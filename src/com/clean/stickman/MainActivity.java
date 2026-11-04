@@ -40,6 +40,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
     /** Later tasks swap their real pages in here. */
     Page makePage(int i) {
         switch (SECTIONS[i]) {
+            case "Remote": return new RemotePage();
             case "Status": return new StatusPage();
             case "Settings": return new SettingsPage();
             default: return new PlaceholderPage(SECTIONS[i]);
@@ -157,9 +158,13 @@ public class MainActivity extends Activity implements Bridge.Listener {
     /** Right from the sidebar enters the page; Left at the page's left edge returns to the sidebar. */
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
+        if (current >= 0 && pages[current].onKey(e)) return true;
         if (e.getAction() == KeyEvent.ACTION_DOWN && current >= 0) {
             View f = getCurrentFocus();
             int k = e.getKeyCode();
+            // the drawn remote moves its own focus first; only its left edge falls through to the sidebar rule
+            if (f instanceof RemoteView && k == KeyEvent.KEYCODE_DPAD_LEFT
+                && ((RemoteView) f).canMove(com.clean.stickman.core.RemoteLayout.LEFT)) return super.dispatchKeyEvent(e);
             if (f != null && k == KeyEvent.KEYCODE_DPAD_RIGHT && isIn(f, sidebar)) {
                 if (f != nav[current]) select(indexOf(f));
                 if (content.requestFocus(View.FOCUS_RIGHT)) return true;

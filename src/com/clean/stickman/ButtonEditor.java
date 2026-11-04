@@ -1,0 +1,314 @@
+package com.clean.stickman;
+
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.graphics.Typeface;
+import android.view.View;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import com.clean.stickman.core.Actions;
+import com.clean.stickman.core.Catalog;
+import com.clean.stickman.core.Keys;
+import com.clean.stickman.core.RemapModel;
+import com.clean.stickman.core.Rule;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Dialog editing one button's Tap / Double / Hold layers in one profile. Each row opens an action chooser
+ * (Original, Do nothing, an app, another button, a Stickman action). Save writes remap.conf and re-runs ensure.
+ */
+public class ButtonEditor {
+    public interface Callback<T> { void got(T t); }
+
+    static final Rule.Layer[] LAYERS = Rule.Layer.values();
+    static final String DOUBLE_NOTE = "adds a short delay to this button";
+    /** remapd drops action lines of 256+ bytes; keep well clear. */
+    static final int MAX_ACTION = 249;
+    static final int[] TIMER_MIN = { 15, 30, 60, 90, 120 };
+
+    /** {label, action id} of the plain Stickman actions (submenus are added in chooseStickman). */
+    static final String[][] STICKMAN = {
+        { "Boost (free memory)", Actions.BOOST },
+        { "Sleep now", Actions.SLEEP_NOW },
+        { "Sleep timer (cycle 15/30/60/90/off)", Actions.SLEEP_TIMER },
+        { "Screen off (black curtain)", Actions.SCREEN_OFF },
+        { "Toggle screensaver", Actions.SCREENSAVER_TOGGLE },
+        { "Screenshot", Actions.SCREENSHOT },
+        { "Play / pause", Actions.PLAY_PAUSE },
+        { "Next", Actions.NEXT },
+        { "Previous", Actions.PREVIOUS },
+        { "Close the current app", Actions.KILL_CURRENT },
+    };
+
+    final MainActivity a;
+    final RemapModel m;
+    final String profile;
+    final int code;
+    final Runnable onSaved;
+    final String[] cur = new String[LAYERS.length];
+    final Button[] rows = new Button[LAYERS.length];
+    /** App profile without its own rules for this key: showing the Default profile's layers. */
+    final boolean inherited;
+    boolean dirty;
+    TextView note;
+
+    ButtonEditor(MainActivity a, RemapModel m, String profile, int code, Runnable onSaved) {
+        this.a = a;
+        this.m = m;
+        this.profile = profile;
+        this.code = code;
+        this.onSaved = onSaved;
+        inherited = !RemapModel.DEFAULT.equals(profile) && !m.hasRules(profile, code);
+        String src = inherited ? RemapModel.DEFAULT : profile;
+        for (Rule.Layer l : LAYERS) cur[l.ordinal()] = m.get(src, code, l);
+    }
+
+    public static void open(MainActivity a, RemapModel m, String profile, int code, Runnable onSaved) {
+        new ButtonEditor(a, m, profile, code, onSaved).show();
+    }
+
+    // ---- shared helpers (RemotePage uses them too) ----
+
+    static final Map<String, String> labels = new HashMap<>();
+
+    /** App label for a package, cached; the package name when it isn't installed. */
+    static String appLabel(Context c, String pkg) {
+        String l = labels.get(pkg);
+        if (l != null) return l;
+        try {
+            PackageManager pm = c.getPackageManager();
+            l = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+        } catch (Exception e) {
+            l = pkg;
+        }
+        labels.put(pkg, l);
+        return l;
+    }
+
+    /** Friendly text for a raw action string (null = Original). */
+    static String describe(Context c, String action) {
+        if (action == null) return "Original";
+        String[] t = action.trim().split("\\s+", 3);
+        if (t[0].equals("start") && t.length > 1) {
+            int s = t[1].indexOf('/');
+            String pkg = s < 0 ? t[1] : t[1].substring(0, s);
+            if (Store.WOLF.equals(t[1])) return "Go to Wolf home";
+            return Actions.describe(action, appLabel(c, pkg));
+        }
+        if (t[0].equals("act") && t.length > 2) {
+            if (t[1].equals(Actions.OPEN_SCREEN)) {
+                for (String[] sc : Catalog.SHORTCUTS) if (sc[1].equals(t[2])) return "Open " + sc[0];
+                return "Open Amazon screen";
+            }
+            if (t[1].equals(Actions.SLEEP_TIMER_SET)) return "Sleep timer " + t[2] + " min";
+        }
+        return Actions.describe(action, null);
+    }
+
+    /** null when the action may be written to remap.conf, else why not. */
+    static String invalid(String action) {
+        if (action == null) return null;
+        if (action.indexOf('\n') >= 0 || action.indexOf('\r') >= 0) return "The action contains a line break.";
+        if (action.length() > MAX_ACTION) return "The action is too long (" + action.length() + " characters; the limit is " + MAX_ACTION + ").";
+        return null;
+    }
+
+    static boolean validPkg(String p) { return p != null && p.matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"); }
+
+    /** Launchable apps (TV launcher entries first), one per package, sorted by label: {label, pkg, pkg/cls}. */
+    static List<String[]> launchables(Context c) {
+        PackageManager pm = c.getPackageManager();
+        Map<String, String[]> byPkg = new HashMap<>();
+        for (String cat : new String[] { Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER }) {
+            List<ResolveInfo> ris = pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(cat), 0);
+            for (ResolveInfo ri : ris) {
+                String pkg = ri.activityInfo.packageName;
+                if (byPkg.containsKey(pkg) || !validPkg(pkg)) continue;
+                String comp = pkg + "/" + ri.activityInfo.name;
+                if (!comp.matches("[A-Za-z0-9_.$/]+")) continue;
+                byPkg.put(pkg, new String[] { String.valueOf(ri.loadLabel(pm)), pkg, comp });
+            }
+        }
+        List<String[]> out = new ArrayList<>(byPkg.values());
+        Collections.sort(out, (x, y) -> x[0].compareToIgnoreCase(y[0]));
+        return out;
+    }
+
+    static void pickApp(MainActivity a, String title, Callback<String[]> cb) {
+        final List<String[]> apps = launchables(a);
+        if (apps.isEmpty()) { message(a, "No apps found", "Couldn't list the installed apps."); return; }
+        String[] names = new String[apps.size()];
+        for (int i = 0; i < names.length; i++) names[i] = apps.get(i)[0];
+        a.dialog().setTitle(title).setItems(names, (d, w) -> cb.got(apps.get(w))).setNegativeButton("Cancel", null).show();
+    }
+
+    static void message(MainActivity a, String title, String msg) {
+        a.dialog().setTitle(title).setMessage(msg).setPositiveButton("OK", null).show();
+    }
+
+    // ---- the dialog ----
+
+    String layerName(Rule.Layer l) {
+        switch (l) {
+            case TAP: return "Press";
+            case DOUBLE: return "Double press";
+            default: return "Hold";
+        }
+    }
+
+    String valueText(Rule.Layer l, String action) {
+        if (action == null) {
+            switch (l) {
+                case DOUBLE: return "Off";
+                case HOLD: return "Original (hold " + Keys.name(code) + ")";
+                default: return "Original (" + Keys.name(code) + ")";
+            }
+        }
+        return describe(a, action);
+    }
+
+    void refreshRows() {
+        for (Rule.Layer l : LAYERS) {
+            Button b = rows[l.ordinal()];
+            if (b != null) b.setText(layerName(l) + "   ›   " + valueText(l, cur[l.ordinal()]));
+        }
+        if (note != null) note.setVisibility(inherited && !dirty ? View.VISIBLE : View.GONE);
+    }
+
+    void show() {
+        LinearLayout col = Theme.column(a);
+        int p = Theme.dp(a, 24);
+        col.setPadding(p, Theme.dp(a, 20), p, Theme.dp(a, 8));
+
+        TextView t = Theme.text(a, Keys.name(code), 26, Theme.TEXT);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        col.addView(t);
+        boolean def = RemapModel.DEFAULT.equals(profile);
+        col.addView(Theme.text(a, def ? "Default profile · every app" : "Only while " + appLabel(a, profile) + " is open", 15, Theme.WOOD));
+        note = Theme.text(a, "This app uses the Default settings for this button. Changing anything gives it its own.", 14, Theme.MUTED);
+        note.setPadding(0, Theme.dp(a, 6), 0, 0);
+        col.addView(note);
+        View gap = new View(a);
+        col.addView(gap, new LinearLayout.LayoutParams(1, Theme.dp(a, 10)));
+
+        for (final Rule.Layer l : LAYERS) {
+            if (l == Rule.Layer.HOLD && Keys.tapOnly(code)) continue;
+            Button b = Theme.button(a, "");
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.setMargins(0, Theme.dp(a, 4), 0, Theme.dp(a, l == Rule.Layer.DOUBLE ? 0 : 4));
+            b.setLayoutParams(lp);
+            b.setOnClickListener(v -> choose(l));
+            rows[l.ordinal()] = b;
+            col.addView(b);
+            if (l == Rule.Layer.DOUBLE) {
+                TextView n = Theme.text(a, "Double press " + DOUBLE_NOTE + " (it waits for a possible second press).", 13, Theme.MUTED);
+                n.setPadding(Theme.dp(a, 16), Theme.dp(a, 2), 0, Theme.dp(a, 6));
+                col.addView(n);
+            }
+        }
+        if (Keys.tapOnly(code)) {
+            TextView n = Theme.text(a, "App buttons can't be held: the remote sends press and release together.", 13, Theme.MUTED);
+            n.setPadding(0, Theme.dp(a, 6), 0, 0);
+            col.addView(n);
+        }
+        refreshRows();
+
+        AlertDialog d = a.dialog().setView(Theme.scroll(a, col))
+            .setPositiveButton("Save", (x, w) -> save(false))
+            .setNeutralButton(def ? "Reset to original" : "Use Default here", (x, w) -> save(true))
+            .setNegativeButton("Cancel", null)
+            .create();
+        d.show();
+        if (rows[0] != null) rows[0].requestFocus();
+    }
+
+    void set(Rule.Layer l, String action) {
+        String why = invalid(action);
+        if (why != null) { message(a, "Can't use that", why); return; }
+        cur[l.ordinal()] = action;
+        dirty = true;
+        refreshRows();
+    }
+
+    void choose(final Rule.Layer l) {
+        String orig = l == Rule.Layer.DOUBLE ? "Off (no double press)" : "Original";
+        String[] opts = { orig, "Do nothing", "Open an app…", "Act as another button…", "A Stickman action…" };
+        a.dialog().setTitle(layerName(l) + " · " + Keys.name(code)).setItems(opts, (d, w) -> {
+            switch (w) {
+                case 0: set(l, null); break;
+                case 1: set(l, "none"); break;
+                case 2: pickApp(a, "Open which app?", app -> set(l, "start " + app[2])); break;
+                case 3: chooseKey(l); break;
+                default: chooseStickman(l);
+            }
+        }).setNegativeButton("Cancel", null).show();
+    }
+
+    void chooseKey(final Rule.Layer l) {
+        final List<Integer> codes = new ArrayList<>();
+        for (int k : Keys.ALL) if (k != code) codes.add(k);
+        String[] names = new String[codes.size()];
+        for (int i = 0; i < names.length; i++) names[i] = Keys.name(codes.get(i));
+        a.dialog().setTitle("Act as which button?").setItems(names, (d, w) -> set(l, "key " + codes.get(w)))
+            .setNegativeButton("Cancel", null).show();
+    }
+
+    void chooseStickman(final Rule.Layer l) {
+        final List<String> labels = new ArrayList<>(), acts = new ArrayList<>();
+        for (String[] s : STICKMAN) { labels.add(s[0]); acts.add("act " + s[1]); }
+        labels.add("Set the sleep timer…"); acts.add("@timer");
+        labels.add("Open an Amazon screen…"); acts.add("@screen");
+        try {
+            a.getPackageManager().getPackageInfo(Store.WOLF_PKG, 0);
+            labels.add("Go to Wolf home"); acts.add("start " + Store.WOLF);
+        } catch (Exception ignored) {}
+        a.dialog().setTitle("Stickman action").setItems(labels.toArray(new String[0]), (d, w) -> {
+            String act = acts.get(w);
+            if (act.equals("@timer")) {
+                String[] n = new String[TIMER_MIN.length];
+                for (int i = 0; i < n.length; i++) n[i] = TIMER_MIN[i] + " minutes";
+                a.dialog().setTitle("Sleep timer").setItems(n, (d2, w2) ->
+                    set(l, "act " + Actions.SLEEP_TIMER_SET + " " + TIMER_MIN[w2])).setNegativeButton("Cancel", null).show();
+            } else if (act.equals("@screen")) {
+                String[] n = new String[Catalog.SHORTCUTS.length];
+                for (int i = 0; i < n.length; i++) n[i] = Catalog.SHORTCUTS[i][0];
+                a.dialog().setTitle("Open which screen?").setItems(n, (d2, w2) ->
+                    set(l, "act " + Actions.OPEN_SCREEN + " " + Catalog.SHORTCUTS[w2][1])).setNegativeButton("Cancel", null).show();
+            } else {
+                set(l, act);
+            }
+        }).setNegativeButton("Cancel", null).show();
+    }
+
+    /** reset: default profile -> every layer Original; app profile -> drop its rules so Default applies. */
+    void save(boolean reset) {
+        if (!reset && !dirty) return;
+        if (reset) {
+            for (Rule.Layer l : LAYERS) m.set(profile, code, l, null);
+        } else {
+            for (Rule.Layer l : LAYERS) {
+                String v = cur[l.ordinal()];
+                if (l == Rule.Layer.HOLD && Keys.tapOnly(code)) v = null;
+                String why = invalid(v);
+                if (why != null) { message(a, "Not saved", why); return; }
+                m.set(profile, code, l, v);
+            }
+            // an app profile asking for plain Original while Default remaps the key needs an explicit rule
+            if (!RemapModel.DEFAULT.equals(profile) && !m.hasRules(profile, code) && m.hasRules(RemapModel.DEFAULT, code))
+                m.set(profile, code, Rule.Layer.TAP, "orig");
+        }
+        Store.saveRemap(a, m);
+        if (onSaved != null) onSaved.run();
+        if (Store.enabled(a)) a.run(null, Ensure.MARKER);
+    }
+}

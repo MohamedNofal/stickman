@@ -12,6 +12,10 @@ public class LogTail implements Runnable {
     /** Newest last; guarded by itself. */
     static final java.util.ArrayDeque<String> status = new java.util.ArrayDeque<>();
     static volatile long statusAt;
+    /** Latest STATUS line per kind (the word after STATUS, e.g. "boost", "dns", "sleep_timer") -> the rest. */
+    static final java.util.concurrent.ConcurrentHashMap<String, String> lastStatus = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Same keys -> when that line was logged (epoch ms, from the logcat timestamp; replayed history keeps its time). */
+    static final java.util.concurrent.ConcurrentHashMap<String, Long> lastStatusAt = new java.util.concurrent.ConcurrentHashMap<>();
     static volatile int lastKey;
     static volatile long lastKeyAt;
     volatile boolean stop;
@@ -27,7 +31,12 @@ public class LogTail implements Runnable {
                 long started = System.currentTimeMillis();
                 while (!stop && (l = r.readLine()) != null) {
                     int st = l.indexOf("): STATUS ");
-                    if (st > 0) { addStatus(l.length() > 14 ? l.substring(6, 14) : "", l.substring(st + 3).trim()); continue; }
+                    if (st > 0) {
+                        String body = l.substring(st + 3).trim();
+                        addStatus(l.length() > 14 ? l.substring(6, 14) : "", body);
+                        putStatus(body, logTime(l));
+                        continue;
+                    }
                     int i = l.indexOf("): KEY ");
                     if (i > 0 && System.currentTimeMillis() - started > 500) {
                         try { lastKey = Integer.parseInt(l.substring(i + 7).trim()); lastKeyAt = System.currentTimeMillis(); }
@@ -47,6 +56,37 @@ public class LogTail implements Runnable {
             while (status.size() > MAX_STATUS) status.removeFirst();
         }
         statusAt = System.currentTimeMillis();
+    }
+
+    /** body = "STATUS <kind> [rest]". */
+    static void putStatus(String body, long at) {
+        String[] t = body.split("\\s+", 3);
+        if (t.length < 2 || !t[0].equals("STATUS")) return;
+        lastStatus.put(t[1], t.length > 2 ? t[2] : "");
+        lastStatusAt.put(t[1], at);
+    }
+
+    /** Rest of the latest "STATUS <kind> ..." line, or null if none seen. */
+    static String status(String kind) { return lastStatus.get(kind); }
+
+    /** When the latest "STATUS <kind>" line was logged (epoch ms), or 0. */
+    static long statusAt(String kind) {
+        Long t = lastStatusAt.get(kind);
+        return t == null ? 0 : t;
+    }
+
+    /** Epoch ms of a "MM-DD HH:mm:ss.mmm ..." logcat line (this year; last year if that lands in the future). */
+    static long logTime(String l) {
+        long now = System.currentTimeMillis();
+        try {
+            java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.ROOT);
+            int year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR);
+            long t = f.parse(year + "-" + l.substring(0, 18)).getTime();
+            if (t > now + 86400000L) t = f.parse((year - 1) + "-" + l.substring(0, 18)).getTime();
+            return t;
+        } catch (Exception e) {
+            return now;
+        }
     }
 
     static java.util.List<String> statusLines() {
