@@ -9,6 +9,8 @@ import java.io.FileOutputStream;
 /** VPN up -> userspace TCP to adbd -> adb auth -> run queued shell commands -> VPN down. */
 public class BridgeWorker implements Runnable {
     static final String TAG = "Stickman";
+    /** First run: rules from KeyShift (v1) and/or an earlier Stickman (v2); echo keeps a missing final newline apart. */
+    static final String IMPORT_CMD = "cat /data/local/tmp/remap/remap.conf 2>/dev/null; echo; cat /data/local/tmp/stickman/remap.conf 2>/dev/null";
     final BridgeService svc;
 
     public BridgeWorker(BridgeService svc) { this.svc = svc; }
@@ -28,12 +30,12 @@ public class BridgeWorker implements Runnable {
             tcp.connect();
             AdbClient adb = new AdbClient(tcp);
             adb.connect(AdbKey.loadOrCreate(svc.getFilesDir()), 90000);
-            if (RemapConfig.needsImport(svc))
-                RemapConfig.importConf(svc, adb.exec("cat " + RemapConfig.D + "/remap.conf 2>/dev/null", 10000));
+            if (!Store.hasRemap(svc))
+                Store.importRemap(svc, adb.exec(IMPORT_CMD, 10000));
             String cmd;
             while ((cmd = Bridge.take()) != null) {
                 String orig = cmd;
-                if (cmd.equals(RemapConfig.ENSURE)) cmd = RemapConfig.ensureCmd(svc);
+                if (cmd.equals(Ensure.MARKER)) cmd = Ensure.cmd(svc);
                 try {
                     result = adb.exec(cmd, 20000).trim();
                 } catch (Throwable e) {
@@ -41,7 +43,10 @@ public class BridgeWorker implements Runnable {
                     throw e;
                 }
                 Log.i(TAG, "shell result: " + result);
-                if (result.matches("(?s).*REMAPD \\d+.*")) RemapConfig.markEnsured(svc);
+                if (orig.equals(Ensure.MARKER)) {
+                    Store.setLastEnsure(svc, result);
+                    if (result.matches("(?s).*REMAPD \\d+.*")) Store.markEnsured(svc);
+                }
                 Bridge.notifyResult(orig, result, true);
             }
             result = "OK " + result;

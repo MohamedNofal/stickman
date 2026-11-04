@@ -4,94 +4,112 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.VpnService;
 import android.os.Bundle;
 import android.os.Handler;
-import android.view.Gravity;
+import android.view.FocusFinder;
+import android.view.KeyEvent;
 import android.view.View;
-import android.widget.ArrayAdapter;
+import android.view.ViewParent;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
+import com.clean.stickman.core.Keys;
 
-public class MainActivity extends Activity {
-    TextView status, hint;
-    ListView list;
-    Button toggle;
-    ArrayAdapter<String> adapter;
+/** App shell: left sidebar of sections + a content area that swaps Page views. Fully D-pad driven. */
+public class MainActivity extends Activity implements Bridge.Listener {
+    static final String[] SECTIONS = { "Remote", "Speed", "Sleep", "Privacy", "Debloat", "Shortcuts", "Status", "Settings" };
+    static final String VPN_WARNING = "A VPN (e.g. NordVPN) is connected. Applying will disconnect it. Continue?";
+
+    final Page[] pages = new Page[SECTIONS.length];
+    final View[] views = new View[SECTIONS.length];
+    final Button[] nav = new Button[SECTIONS.length];
     final Handler h = new Handler();
+    LinearLayout sidebar;
+    FrameLayout content;
+    TextView statusLine;
+    int current = -1;
     LogTail tail;
-    long seenKeyAt;
     boolean hadLogs;
+
+    /** Later tasks swap their real pages in here. */
+    Page makePage(int i) {
+        switch (SECTIONS[i]) {
+            case "Status": return new StatusPage();
+            case "Settings": return new SettingsPage();
+            default: return new PlaceholderPage(SECTIONS[i]);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        RemapConfig.initDefaults(this);
+        FadeOverlay.stop();   // clear a sleep-fade overlay left behind
         hadLogs = checkSelfPermission(android.Manifest.permission.READ_LOGS) == PackageManager.PERMISSION_GRANTED;
         BootJob.schedule(this);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(64, 40, 64, 32);
-        root.setBackgroundColor(Color.rgb(18, 20, 26));
+        LinearLayout root = Theme.row(this);
+        root.setBackgroundColor(Theme.BG);
+        root.setGravity(0);
 
-        TextView title = new TextView(this);
-        title.setText("Stickman");
-        title.setTextSize(30); title.setTextColor(Color.WHITE);
-        root.addView(title);
+        sidebar = Theme.column(this);
+        sidebar.setBackgroundColor(Theme.PANEL);
+        int p = Theme.dp(this, 20);
+        sidebar.setPadding(p, Theme.dp(this, 24), Theme.dp(this, 12), p);
+        TextView brand = Theme.text(this, "Stickman", 26, Theme.ACCENT);
+        brand.setTypeface(Typeface.DEFAULT_BOLD);
+        brand.setPadding(Theme.dp(this, 4), 0, 0, Theme.dp(this, 16));
+        sidebar.addView(brand);
+        for (int i = 0; i < SECTIONS.length; i++) {
+            final int idx = i;
+            Button bt = Theme.button(this, SECTIONS[i]);
+            bt.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+            ((LinearLayout.LayoutParams) bt.getLayoutParams()).setMargins(0, Theme.dp(this, 3), 0, Theme.dp(this, 3));
+            bt.setOnClickListener(v -> select(idx));
+            nav[i] = bt;
+            sidebar.addView(bt);
+        }
+        View spacer = new View(this);
+        sidebar.addView(spacer, new LinearLayout.LayoutParams(-1, 0, 1f));
+        statusLine = Theme.text(this, "", 13, Theme.MUTED);
+        sidebar.addView(statusLine);
+        root.addView(sidebar, new LinearLayout.LayoutParams(Theme.dp(this, 220), -1));
 
-        status = new TextView(this);
-        status.setTextSize(16); status.setTextColor(Color.rgb(150, 200, 255));
-        status.setPadding(0, 8, 0, 4);
-        root.addView(status);
-
-        hint = new TextView(this);
-        hint.setTextSize(14); hint.setTextColor(Color.rgb(160, 160, 170));
-        hint.setText("Press any remote button to jump to it. Select a button to change what it does.\n" +
-            "Holding a remapped button (except app buttons) still does its original action. Hold Back 10 s = emergency stop.");
-        hint.setPadding(0, 0, 0, 16);
-        root.addView(hint);
-
-        list = new ListView(this);
-        adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, new ArrayList<String>());
-        list.setAdapter(adapter);
-        list.setOnItemClickListener((parent, view, pos, id) -> editKey(pos));
-        root.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
-
-        toggle = new Button(this);
-        toggle.setOnClickListener(v -> toggleEnabled());
-        LinearLayout bar = new LinearLayout(this);
-        bar.setGravity(Gravity.END);
-        bar.addView(toggle);
-        root.addView(bar);
+        content = new FrameLayout(this);
+        int cp = Theme.dp(this, 32);
+        content.setPadding(cp, Theme.dp(this, 24), cp, Theme.dp(this, 16));
+        root.addView(content, new LinearLayout.LayoutParams(0, -1, 1f));
 
         setContentView(root);
-        refreshList();
+        select(0);
+        nav[0].requestFocus();
 
+        Bridge.setListener(this);
         Intent consent = VpnService.prepare(this);
         if (consent != null) startActivityForResult(consent, 1);
-        else apply();
+        else ensureOnOpen();
     }
 
     @Override
-    protected void onActivityResult(int req, int res, Intent data) { if (res == RESULT_OK) apply(); }
+    protected void onActivityResult(int req, int res, Intent data) {
+        if (req == 1 && res == RESULT_OK) ensureOnOpen();
+    }
+
+    void ensureOnOpen() {
+        if (Store.enabled(this)) run(null, Ensure.MARKER);
+    }
 
     @Override
     protected void onResume() {
         super.onResume();
-        refreshList();
+        FadeOverlay.stop();
+        Bridge.setListener(this);
         tail = new LogTail();
         new Thread(tail, "logtail").start();
+        if (current >= 0) pages[current].onShow();
         h.post(this::tick);
     }
 
@@ -99,12 +117,93 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         if (tail != null) tail.shutdown();
+        if (current >= 0) pages[current].onHide();
         h.removeCallbacksAndMessages(null);
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (Bridge.listener == this) Bridge.setListener(null);
+    }
+
+    void select(int i) {
+        if (i == current) return;
+        if (current >= 0) {
+            pages[current].onHide();
+            nav[current].setSelected(false);
+        }
+        if (pages[i] == null) {
+            pages[i] = makePage(i);
+            views[i] = pages[i].build(this);
+        }
+        content.removeAllViews();
+        content.addView(views[i], new FrameLayout.LayoutParams(-1, -1));
+        current = i;
+        nav[i].setSelected(true);
+        pages[i].onShow();
+    }
+
+    static boolean isIn(View v, View parent) {
+        for (ViewParent p = v.getParent(); p != null; p = p.getParent()) if (p == parent) return true;
+        return false;
+    }
+
+    /** Right from the sidebar enters the page; Left at the page's left edge returns to the sidebar. */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        if (e.getAction() == KeyEvent.ACTION_DOWN && current >= 0) {
+            View f = getCurrentFocus();
+            int k = e.getKeyCode();
+            if (f != null && k == KeyEvent.KEYCODE_DPAD_RIGHT && isIn(f, sidebar)) {
+                if (f != nav[current]) select(indexOf(f));
+                if (content.requestFocus(View.FOCUS_RIGHT)) return true;
+                return true;   // nothing focusable on this page: stay put
+            }
+            if (f != null && k == KeyEvent.KEYCODE_DPAD_LEFT && isIn(f, content)) {
+                View next = FocusFinder.getInstance().findNextFocus(content, f, View.FOCUS_LEFT);
+                if (next == null) { nav[current].requestFocus(); return true; }
+            }
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    int indexOf(View v) {
+        for (int i = 0; i < nav.length; i++) if (nav[i] == v) return i;
+        return current;
+    }
+
+    AlertDialog.Builder dialog() {
+        return new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert);
+    }
+
+    /**
+     * User-initiated apply: runs onGo (may be null) then queues each non-null command as its own bridge
+     * command. When another VPN is up, asks first (applying would disconnect it).
+     */
+    void run(final Runnable onGo, final String... cmds) {
+        final Runnable go = () -> {
+            if (onGo != null) onGo.run();
+            for (String c : cmds) if (c != null) Bridge.run(this, c, false);
+        };
+        if (Bridge.otherVpnActive(this)) {
+            dialog().setTitle("VPN connected").setMessage(VPN_WARNING)
+                .setPositiveButton("Continue", (d, w) -> go.run())
+                .setNegativeButton("Cancel", null).show();
+        } else {
+            go.run();
+        }
+    }
+
+    @Override
+    public void onResult(String cmd, String output, boolean ok) {
+        for (Page p : pages) if (p != null) p.onResult(cmd, output, ok);
+        updateStatusLine();
+    }
+
     void tick() {
-        // READ_LOGS is granted (by the shell, during the first apply) while we're running, but it only
-        // takes effect in a fresh process -> restart ourselves once so the live button display works.
+        // READ_LOGS is granted (by the shell, during the first ensure) while we're running, but it only takes
+        // effect in a fresh process -> restart ourselves once so the live displays work.
         if (!hadLogs && !Bridge.busy
                 && checkSelfPermission(android.Manifest.permission.READ_LOGS) == PackageManager.PERMISSION_GRANTED) {
             startActivity(new Intent(this, MainActivity.class)
@@ -112,92 +211,24 @@ public class MainActivity extends Activity {
             android.os.Process.killProcess(android.os.Process.myPid());
             return;
         }
-        String r = Bridge.busy ? "working…" : Bridge.lastResult;
-        String s;
-        if (!RemapConfig.enabled(this)) s = "Remapper is OFF – remote works normally";
-        else if (r.startsWith("FAIL")) s = "Problem: " + r.substring(5);
-        else if (r.contains("REMAPD ") && r.matches("(?s).*REMAPD \\d+.*")) s = "Remapper running ✓";
-        else s = r.isEmpty() || r.equals("working…") ? "Starting remapper…" : r;
-        if (LogTail.lastKey != 0 && LogTail.lastKeyAt > seenKeyAt) {
-            seenKeyAt = LogTail.lastKeyAt;
-            int idx = indexOf(RemapConfig.CODES, LogTail.lastKey);
-            if (idx >= 0) { list.setSelection(idx); list.requestFocus(); }
-        }
-        if (LogTail.lastKey != 0 && System.currentTimeMillis() - LogTail.lastKeyAt < 4000)
-            s += "   •   last button: " + keyName(LogTail.lastKey);
-        status.setText(s);
-        toggle.setText(RemapConfig.enabled(this) ? "Turn remapper OFF" : "Turn remapper ON");
+        updateStatusLine();
+        if (current >= 0) pages[current].onTick();
         h.postDelayed(this::tick, 400);
     }
 
-    static int indexOf(int[] a, int v) { for (int i = 0; i < a.length; i++) if (a[i] == v) return i; return -1; }
-
-    static String keyName(int code) {
-        int i = indexOf(RemapConfig.CODES, code);
-        if (i >= 0) return RemapConfig.NAMES[i];
-        i = indexOf(RemapConfig.TARGETS, code);
-        return i >= 0 ? RemapConfig.TARGET_NAMES[i] : ("key " + code);
-    }
-
-    void refreshList() {
-        adapter.clear();
-        for (int i = 0; i < RemapConfig.CODES.length; i++)
-            adapter.add(RemapConfig.NAMES[i] + "   →   " + RemapConfig.describe(RemapConfig.get(this, RemapConfig.CODES[i])));
-        adapter.notifyDataSetChanged();
-    }
-
-    void apply() {
-        if (RemapConfig.enabled(this)) Bridge.run(this, RemapConfig.ENSURE, false);
-        else Bridge.run(this, RemapConfig.stopCmd(), false);
-    }
-
-    void toggleEnabled() {
-        RemapConfig.setEnabled(this, !RemapConfig.enabled(this));
-        apply();
-    }
-
-    void editKey(int pos) {
-        final int code = RemapConfig.CODES[pos];
-        String[] opts = { "Default (no change)", "Open an app…", "Act as another button…", "Do nothing (disable)" };
-        new AlertDialog.Builder(this).setTitle(RemapConfig.NAMES[pos])
-            .setItems(opts, (d, which) -> {
-                if (which == 0) save(code, null);
-                else if (which == 1) pickApp(code);
-                else if (which == 2) pickTarget(code);
-                else save(code, "none");
-            }).show();
-    }
-
-    void pickTarget(final int code) {
-        new AlertDialog.Builder(this).setTitle("Act as…")
-            .setItems(RemapConfig.TARGET_NAMES, (d, w) ->
-                save(code, "key\t" + RemapConfig.TARGETS[w] + "\t" + RemapConfig.TARGET_NAMES[w])).show();
-    }
-
-    void pickApp(final int code) {
-        PackageManager pm = getPackageManager();
-        final List<String[]> apps = new ArrayList<>();
-        HashSet<String> seen = new HashSet<>();
-        for (String cat : new String[] { Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER }) {
-            Intent q = new Intent(Intent.ACTION_MAIN).addCategory(cat);
-            for (ResolveInfo ri : pm.queryIntentActivities(q, 0)) {
-                String pkg = ri.activityInfo.packageName;
-                if (pkg.equals(getPackageName()) || !seen.add(pkg)) continue;
-                apps.add(new String[] { ri.loadLabel(pm).toString(), pkg + "/" + ri.activityInfo.name });
-            }
-        }
-        Collections.sort(apps, (a, c) -> a[0].compareToIgnoreCase(c[0]));
-        String[] labels = new String[apps.size()];
-        for (int i = 0; i < labels.length; i++) labels[i] = apps.get(i)[0];
-        new AlertDialog.Builder(this).setTitle("Open which app?")
-            .setItems(labels, (d, w) -> save(code, "start\t" + apps.get(w)[1] + "\t" + apps.get(w)[0])).show();
-    }
-
-    void save(int code, String rule) {
-        RemapConfig.set(this, code, rule);
-        refreshList();
-        if (!RemapConfig.enabled(this)) RemapConfig.setEnabled(this, true);
-        apply();
-        Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+    void updateStatusLine() {
+        String r = Bridge.lastResult;
+        String s;
+        int color = Theme.MUTED;
+        if (Bridge.busy) s = "Working…";
+        else if (Bridge.VPN_BUSY.equals(r)) { s = "Another VPN is on: not applied"; color = Theme.ACCENT; }
+        else if (r.startsWith("FAIL")) { s = "Problem: " + r.substring(4).trim(); color = Theme.ACCENT; }
+        else if (!Store.enabled(this)) s = "Stickman is OFF";
+        else if (Store.pid(Store.lastEnsure(this), "REMAPD") != null) s = "Running ✓";
+        else s = r.isEmpty() ? "Starting…" : "Not running";
+        if (LogTail.lastKey != 0 && System.currentTimeMillis() - LogTail.lastKeyAt < 4000)
+            s += "\nLast button: " + Keys.name(LogTail.lastKey);
+        statusLine.setText(s);
+        statusLine.setTextColor(color);
     }
 }

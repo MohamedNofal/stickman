@@ -10,7 +10,7 @@ import android.util.Log;
 
 /**
  * Fire OS never delivers BOOT_COMPLETED to sideloaded apps, but it does restore PERSISTED jobs
- * after a reboot. This periodic job restarts remapd once per boot (no-op otherwise).
+ * after a reboot. This periodic job re-runs the ensure script (remapd + stickd) once per boot (no-op otherwise).
  */
 public class BootJob extends JobService {
     static void schedule(Context c) {
@@ -23,9 +23,9 @@ public class BootJob extends JobService {
 
     @Override
     public boolean onStartJob(JobParameters params) {
-        if (RemapConfig.enabled(this) && !RemapConfig.ensuredThisBoot(this)) {
-            Log.i("Stickman", "BootJob: new boot -> starting remapd");
-            Bridge.run(this, RemapConfig.ENSURE, true);
+        if (Store.enabled(this) && !Store.ensuredThisBoot(this)) {
+            Log.i("Stickman", "BootJob: new boot -> ensuring daemons");
+            Bridge.run(this, Ensure.MARKER, true);
         }
         return false;
     }
