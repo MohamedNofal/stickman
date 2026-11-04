@@ -1,19 +1,19 @@
 /*
- * remapd - Fire TV remote button remapper. Runs as the shell user (uid 2000),
- * started by the "Remote Remap" app through its VPN self-ADB bridge.
+ * remapd - Fire TV remote button remapper (Stickman). Runs as the shell user (uid 2000),
+ * started by the Stickman app through its self-ADB bridge.
  *
- * shell is in groups `input` (rw /dev/input/eventN) and `net_bt_admin` (rw /dev/uinput), so:
+ * shell is in groups `input` (read /dev/input/eventN) and `net_bt_admin` (rw /dev/uinput), so:
  *   1. EVIOCGRAB the real "Amazon Fire TV Remote" -> Android stops seeing it directly
  *   2. create a uinput clone with the same vendor/product (same .kl keylayout applies)
- *   3. forward every event to the clone, EXCEPT remapped keys, which run their action.
- * Holding a remapped key >= HOLD_MS passes the ORIGINAL key through (long-press still works).
+ *   3. forward every event to the clone; remapped keys go through the tap/double/hold
+ *      state machine in layers.c and run their rule's action instead.
+ * Unmapped keys pass straight through with no added delay.
  * Safety: if remapd dies the kernel releases the grab; holding BACK for 10 s exits remapd.
  *
- * Config (re-read when its mtime changes), one rule per line:
- *   <linux keycode> start <package/activity>   - open an app (as shell: no 5 s switch block)
- *   <linux keycode> key <linux keycode>        - act as another remote button
- *   <linux keycode> none                       - disable the button
- *   <linux keycode> sh <shell command...>      - run a shell command
+ * Config: /data/local/tmp/stickman/remap.conf (v2: "set", "profile <name>", "<code> <layer> <action>",
+ * v1 "<code> <action>" = tap). Active profile: /data/local/tmp/stickman/profile (missing -> default).
+ * Both are re-read when their mtime/size change. Actions:
+ *   start <pkg/activity> | key <code> | none | orig | act <id> [arg] (-> act.fifo) | sh <command...>
  */
 #define _GNU_SOURCE
 #include <dirent.h>
@@ -35,24 +35,36 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include "layers.h"
 
 #define REMOTE_NAME "Amazon Fire TV Remote"
 #define VIRT_PHYS "remapd/virtual"
-#define MAXKEY 768
-#define HOLD_MS 700
+#define MAXKEY LYR_MAXKEY
 #define PANIC_KEY KEY_BACK
 #define PANIC_MS 10000
+#ifndef DIR_PATH
+#define DIR_PATH "/data/local/tmp/stickman/"
+#endif
+#define DEF_CONF DIR_PATH "remap.conf"
+#define PROFILE_PATH DIR_PATH "profile"
+#define FIFO_PATH DIR_PATH "act.fifo"
+#define PID_PATH DIR_PATH "remapd.pid"
+#define NOUT (2 * MAXKEY + 8)
 
-enum { A_NONE = 0, A_START, A_KEY, A_OFF, A_SH };
-struct rule { int type; int key; char arg[256]; };
+/* parsed remap.conf: profiles[0] is "default"; rules are last-write-wins per (profile, code, layer) */
+struct crule { int prof, code, layer; char action[256]; };
+static struct crule *crules; static int ncrules, capcrules;
+static char (*profs)[128]; static int nprofs, capprofs;
+static int cfg_double_ms = 250, cfg_hold_ms = 600;
+static int eff[MAXKEY][3];          /* effective rule index per code/layer, -1 = none (implicit orig) */
+static int nmapped;
+static char active_prof[128] = "default";
 
-static struct rule rules[MAXKEY];
-static int nrules;
 static const char *conf_path;
-static long long conf_mtime;
+static long long conf_key = -2, prof_key = -2;   /* mtime ns + size; -1 = missing, -2 = never read */
+static lyr_state *L;
+static lyr_out outs[NOUT];
 static int rfd = -1, ufd = -1, grabbed;
-static long long down_at[MAXKEY];
-static int passthru[MAXKEY];
 static long long back_down_at;
 static long long key_t0[MAXKEY];
 static int ino = -1;
@@ -86,29 +98,108 @@ static void alog(const char *fmt, ...) {
     send(logfd, pkt, n, MSG_DONTWAIT);
 }
 
-static void load_conf(void) {
+
+static long long file_key(const char *path) {
     struct stat st;
-    if (stat(conf_path, &st) < 0) { if (conf_mtime) { memset(rules, 0, sizeof rules); nrules = 0; conf_mtime = 0; } return; }
-    long long m = (long long)st.st_mtim.tv_sec * 1000000000LL + st.st_mtim.tv_nsec + st.st_size;
-    if (m == conf_mtime) return;
-    conf_mtime = m;
-    memset(rules, 0, sizeof rules); nrules = 0;
+    if (stat(path, &st) < 0) return -1;
+    return (long long)st.st_mtim.tv_sec * 1000000000LL + st.st_mtim.tv_nsec + st.st_size;
+}
+
+static int prof_index(const char *name, int add) {
+    for (int i = 0; i < nprofs; i++) if (!strcmp(profs[i], name)) return i;
+    if (!add) return -1;
+    if (nprofs == capprofs) {
+        int nc = capprofs ? capprofs * 2 : 8;
+        void *np = realloc(profs, nc * sizeof *profs); if (!np) return 0;
+        profs = np; capprofs = nc;
+    }
+    snprintf(profs[nprofs], sizeof profs[0], "%s", name);
+    return nprofs++;
+}
+
+static void add_rule(int prof, const rmp_rule *r) {
+    for (int i = 0; i < ncrules; i++)
+        if (crules[i].prof == prof && crules[i].code == r->code && crules[i].layer == r->layer) {
+            snprintf(crules[i].action, sizeof crules[i].action, "%s", r->action); return;
+        }
+    if (ncrules == capcrules) {
+        int nc = capcrules ? capcrules * 2 : 64;
+        void *np = realloc(crules, nc * sizeof *crules); if (!np) return;
+        crules = np; capcrules = nc;
+    }
+    struct crule *c = &crules[ncrules++];
+    c->prof = prof; c->code = r->code; c->layer = r->layer;
+    snprintf(c->action, sizeof c->action, "%s", r->action);
+}
+
+static void parse_conf(void) {
+    ncrules = 0; nprofs = 0; cfg_double_ms = 250; cfg_hold_ms = 600;
+    prof_index("default", 1);
     FILE *f = fopen(conf_path, "r"); if (!f) return;
-    char line[512];
-    while (fgets(line, sizeof line, f)) {
-        line[strcspn(line, "\r\n")] = 0;
-        int code; char verb[16]; int off = 0;
-        if (sscanf(line, "%d %15s %n", &code, verb, &off) < 2 || code <= 0 || code >= MAXKEY) continue;
-        struct rule *r = &rules[code];
-        const char *arg = line + off;
-        if (!strcmp(verb, "start")) { r->type = A_START; snprintf(r->arg, sizeof r->arg, "%s", arg); }
-        else if (!strcmp(verb, "sh")) { r->type = A_SH; snprintf(r->arg, sizeof r->arg, "%s", arg); }
-        else if (!strcmp(verb, "key")) { r->type = A_KEY; r->key = atoi(arg); if (r->key <= 0 || r->key >= MAXKEY) r->type = A_NONE; }
-        else if (!strcmp(verb, "none")) r->type = A_OFF;
-        if (r->type) nrules++;
+    char *line = NULL; size_t cap = 0; int cur = 0;
+    while (getline(&line, &cap, f) >= 0) {
+        rmp_rule r;
+        if (!rmp_parse_line(line, &r)) continue;
+        if (r.kind == RMP_PROFILE) cur = prof_index(r.name, 1);
+        else if (r.kind == RMP_SET) {
+            if (!strcmp(r.name, "double_ms")) cfg_double_ms = r.value; else cfg_hold_ms = r.value;
+        } else add_rule(cur, &r);
+    }
+    free(line); fclose(f);
+}
+
+static void read_profile(void) {
+    snprintf(active_prof, sizeof active_prof, "default");
+    FILE *f = fopen(PROFILE_PATH, "r"); if (!f) return;
+    char buf[sizeof active_prof];
+    if (fgets(buf, sizeof buf, f)) {
+        char *b = buf; while (*b == ' ' || *b == '\t') b++;
+        b[strcspn(b, " \t\r\n")] = 0;
+        if (*b) snprintf(active_prof, sizeof active_prof, "%s", b);
     }
     fclose(f);
-    alog("config loaded: %d rules", nrules);
+}
+
+static int is_orig(int idx) { return idx >= 0 && !strcmp(crules[idx].action, "orig"); }
+
+/* rule lookup: the active profile's layers for a code if it has any, else default's */
+static void compute_effective(void) {
+    int ap = prof_index(active_prof, 0);
+    for (int c = 0; c < MAXKEY; c++) eff[c][0] = eff[c][1] = eff[c][2] = -1;
+    for (int pass = 0; pass < 2; pass++) {
+        int want = pass == 0 ? 0 : ap;             /* default first, then the active profile overrides per code */
+        if (pass == 1 && ap <= 0) break;
+        static unsigned char seen[MAXKEY]; memset(seen, 0, sizeof seen);
+        for (int i = 0; i < ncrules; i++) {
+            if (crules[i].prof != want) continue;
+            int c = crules[i].code;
+            if (pass == 1 && !seen[c]) { eff[c][0] = eff[c][1] = eff[c][2] = -1; seen[c] = 1; }
+            eff[c][crules[i].layer] = i;
+        }
+    }
+    nmapped = 0;
+    lyr_set_timing(L, cfg_double_ms, cfg_hold_ms);
+    for (int c = 1; c < MAXKEY; c++) {
+        lyr_keycfg k = { 0, 0, 0, 0 };
+        /* an explicit "orig" tap/hold is the same as the implicit default; only double orig differs */
+        k.has_tap = eff[c][LYR_TAP] >= 0 && !is_orig(eff[c][LYR_TAP]);
+        k.has_double = eff[c][LYR_DOUBLE] >= 0;
+        k.has_hold = eff[c][LYR_HOLD] >= 0 && !is_orig(eff[c][LYR_HOLD]);
+        if (k.has_tap || k.has_double || k.has_hold) { k.tap_only = c >= 744 && c <= 747; nmapped++; }
+        lyr_set_cfg(L, c, k);
+    }
+}
+
+static void load_conf(void) {
+    long long ck = file_key(conf_path), pk = file_key(PROFILE_PATH);
+    if (ck == conf_key && pk == prof_key) return;
+    int conf_changed = ck != conf_key;
+    conf_key = ck; prof_key = pk;
+    if (conf_changed) parse_conf();
+    read_profile();
+    compute_effective();
+    alog("config loaded: %d rules, %d profiles, profile=%s, %d mapped keys, double=%d hold=%d",
+         ncrules, nprofs, active_prof, nmapped, cfg_double_ms, cfg_hold_ms);
 }
 
 static void emit(int type, int code, int value) {
@@ -129,18 +220,55 @@ static void run_sh(const char *cmd) {
     }
 }
 
-static void do_action(int code) {
-    struct rule *r = &rules[code];
+static void act_fifo(const char *arg) {
+    int fd = open(FIFO_PATH, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) {
+        if (errno == ENXIO) alog("stickd not running");
+        else alog("act.fifo open: %s", strerror(errno));
+        return;
+    }
+    char buf[300]; int len = snprintf(buf, sizeof buf, "%s\n", arg);
+    if (len >= (int)sizeof buf) len = sizeof buf - 1;
+    if (write(fd, buf, len) != len) alog("act.fifo write: %s", strerror(errno));
+    close(fd);
+}
+
+static const char *layer_name[3] = { "tap", "double", "hold" };
+
+static void do_action(int code, int layer) {
+    int idx = (layer >= 0 && layer < 3) ? eff[code][layer] : -1;
+    const char *a = idx >= 0 ? crules[idx].action : "orig";
+    const char *ln = layer_name[layer >= 0 && layer < 3 ? layer : 0];
+    const char *arg = strchr(a, ' '); arg = arg ? arg + 1 : "";
+    while (*arg == ' ' || *arg == '\t') arg++;
     char cmd[400];
-    switch (r->type) {
-    case A_START:
-        snprintf(cmd, sizeof cmd, "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10200000 -n '%s'", r->arg);
-        run_sh(cmd); alog("key %d -> start %s", code, r->arg); break;
-    case A_SH: run_sh(r->arg); alog("key %d -> sh", code); break;
-    case A_KEY: tap(r->key); alog("key %d -> key %d", code, r->key); break;
-    default: alog("key %d -> disabled", code); break;
+    if (!strncmp(a, "start ", 6)) {
+        snprintf(cmd, sizeof cmd, "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10200000 -n '%s'", arg);
+        run_sh(cmd); alog("key %d %s -> start %s", code, ln, arg);
+    } else if (!strncmp(a, "sh ", 3)) { run_sh(arg); alog("key %d %s -> sh", code, ln); }
+    else if (!strncmp(a, "key ", 4)) {
+        int k = atoi(arg);
+        if (k > 0 && k < MAXKEY) tap(k);
+        alog("key %d %s -> key %d", code, ln, k);
+    } else if (!strncmp(a, "act ", 4)) { act_fifo(arg); alog("key %d %s -> act %s", code, ln, arg); }
+    else if (!strcmp(a, "orig")) { tap(code); alog("key %d %s -> original", code, ln); }
+    else alog("key %d %s -> disabled", code, ln);
+}
+
+/* PASS -> original event on the clone; FIRE -> the rule's action. syn: add SYN_REPORT after a PASS
+ * (tick/reset outputs; outputs of a real event are followed by that event's own SYN). */
+static void run_outs(int n, int syn) {
+    for (int i = 0; i < n; i++) {
+        if (outs[i].kind == OUT_PASS) {
+            emit(EV_KEY, outs[i].code, outs[i].value);
+            if (syn) emit(EV_SYN, 0, 0);
+            if (outs[i].value == 1 && syn) alog("key %d held -> original", outs[i].code);
+        } else do_action(outs[i].code, outs[i].layer);
     }
 }
+
+/* release anything the clone still holds down (device lost / grab dropped / exit) */
+static void release_all(void) { run_outs(lyr_reset(L, outs, NOUT), 1); }
 
 static int is_virtual(int fd) {
     char phys[64] = {0};
@@ -190,6 +318,7 @@ static int make_uinput(int src) {
 
 static void set_grab(int on) {
     if (rfd < 0 || on == grabbed) return;
+    if (!on) release_all();
     if (ioctl(rfd, EVIOCGRAB, on ? 1 : 0) == 0) { grabbed = on; alog(on ? "remote grabbed" : "remote released"); }
     else alog("EVIOCGRAB(%d) failed: %s", on, strerror(errno));
 }
@@ -200,23 +329,29 @@ static void handle(struct input_event *ev) {
         if (ev->value == 1) { alog("KEY %d", c); key_t0[c] = now_ms(); }
         if (ev->value == 0 && key_t0[c]) { alog("UP %d after %lldms", c, now_ms() - key_t0[c]); key_t0[c] = 0; }
         if (c == PANIC_KEY) back_down_at = ev->value ? (ev->value == 1 ? now_ms() : back_down_at) : 0;
-        if (grabbed && rules[c].type) {
-            if (ev->value == 1) { down_at[c] = now_ms(); passthru[c] = 0; return; }
-            if (ev->value == 2) { if (passthru[c]) emit(EV_KEY, c, 2); return; }
-            if (ev->value == 0) {
-                if (passthru[c]) { emit(EV_KEY, c, 0); emit(EV_SYN, 0, 0); }
-                else if (down_at[c]) do_action(c);
-                down_at[c] = 0; passthru[c] = 0; return;
-            }
+        if (grabbed) {
+            /* a lone PASS rides on this event's own SYN (zero-change passthrough); when several
+             * outputs come at once (flush / late deadline) each PASS gets its own SYN */
+            int n = lyr_on_key(L, c, ev->value, now_ms(), outs, NOUT);
+            run_outs(n, n > 1);
         }
+        return;
     }
     if (grabbed) emit(ev->type, ev->code, ev->value);
 }
 
+static void device_lost(const char *why) {
+    alog("%s", why);
+    release_all();
+    close(rfd); rfd = -1; grabbed = 0;
+}
+
 int main(int argc, char **argv) {
-    conf_path = argc > 1 ? argv[1] : "/data/local/tmp/remap/remap.conf";
+    conf_path = argc > 1 ? argv[1] : DEF_CONF;
     signal(SIGCHLD, SIG_IGN); signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
-    FILE *pf = fopen("/data/local/tmp/remap/remapd.pid", "w");
+    L = lyr_new(250, 600);
+    if (!L) return 1;
+    FILE *pf = fopen(PID_PATH, "w");
     if (pf) { fprintf(pf, "%d\n", getpid()); fclose(pf); }
     alog("remapd starting pid %d", getpid());
 
@@ -237,32 +372,30 @@ int main(int argc, char **argv) {
             if (ufd < 0) ufd = make_uinput(rfd);
             if (ufd < 0) { close(rfd); rfd = -1; sleep(5); continue; }
         }
-        set_grab(nrules > 0);
+        set_grab(nmapped > 0);
 
-        /* timeout: nearest hold deadline, else 1 s (to notice config changes) */
+        /* timeout: nearest layer deadline / panic deadline, else 1 s (to notice config changes) */
         int timeout = 1000; long long t = now_ms();
-        for (int c = 1; c < MAXKEY; c++)
-            if (down_at[c] && !passthru[c]) { long long left = down_at[c] + HOLD_MS - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
+        long long dl = grabbed ? lyr_next_deadline(L) : -1;
+        if (dl >= 0) { long long left = dl - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
         if (back_down_at) { long long left = back_down_at + PANIC_MS - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
 
         struct pollfd p = { .fd = rfd, .events = POLLIN };
         int r = poll(&p, 1, timeout);
         if (r > 0) {
-            if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) { alog("remote gone"); close(rfd); rfd = -1; grabbed = 0; continue; }
+            if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) { device_lost("remote gone"); continue; }
             struct input_event evs[64];
             ssize_t n = read(rfd, evs, sizeof evs);
-            if (n < 0 && errno != EAGAIN) { alog("read error %s", strerror(errno)); close(rfd); rfd = -1; grabbed = 0; continue; }
+            if (n < 0 && errno != EAGAIN) { device_lost("read error"); continue; }
             for (int i = 0; i < n / (ssize_t)sizeof evs[0]; i++) handle(&evs[i]);
         }
         t = now_ms();
-        for (int c = 1; c < MAXKEY; c++)       /* long hold on a remapped key -> original key */
-            if (down_at[c] && !passthru[c] && t - down_at[c] >= HOLD_MS) {
-                passthru[c] = 1; emit(EV_KEY, c, 1); emit(EV_SYN, 0, 0); alog("key %d held -> original", c);
-            }
+        if (grabbed) run_outs(lyr_on_tick(L, t, outs, NOUT), 1);
         if (back_down_at && t - back_down_at >= PANIC_MS) {
             alog("BACK held 10s -> exiting, remote released");
+            release_all();
             if (rfd >= 0) ioctl(rfd, EVIOCGRAB, 0);
-            unlink("/data/local/tmp/remap/remapd.pid");
+            unlink(PID_PATH);
             return 0;
         }
     }
