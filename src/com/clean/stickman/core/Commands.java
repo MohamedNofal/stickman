@@ -42,8 +42,9 @@ public final class Commands {
             + Originals.setting("global", "com.amazon.tv.settings.featured_item_video_enabled", off);
     }
 
+    /** null for invalid names, and (when putting to sleep) for protected packages such as Net Filter or Stickman. */
     public static String keepAsleep(String pkg, boolean on) {
-        if (!Originals.validPkg(pkg)) return null;
+        if (!Originals.validPkg(pkg) || (on && Catalog.isProtected(pkg))) return null;
         if (on) {
             return Originals.bucket(pkg, "rare") + "; " + Originals.appop(pkg, "RUN_ANY_IN_BACKGROUND", "ignore");
         }
@@ -54,9 +55,9 @@ public final class Commands {
             + "if [ -f " + f + " ]; then grep -v -e '^bucket " + pkg + " ' -e '^appop " + pkg + " ' " + f + " > " + f + ".tmp; mv " + f + ".tmp " + f + "; fi";
     }
 
-    /** null when pkg is protected. */
+    /** null for invalid names, and when disabling a protected pkg (enabling is always allowed). */
     public static String debloat(String pkg, boolean disable) {
-        if (!Originals.validPkg(pkg) || Catalog.isProtected(pkg)) return null;
+        if (!Originals.validPkg(pkg) || (disable && Catalog.isProtected(pkg))) return null;
         if (disable) return Originals.disablePkg(pkg);
         return "pm enable " + pkg;
     }

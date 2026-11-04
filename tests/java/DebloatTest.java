@@ -29,6 +29,7 @@ public class DebloatTest {
         T.yes(Debloat.READ_CMD.contains("^pkg ") && Debloat.READ_CMD.contains(Originals.FILE), Debloat.READ_CMD);
     }
 
+    static String lastOut = "";
     static String run(String script, java.io.File bin, java.io.File log) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", script);
         pb.environment().put("PATH", bin.getPath() + ":" + System.getenv("PATH"));
@@ -36,6 +37,7 @@ public class DebloatTest {
         pb.redirectErrorStream(true);
         Process p = pb.start();
         String out = new String(readAll(p.getInputStream()));
+        lastOut = out;
         T.eq(0, p.waitFor(), "exit: " + out);
         return log.exists() ? new String(java.nio.file.Files.readAllBytes(log.toPath())) : "";
     }
@@ -72,7 +74,9 @@ public class DebloatTest {
     public void testRestoreAllNoJournal() throws Exception {
         java.io.File d = java.nio.file.Files.createTempDirectory("rall").toFile();
         java.io.File bin = stubs(d), log = new java.io.File(d, "log");
-        T.eq("", run(Debloat.restoreAllScript(new java.io.File(d, "none").getPath()), bin, log), "nothing");
+        T.eq("", run(Debloat.restoreAllScript(new java.io.File(d, "none").getPath()) + "; echo AFTER", bin, log), "nothing");
+        T.yes(lastOut.contains("RESTORED 0") && lastOut.contains("AFTER"), "appended refresh still runs: " + lastOut);
+        T.yes(!Debloat.restoreAllScript().contains("exit"), "no exit");
         T.yes(!new java.io.File(d, "none").exists(), "not created");
     }
     public void testRestoreAllSkipsProtectedAndGarbage() throws Exception {
@@ -87,7 +91,9 @@ public class DebloatTest {
         java.nio.file.Files.write(j.toPath(), "pkg com.x\npkg com.xy\nsetting a b c\n".getBytes());
         T.eq("pm enable com.x\n", run(Debloat.enableOne("com.x", j.getPath()), bin, log), "enable");
         T.eq("pkg com.xy\nsetting a b c\n", new String(java.nio.file.Files.readAllBytes(j.toPath())), "pruned only com.x");
-        T.eq(null, Debloat.enableOne("com.amazon.tv.launcher", j.getPath()), "protected");
+        T.yes(Debloat.enableOne("com.amazon.tv.launcher", j.getPath()) != null, "re-enabling a protected pkg is allowed");
+        T.yes(Commands.debloat("com.amazon.tv.launcher", false) != null, "enable allowed");
+        T.eq(null, Commands.debloat("com.amazon.tv.launcher", true), "disable refused");
         T.eq(null, Debloat.enableOne("a b", j.getPath()), "bad");
     }
     public void testListRecorded() {
@@ -99,5 +105,62 @@ public class DebloatTest {
         T.yes(Catalog.isProtected("com.amazon.tv.keypolicymanager"), "keypolicy");
         T.yes(!Catalog.isProtected("com.amazon.tv.releasenotes"), "releasenotes ok");
         T.yes(!Catalog.isProtected("com.amazon.imp"), "imp is not an ime");
+    }
+
+    static List<String> fixture() throws Exception {
+        List<String> out = new ArrayList<>();
+        for (String l : java.nio.file.Files.readAllLines(java.nio.file.Paths.get("tests/fixtures/amazon_pkgs.txt")))
+            if (l.startsWith("package:")) out.add(l.substring(8).trim());
+        return out;
+    }
+    static final String[] CRITICAL = {
+        "com.amazon.tv.oobe", "com.amazon.tv.ooberesource", "com.amazon.webview.chromium", "com.amazon.venezia",
+        "com.amazon.android.marketplace", "com.amazon.dcp", "com.amazon.dcp.contracts.framework.library",
+        "com.amazon.dcp.contracts.library", "com.amazon.identity.auth.device.authorization", "com.amazon.device.sync",
+        "com.amazon.device.sync.sdk.internal", "com.amazon.securitysyncclient", "com.amazon.providers.contentsupport",
+        "com.amazon.providers.tv", "com.amazon.tv.intentsupport", "com.amazon.tv.devicecontrol",
+        "com.amazon.tv.devicecontrolsettings", "com.amazon.connectivitycontroller", "com.amazon.connectivitydiag",
+        "com.amazon.connection_manager_neo_service", "com.amazon.wifilocker", "com.amazon.tv.ime",
+        "com.amazon.tv.keypolicymanager", "com.amazon.tv.quicksettings.ui", "com.amazon.tv.quicksettings.ui.overlay",
+        "com.amazon.tv.forcedotaupdater.v2", "com.amazon.tv.easyupgrade", "com.amazon.tiramisubootsupport",
+        "com.amazon.device.lowstoragemanager", "com.amazon.storage.manager", "com.amazon.application.compatibility.enforcer",
+        "com.amazon.application.compatibility.enforcer.sdk.library", "com.amazon.appaccesskeyprovider",
+        "com.amazon.tv.routing", "com.amazon.tv.arc", "com.amazon.tv.resolutioncycler", "com.amazon.ftvcalibrationservice",
+        "com.amazon.tv.sysappsinternal.resources", "com.amazon.android.devicemodelinfo.resources",
+        "com.amazon.tcomm", "com.amazon.tcomm.client", "com.amazon.tcomm.jackson", "com.amazon.ssm", "com.amazon.ssmsys",
+        "com.amazon.uxcontrollerservice", "com.amazon.dpcclient", "com.amazon.ftv.profilepicker",
+        "com.amazon.tv.parentalcontrols", "com.amazon.tifobserver", "com.amazon.device.messaging",
+        "com.amazon.device.messaging.sdk.library", "com.amazon.csm.htmlruntime", "com.amazon.whisperlink.core.android",
+        "com.amazon.whisperjoin.middleware.v2.np", "com.amazon.whisperplay.contracts", "com.amazon.whisperplay.service.install",
+        "com.amazon.client.metrics.api", "com.amazon.dummy.settings", "com.amazon.whasettings",
+        "com.amazon.device.blepa", "com.amazon.autopairservice", "com.amazon.accessoryconfigservice",
+        "com.amazon.tv.ffsprovisioneeclient", "com.amazon.tv.launcher", "com.amazon.firehomestarter", "com.amazon.tv.settings.v2", "com.amazon.device.software.ota",
+    };
+    public void testAdvancedOverRealDeviceListExcludesCritical() throws Exception {
+        List<String> real = fixture();
+        T.eq(179, real.size(), "fixture size");
+        StringBuilder sb = new StringBuilder();
+        for (String p : real) sb.append("package:").append(p).append('\n');
+        Debloat d = Debloat.parse(sb.toString() + Debloat.SEP + "\n");
+        List<String> adv = d.advanced();
+        for (String c : CRITICAL) {
+            T.yes(real.contains(c), "critical pkg present on device: " + c);
+            T.yes(!adv.contains(c), "offered but critical: " + c);
+        }
+        for (String p : real) {
+            String l = p.toLowerCase();
+            if (l.startsWith("com.amazon.dcp") || l.startsWith("com.amazon.device.settings") || l.startsWith("com.amazon.tv.devicecontrol"))
+                T.yes(!adv.contains(p), "family offered: " + p);
+        }
+        T.eq(4, d.recommended().size(), "all recommended still offered");
+        System.out.println("  advanced offered over real list: " + adv.size() + " of " + real.size());
+    }
+    public void testRulingFamiliesBlocked() {
+        String[] fam = { "com.amazon.tv.oobe", "com.android.webview", "com.amazon.dcp.x", "com.amazon.identity.y",
+            "com.amazon.account.z", "com.amazon.device.sync", "com.amazon.device.settings", "com.amazon.device.settings.foo",
+            "com.amazon.providers.x", "com.amazon.tv.intentsupport", "com.amazon.tv.devicecontrol", "com.amazon.tv.cec",
+            "com.amazon.connectivity", "com.amazon.network.x", "com.amazon.wifi.x", "com.android.packageinstaller", "com.amazon.venezia" };
+        for (String f : fam) T.yes(Catalog.isProtected(f), f);
+        for (String[] r : Catalog.DEBLOAT_RECOMMENDED) T.yes(!Catalog.isProtected(r[0]), "recommended stays offered: " + r[0]);
     }
 }

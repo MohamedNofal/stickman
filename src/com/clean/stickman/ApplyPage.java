@@ -34,8 +34,34 @@ public abstract class ApplyPage extends Page {
     void send(String cmd, String kind, String pending) {
         if (cmd == null) { say("Not allowed."); return; }
         mine.put(cmd, kind);
-        a.run(() -> result.setText(pending), cmd);
+        a.run(() -> {
+            result.setText(pending);
+            pendingSince = System.currentTimeMillis();
+            h.removeCallbacks(timeout);
+            h.postDelayed(timeout, PENDING_TIMEOUT_MS);
+        }, cmd);
     }
+
+    static final long PENDING_TIMEOUT_MS = 30000;
+    /** Own handler: MainActivity clears its handler on pause. */
+    final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+    /** When the newest command was sent (0 = nothing pending). */
+    long pendingSince;
+
+    /** Never stay "pending" forever: after 30 s with no answer show the bridge's last result. */
+    final Runnable timeout = new Runnable() {
+        public void run() {
+            if (pendingSince == 0 || mine.isEmpty()) return;
+            if (Bridge.busy && System.currentTimeMillis() - pendingSince < 3 * PENDING_TIMEOUT_MS) {
+                h.postDelayed(this, 5000);   // still connecting/running: give it a little longer
+                return;
+            }
+            pendingSince = 0;
+            mine.clear();
+            String r = Bridge.lastResult;
+            say(r.startsWith("FAIL") ? "Problem: " + r.substring(4).trim() : r.isEmpty() ? "No response" : "No response (last: " + r + ")");
+        }
+    };
 
     /** Applies the edited stickd.conf: saved locally, then the ensure rewrites it on the stick and spools reload. */
     void applyStickdConf(String text, String kind) {
@@ -63,6 +89,7 @@ public abstract class ApplyPage extends Page {
         if (a == null) return;
         String kind = mine.remove(cmd);
         if (kind == null) return;
+        if (mine.isEmpty()) pendingSince = 0;
         if (!ok) { say("Failed: " + output); return; }
         String s = describe(kind, output);
         if (s != null) say(s);

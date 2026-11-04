@@ -5,6 +5,10 @@ import java.util.Set;
 
 /** stickd.conf: key=value lines; unknown keys and bad values are ignored. */
 public final class StickdConf {
+    /** The stickd.conf the app ships with (everything off). */
+    public static final String DEFAULT_TEXT =
+        "autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=\nautokill.blacklist=\nstayawake.media=0\n";
+
     public boolean onLeave;
     public int intervalMin;
     public Set<String> whitelist = new LinkedHashSet<>();

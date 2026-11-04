@@ -5,6 +5,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.clean.stickman.core.Actions;
+import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
 import com.clean.stickman.core.StickdConf;
@@ -54,8 +55,7 @@ public class SpeedPage extends ApplyPage {
 
         LinearLayout s = card(l, "Keep asleep", "Chosen apps can't run in the background until you open them.");
         LinearLayout sr = Theme.row(a);
-        button(sr, "Add an app…", v -> ButtonEditor.pickApp(a, "Keep which app asleep?", app ->
-            send(Commands.keepAsleep(app[1], true), "asleep:" + app[0], "Putting " + app[0] + " to sleep…")));
+        button(sr, "Add an app…", v -> pickAsleep());
         button(sr, "Kept-asleep apps…", v -> send(Debloat.recorded("bucket"), "list", "Reading…"));
         s.addView(sr);
 
@@ -92,10 +92,32 @@ public class SpeedPage extends ApplyPage {
         return sb.toString();
     }
 
-    /** Multi-choice picker over installed apps (minus Stickman) for the whitelist or blacklist. */
+    /** Installed launchable apps, minus Stickman; minus every protected package (Net Filter, home, ...) when asked. */
+    List<String[]> apps(boolean dropProtected) {
+        List<String[]> out = new ArrayList<>();
+        for (String[] app : ButtonEditor.launchables(a)) {
+            if (app[1].equals(a.getPackageName())) continue;
+            if (dropProtected && Catalog.isProtected(app[1])) continue;
+            out.add(app);
+        }
+        return out;
+    }
+
+    /** Keep-asleep picker: protected packages (Net Filter's proxy, home, Stickman, ...) are never offered. */
+    void pickAsleep() {
+        final List<String[]> apps = apps(true);
+        if (apps.isEmpty()) { say("Couldn't list the installed apps."); return; }
+        String[] names = new String[apps.size()];
+        for (int i = 0; i < names.length; i++) names[i] = apps.get(i)[0];
+        a.dialog().setTitle("Keep which app asleep?").setItems(names, (d, w) -> {
+            String[] app = apps.get(w);
+            send(Commands.keepAsleep(app[1], true), "asleep:" + app[0], "Putting " + app[0] + " to sleep…");
+        }).setNegativeButton("Cancel", null).show();
+    }
+
+    /** Multi-choice picker for the whitelist (any app) or the force-stop blacklist (protected apps excluded). */
     void pickList(final boolean white) {
-        final List<String[]> apps = new ArrayList<>();
-        for (String[] app : ButtonEditor.launchables(a)) if (!app[1].equals(a.getPackageName())) apps.add(app);
+        final List<String[]> apps = apps(!white);
         if (apps.isEmpty()) { say("Couldn't list the installed apps."); return; }
         final StickdConf c = conf();
         final Set<String> set = white ? c.whitelist : c.blacklist;
@@ -107,6 +129,7 @@ public class SpeedPage extends ApplyPage {
             .setPositiveButton("Save", (d, w) -> {
                 set.clear();
                 for (int i = 0; i < on.length; i++) if (on[i]) set.add(apps.get(i)[1]);
+                if (!white) set.removeIf(Catalog::isProtected);
                 if (white) c.blacklist.removeAll(set); else c.whitelist.removeAll(set);
                 save(c);
             })

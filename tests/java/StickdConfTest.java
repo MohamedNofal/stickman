@@ -30,9 +30,9 @@ public class StickdConfTest {
         T.yes(r.onLeave && r.stayAwakeMedia && r.intervalMin == 30, "flags");
         T.eq(c.whitelist, r.whitelist, "wl");
         T.eq(c.blacklist, r.blacklist, "bl");
-        T.eq(Store_DEFAULT, new StickdConf().serialize(), "defaults match Store.DEFAULT_STICKD");
+        T.eq(StickdConf.DEFAULT_TEXT, new StickdConf().serialize(), "defaults match the shipped default text");
+        T.yes(StickdConf.DEFAULT_TEXT.contains("autokill.on_leave=0") && StickdConf.DEFAULT_TEXT.contains("stayawake.media=0"), "default keys");
     }
-    static final String Store_DEFAULT = "autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=\nautokill.blacklist=\nstayawake.media=0\n";
     public void testSerializeDropsBadPackages() {
         StickdConf c = new StickdConf();
         c.whitelist.add("ok.pkg"); c.whitelist.add("bad,pkg"); c.blacklist.add("x\ny=1");

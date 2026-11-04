@@ -23,10 +23,34 @@ public final class Catalog {
         if (pkg.startsWith("com.amazon.tv.settings")) return true;
         if (pkg.startsWith("com.amazon.device.software.ota")) return true;
         String p = pkg.toLowerCase();
-        // input methods (".ime") and key routing count as input packages
-        return p.contains("input") || p.contains("remote") || p.contains("bluetooth")
-            || p.endsWith(".ime") || p.contains(".ime.") || p.contains("keypolicy");
+        if (p.startsWith("com.amazon.device.settings") || p.equals("com.amazon.venezia") || p.endsWith(".ime")
+            || p.contains(".ime.") || p.endsWith(".arc") || p.equals("com.amazon.ssm") || p.equals("com.amazon.ssmsys")) return true;
+        for (String f : CRITICAL_PARTS) if (p.contains(f)) return true;
+        return false;
     }
+
+    /**
+     * Substrings of system-critical families (lower case): home/launch, settings, input, connectivity,
+     * identity/account, rendering/runtime, installer/store, update/boot, storage/media providers, shared libraries.
+     */
+    static final String[] CRITICAL_PARTS = {
+        // input / remote / key routing
+        "input", "remote", "bluetooth", "keypolicy", "keymap", "tifobserver", "blepa", "autopair", "accessoryconfig",
+        // home, setup, settings, profiles, parental controls
+        "launcher", "home", "oobe", "settings", "profilepicker", "parentalcontrol", "uxcontroller",
+        // connectivity
+        "connectivity", "connection", "network", "wifi", "ffsprovision", "whisperjoin", "whisperlink", "cec", "routing",
+        // identity / account / device messaging
+        "identity", "account", "auth", "dcp", "dpcclient", "tcomm", "messaging", "sync",
+        // rendering / runtimes / display
+        "webview", "htmlruntime", "resolution", "calibration",
+        // installers, store, app compatibility, intents
+        "packageinstaller", "install", "marketplace", "compatibility", "appaccesskey", "intentsupport", "devicecontrol",
+        // updates, boot, storage, providers
+        "ota", "update", "upgrade", "bootsupport", "storage", "providers",
+        // shared libraries / resource + overlay packages / contracts
+        "library", ".sdk", "contracts", "resources", "ooberesource", "overlay", "metrics.api",
+    };
 
     /** {pkg, label, why}; installed on the Fire TV 4K Max (ags.app and alexashopping were absent, dropped). */
     public static final String[][] DEBLOAT_RECOMMENDED = {

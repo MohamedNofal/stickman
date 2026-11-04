@@ -60,18 +60,19 @@ public final class Debloat {
     public static String restoreAllScript() { return restoreAllScript(Originals.FILE); }
 
     public static String restoreAllScript(String path) {
-        return "F=" + Originals.q(path) + "; [ -f \"$F\" ] || { echo RESTORED 0; exit 0; }; n=0; "
+        // no 'exit': callers append a refresh command to the same shell
+        return "F=" + Originals.q(path) + "; n=0; if [ -f \"$F\" ]; then "
             + "for p in $(grep '^pkg ' \"$F\" | cut -d' ' -f2); do "
             + "case \"$p\" in *[!A-Za-z0-9._]*) continue;; esac; pm enable \"$p\" >/dev/null; n=$((n+1)); done; "
             + "grep -v '^pkg ' \"$F\" > \"$F.tmp\"; if [ -s \"$F.tmp\" ]; then mv \"$F.tmp\" \"$F\"; else rm -f \"$F.tmp\" \"$F\"; fi; "
-            + "echo RESTORED $n";
+            + "fi; echo RESTORED $n";
     }
 
-    /** Re-enables one package and drops its "pkg" journal line; null for protected / invalid names. */
+    /** Re-enables one package and drops its "pkg" journal line; null for invalid names (re-enabling is always allowed). */
     public static String enableOne(String pkg) { return enableOne(pkg, Originals.FILE); }
 
     public static String enableOne(String pkg, String path) {
-        if (!Originals.validPkg(pkg) || Catalog.isProtected(pkg)) return null;
+        if (!Originals.validPkg(pkg)) return null;
         return "F=" + Originals.q(path) + "; pm enable " + pkg + " >/dev/null; "
             + "if [ -f \"$F\" ]; then grep -v -x 'pkg " + pkg + "' \"$F\" > \"$F.tmp\"; "
             + "if [ -s \"$F.tmp\" ]; then mv \"$F.tmp\" \"$F\"; else rm -f \"$F.tmp\" \"$F\"; fi; fi; echo ENABLED " + pkg;

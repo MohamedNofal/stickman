@@ -46,4 +46,10 @@ public class OriginalsTest {
         T.yes(s.contains("/data/local/tmp/stickman/originals"), "path");
         T.yes(s.contains("settings delete") && s.contains("pm enable") && s.contains("rm -f"), "pieces");
     }
+    public void testKeepAsleepRefusesProtected() {
+        for (String p : new String[]{"com.clean.netfilter", "com.clean.stickman", "com.wolf.firelauncher", "com.amazon.tv.launcher"})
+            T.eq(null, Commands.keepAsleep(p, true), p);
+        T.yes(Commands.keepAsleep("com.netflix.ninja", true) != null, "normal app ok");
+        T.yes(Commands.keepAsleep("com.clean.netfilter", false) != null, "waking is always allowed");
+    }
 }

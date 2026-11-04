@@ -22,8 +22,7 @@ public final class Store {
     static final String STICKD = "stickd.conf";
     static final String WOLF_PKG = "com.wolf.firelauncher";
     static final String WOLF = WOLF_PKG + "/.screens.launcher.LauncherActivity";
-    public static final String DEFAULT_STICKD =
-        "autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=\nautokill.blacklist=\nstayawake.media=0\n";
+    public static final String DEFAULT_STICKD = com.clean.stickman.core.StickdConf.DEFAULT_TEXT;
 
     static SharedPreferences prefs(Context c) { return c.getSharedPreferences("stickman", 0); }
 
