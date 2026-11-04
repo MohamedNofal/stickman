@@ -20,4 +20,24 @@ public class StickdConfTest {
         StickdConf n = StickdConf.parse(null);
         T.eq(0, n.intervalMin, "null text");
     }
+    public void testSerializeRoundTrip() {
+        StickdConf c = new StickdConf();
+        c.onLeave = true; c.intervalMin = 30; c.stayAwakeMedia = true;
+        c.whitelist.add("a.b"); c.whitelist.add("c.d"); c.blacklist.add("e.f");
+        String s = c.serialize();
+        T.eq("autokill.on_leave=1\nautokill.interval_min=30\nautokill.whitelist=a.b,c.d\nautokill.blacklist=e.f\nstayawake.media=1\n", s, "text");
+        StickdConf r = StickdConf.parse(s);
+        T.yes(r.onLeave && r.stayAwakeMedia && r.intervalMin == 30, "flags");
+        T.eq(c.whitelist, r.whitelist, "wl");
+        T.eq(c.blacklist, r.blacklist, "bl");
+        T.eq(Store_DEFAULT, new StickdConf().serialize(), "defaults match Store.DEFAULT_STICKD");
+    }
+    static final String Store_DEFAULT = "autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=\nautokill.blacklist=\nstayawake.media=0\n";
+    public void testSerializeDropsBadPackages() {
+        StickdConf c = new StickdConf();
+        c.whitelist.add("ok.pkg"); c.whitelist.add("bad,pkg"); c.blacklist.add("x\ny=1");
+        String s = c.serialize();
+        T.yes(s.contains("autokill.whitelist=ok.pkg\n"), s);
+        T.yes(s.contains("autokill.blacklist=\n"), s);
+    }
 }

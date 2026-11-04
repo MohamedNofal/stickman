@@ -16,14 +16,16 @@ public final class Catalog {
         "com.clean.netfilter", "com.wolf.firelauncher", "com.clean.stickman",
         "com.amazon.tv.settings", "com.amazon.device.software.ota")));
 
-    /** True for exact NEVER_DISABLE entries plus the settings / ota / input / remote / bluetooth families. */
+    /** True for exact NEVER_DISABLE entries plus the settings / ota / input (incl. IME, key policy) / remote / bluetooth families. */
     public static boolean isProtected(String pkg) {
         if (pkg == null) return true;
         if (NEVER_DISABLE.contains(pkg)) return true;
         if (pkg.startsWith("com.amazon.tv.settings")) return true;
         if (pkg.startsWith("com.amazon.device.software.ota")) return true;
         String p = pkg.toLowerCase();
-        return p.contains("input") || p.contains("remote") || p.contains("bluetooth");
+        // input methods (".ime") and key routing count as input packages
+        return p.contains("input") || p.contains("remote") || p.contains("bluetooth")
+            || p.endsWith(".ime") || p.contains(".ime.") || p.contains("keypolicy");
     }
 
     /** {pkg, label, why}; installed on the Fire TV 4K Max (ags.app and alexashopping were absent, dropped). */

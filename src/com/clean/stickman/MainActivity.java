@@ -37,13 +37,17 @@ public class MainActivity extends Activity implements Bridge.Listener {
     /** The open-time ensure was skipped because another VPN is up. */
     boolean vpnPaused;
 
-    /** Later tasks swap their real pages in here. */
     Page makePage(int i) {
         switch (SECTIONS[i]) {
             case "Remote": return new RemotePage();
             case "Status": return new StatusPage();
+            case "Speed": return new SpeedPage();
+            case "Sleep": return new SleepPage();
+            case "Privacy": return new PrivacyPage();
+            case "Debloat": return new DebloatPage();
+            case "Shortcuts": return new ShortcutsPage();
             case "Settings": return new SettingsPage();
-            default: return new PlaceholderPage(SECTIONS[i]);
+            default: throw new IllegalArgumentException(SECTIONS[i]);
         }
     }
 

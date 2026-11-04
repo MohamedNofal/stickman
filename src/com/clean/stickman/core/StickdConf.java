@@ -46,4 +46,23 @@ public final class StickdConf {
         }
         return s;
     }
+
+    /** key=value text (all keys, fixed order); list entries that aren't plain package names are dropped. */
+    public String serialize() {
+        return "autokill.on_leave=" + (onLeave ? 1 : 0) + "\n"
+            + "autokill.interval_min=" + Math.max(0, intervalMin) + "\n"
+            + "autokill.whitelist=" + join(whitelist) + "\n"
+            + "autokill.blacklist=" + join(blacklist) + "\n"
+            + "stayawake.media=" + (stayAwakeMedia ? 1 : 0) + "\n";
+    }
+
+    private static String join(Set<String> s) {
+        StringBuilder b = new StringBuilder();
+        for (String p : s) {
+            if (p == null || !p.matches("[A-Za-z0-9._]+")) continue;
+            if (b.length() > 0) b.append(',');
+            b.append(p);
+        }
+        return b.toString();
+    }
 }

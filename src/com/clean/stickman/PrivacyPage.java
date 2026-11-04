@@ -1,0 +1,145 @@
+package com.clean.stickman;
+
+import android.text.InputType;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import com.clean.stickman.core.Catalog;
+import com.clean.stickman.core.Commands;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/** Private-DNS ad blocking presets, a DNS status card, and the "limit ads & tracking" switch. */
+public class PrivacyPage extends ApplyPage {
+    static final long AUTO_READ_MS = 30000;
+    /** Prints one line "DNS <mode> <specifier> ADS <limit_ad_tracking>". */
+    static final String READ = "echo DNS $(settings get global private_dns_mode) $(settings get global private_dns_specifier)"
+        + " ADS $(settings get secure limit_ad_tracking)";
+    static final Pattern STATE = Pattern.compile("DNS (\\S+) (\\S+) ADS (\\S+)");
+
+    Button[] presets, ads;
+    TextView dnsNow, dnsCheck;
+    long readAt, checkShownAt = -1;
+
+    @Override public String title() { return "Privacy"; }
+
+    @Override public android.view.View build(MainActivity act) {
+        LinearLayout l = start(act);
+
+        LinearLayout s = card(l, "Private DNS now", null);
+        dnsNow = Theme.text(a, "Not read yet.", 16, Theme.TEXT);
+        s.addView(dnsNow);
+        dnsCheck = Theme.text(a, "", 14, Theme.MUTED);
+        s.addView(dnsCheck);
+        button(s, "Refresh", v -> read());
+
+        LinearLayout d = card(l, "Ad-blocking DNS", "Blocks ads and trackers for every app. If the internet stops "
+            + "working after a change, Stickman switches it back off by itself.");
+        String[] names = new String[Catalog.DNS_PRESETS.length];
+        for (int i = 0; i < names.length; i++) names[i] = Catalog.DNS_PRESETS[i][0];
+        LinearLayout r1 = Theme.row(a), r2 = Theme.row(a);
+        presets = new Button[names.length];
+        for (int i = 0; i < names.length; i++) {
+            final int idx = i;
+            presets[i] = button(i < 3 ? r1 : r2, names[i], v -> choose(idx));
+        }
+        d.addView(r1);
+        d.addView(r2);
+        d.addView(Theme.text(a, "Net Filter keeps running alongside", 14, Theme.MUTED));
+
+        LinearLayout p = card(l, "Limit ads & tracking", "Turns off the advertising ID, interest-based ads, "
+            + "usage-data uploads and autoplaying featured videos.");
+        ads = choices(p, new String[] { "On", "Off" }, i ->
+            send(Commands.privacy(i == 0) + "; " + READ, "ads:" + i, "Applying…"));
+
+        return Theme.scroll(a, l);
+    }
+
+    void read() {
+        readAt = System.currentTimeMillis();
+        send(READ, "read", "Reading…");
+    }
+
+    void choose(int i) {
+        String[] pr = Catalog.DNS_PRESETS[i];
+        if (pr[1] == null) { apply(null, pr[0]); return; }
+        if (!"nextdns".equals(pr[1])) { apply(pr[1], pr[0]); return; }
+        final EditText id = new EditText(a);
+        id.setSingleLine(true);
+        id.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        id.setHint("e.g. abc123");
+        a.dialog().setTitle("Your NextDNS ID").setMessage("The ID from your NextDNS setup page (letters and numbers).")
+            .setView(id)
+            .setPositiveButton("Use it", (dl, w) -> {
+                String host = Catalog.nextDns(id.getText().toString().trim());
+                if (host == null) { say("That isn't a valid NextDNS ID: nothing changed."); return; }
+                apply(host, "NextDNS");
+            })
+            .setNegativeButton("Cancel", null).show();
+    }
+
+    void apply(String host, String label) {
+        String cmd = Commands.privateDns(host);
+        if (cmd == null) { say("Invalid DNS host: nothing changed."); return; }
+        send(cmd + "; " + READ, "dns:" + label, host == null ? "Turning private DNS off…" : "Switching to " + label + "…");
+    }
+
+    @Override public void onShow() {
+        if (a == null) return;
+        if (System.currentTimeMillis() - readAt > AUTO_READ_MS && !Bridge.otherVpnActive(a)) read();
+        onTick();
+    }
+
+    @Override public void onTick() {
+        if (a == null) return;
+        long at = LogTail.statusAt("dns");
+        if (at == checkShownAt) return;
+        checkShownAt = at;
+        String st = LogTail.status("dns");
+        if (st == null) { dnsCheck.setText("Safety check: no result yet."); return; }
+        String when = new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date(at));
+        dnsCheck.setText("Safety check " + when + ": " + ("ok".equals(st.trim()) ? "internet works ✓"
+            : "reverted".equals(st.trim()) ? "internet failed, so DNS was switched off" : st));
+    }
+
+    /** Updates the status card + selections from a READ line; returns the DNS description. */
+    String show(String out) {
+        Matcher m = STATE.matcher(out == null ? "" : out);
+        String last = null;
+        while (m.find()) last = m.group(0);
+        if (last == null) return null;
+        m = STATE.matcher(last);
+        m.find();
+        String mode = m.group(1), spec = m.group(2), lim = m.group(3);
+        boolean on = "hostname".equals(mode) && !"null".equals(spec);
+        String desc = on ? spec : "Off (" + ("null".equals(mode) ? "default" : mode) + ")";
+        int sel = -1;
+        for (int i = 0; i < Catalog.DNS_PRESETS.length; i++) {
+            String h = Catalog.DNS_PRESETS[i][1];
+            if (on ? (h != null && (h.equals(spec) || ("nextdns".equals(h) && spec.endsWith(".dns.nextdns.io")))) : h == null) sel = i;
+            if (on && h != null && h.equals(spec)) desc = Catalog.DNS_PRESETS[i][0] + "  (" + spec + ")";
+        }
+        if (on && spec.endsWith(".dns.nextdns.io")) desc = "NextDNS  (" + spec + ")";
+        dnsNow.setText(desc + "\nLimit ads & tracking: " + ("1".equals(lim) ? "On" : "Off"));
+        select(presets, sel);
+        select(ads, "1".equals(lim) ? 0 : 1);
+        return desc;
+    }
+
+    @Override String describe(String kind, String out) {
+        String desc = show(out);
+        if (kind.equals("read")) { result.setText(""); return null; }
+        if (kind.startsWith("dns:")) {
+            if (desc == null) return "Private DNS: " + kind.substring(4) + " applied.";
+            return desc.startsWith("Off") ? "Private DNS is off." : "Private DNS: " + desc + ". Checking the internet still works…";
+        }
+        if (kind.startsWith("ads:")) return "Limit ads & tracking " + (kind.endsWith("0") ? "on." : "off.");
+        return out;
+    }
+}
