@@ -1,6 +1,6 @@
 package com.clean.stickman.core;
 
-/** Action ids (act.fifo) and human descriptions of raw action strings. */
+/** Action ids (act/ spool) and human descriptions of raw action strings. */
 public final class Actions {
     private Actions() {}
 

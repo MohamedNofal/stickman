@@ -13,7 +13,7 @@
  * Config: /data/local/tmp/stickman/remap.conf (v2: "set", "profile <name>", "<code> <layer> <action>",
  * v1 "<code> <action>" = tap). Active profile: /data/local/tmp/stickman/profile (missing -> default).
  * Both are re-read when their mtime/size change. Actions:
- *   start <pkg/activity> | key <code> | none | orig | act <id> [arg] (-> act.fifo) | sh <command...>
+ *   start <pkg/activity> | key <code> | none | orig | act <id> [arg] (-> act/ spool) | sh <command...>
  */
 #define _GNU_SOURCE
 #include <dirent.h>
@@ -47,7 +47,7 @@
 #endif
 #define DEF_CONF DIR_PATH "remap.conf"
 #define PROFILE_PATH DIR_PATH "profile"
-#define FIFO_PATH DIR_PATH "act.fifo"
+#define SPOOL_DIR DIR_PATH "act"
 #define PID_PATH DIR_PATH "remapd.pid"
 #define NOUT (2 * MAXKEY + 8)
 
@@ -220,17 +220,27 @@ static void run_sh(const char *cmd) {
     }
 }
 
-static void act_fifo(const char *arg) {
-    int fd = open(FIFO_PATH, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
-    if (fd < 0) {
-        if (errno == ENXIO) alog("stickd not running");
-        else alog("act.fifo open: %s", strerror(errno));
-        return;
-    }
+/* act rules: spool protocol shared with stickd/Commands.act — write act/<name>.tmp, rename to act/<name>.act,
+ * <name> = <epoch-ms>-<pid>-<seq> (13-digit ms so numeric and lexical order agree). act.fifo is impossible:
+ * SELinux on Fire OS 8 denies shell fifo_file create. */
+static void act_spool(const char *arg) {
+    static unsigned seq;
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    long long ms = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    char base[192], tmp[200], fin[200];
+    snprintf(base, sizeof base, SPOOL_DIR "/%lld-%d-%u", ms, (int)getpid(), ++seq);
+    snprintf(tmp, sizeof tmp, "%s.tmp", base);
+    snprintf(fin, sizeof fin, "%s.act", base);
+    mkdir(SPOOL_DIR, 0775);   /* EEXIST is fine */
+    int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+    if (fd < 0) { alog("act spool open %s: %s", tmp, strerror(errno)); return; }
     char buf[300]; int len = snprintf(buf, sizeof buf, "%s\n", arg);
-    if (len >= (int)sizeof buf) len = sizeof buf - 1;
-    if (write(fd, buf, len) != len) alog("act.fifo write: %s", strerror(errno));
-    close(fd);
+    if (len >= (int)sizeof buf) { len = sizeof buf - 1; buf[len - 1] = '\n'; }
+    int ok = write(fd, buf, len) == len;
+    if (!ok) alog("act spool write: %s", strerror(errno));
+    if (close(fd) != 0) ok = 0;
+    if (!ok) { unlink(tmp); return; }
+    if (rename(tmp, fin) != 0) { alog("act spool rename: %s", strerror(errno)); unlink(tmp); }
 }
 
 static const char *layer_name[3] = { "tap", "double", "hold" };
@@ -250,7 +260,7 @@ static void do_action(int code, int layer) {
         int k = atoi(arg);
         if (k > 0 && k < MAXKEY) tap(k);
         alog("key %d %s -> key %d", code, ln, k);
-    } else if (!strncmp(a, "act ", 4)) { act_fifo(arg); alog("key %d %s -> act %s", code, ln, arg); }
+    } else if (!strncmp(a, "act ", 4)) { act_spool(arg); alog("key %d %s -> act %s", code, ln, arg); }
     else if (!strcmp(a, "orig")) { tap(code); alog("key %d %s -> original", code, ln); }
     else alog("key %d %s -> disabled", code, ln);
 }

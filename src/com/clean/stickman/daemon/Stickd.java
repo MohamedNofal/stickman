@@ -4,14 +4,13 @@ import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EventParser;
 import com.clean.stickman.core.RemapModel;
+import com.clean.stickman.core.Spool;
 import com.clean.stickman.core.StickdConf;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
-import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
@@ -35,7 +34,7 @@ import java.util.regex.Pattern;
 public final class Stickd {
     public static final int VERSION = 1;
 
-    /** One act.fifo action. {@code arg} is "" when the line has none. */
+    /** One spooled action (act/*.act). {@code arg} is "" when the line has none. */
     public interface Handler { void run(String arg); }
 
     /** Foreground-change hook for later features (auto-kill, stay-awake...). */
@@ -87,8 +86,7 @@ public final class Stickd {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (pid.equals(read(file("stickd.pid")).trim())) file("stickd.pid").delete();
         }));
-        File fifo = file("act.fifo");
-        if (!fifo.exists()) Sh.run("mkfifo -m 0660 '" + fifo.getPath() + "'");
+        file("act").mkdirs();
         activeProfile = read(file("profile")).trim();
         loadConfs();
         registerCore();
@@ -99,7 +97,7 @@ public final class Stickd {
         if (seed != null) onForeground(seed);
 
         Thread a = new Thread(this::followForeground, "stickd-fg");
-        Thread b = new Thread(this::readFifo, "stickd-act");
+        Thread b = new Thread(this::readSpool, "stickd-act");
         a.start(); b.start();
         String v = read(file("version")).trim();
         Sh.log("STATUS started version=" + (v.matches("\\d+") ? v : Integer.toString(VERSION)));
@@ -159,28 +157,37 @@ public final class Stickd {
         return p;
     }
 
-    // ---- thread B: action dispatch ----
-    private void readFifo() {
-        boolean warned = false;
+    // ---- thread B: action dispatch (spool dir act/, see core.Spool) ----
+    static final long POLL_MS = 100;
+    static final long STALE_TMP_MS = 10_000;
+    static final long STALE_ACT_AT_START_MS = 30_000;
+
+    private void readSpool() {
+        File d = file("act");
+        // Actions queued long before stickd started (e.g. a sleep_now while it was down) are dropped, not replayed.
+        drainSpool(d, System.currentTimeMillis() - STALE_ACT_AT_START_MS);
         while (true) {
-            File fifo = file("act.fifo");
-            // Never let RandomAccessFile create a regular file in the FIFO's place (isFile() is false for a FIFO).
-            if (!fifo.exists() || fifo.isFile()) {
-                if (!warned) Sh.log("act.fifo missing or not a FIFO; actions disabled until it exists");
-                warned = true;
-                sleep(30_000);
-                continue;
-            }
-            warned = false;
-            // O_RDWR keeps a writer open so reads never hit EOF and remapd's O_NONBLOCK open never gets ENXIO.
-            try (RandomAccessFile raf = new RandomAccessFile(fifo, "rw");
-                 BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(raf.getFD()), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = r.readLine()) != null) dispatch(line);
-            } catch (Exception e) {
-                Sh.log("fifo error: " + e);
-            }
-            sleep(1000);
+            try { drainSpool(d, 0); } catch (Throwable t) { Sh.log("spool error: " + t); }
+            sleep(POLL_MS);
+        }
+    }
+
+    private void drainSpool(File d, long dropOlderThan) {
+        String[] names = d.list();
+        if (names == null) { d.mkdirs(); return; }
+        long now = System.currentTimeMillis();
+        for (String n : names) {
+            if (!n.endsWith(Spool.TMP)) continue;
+            File f = new File(d, n);
+            if (now - f.lastModified() > STALE_TMP_MS) f.delete();  // crashed writer
+        }
+        for (String n : Spool.pending(names)) {
+            File f = new File(d, n);
+            String line = Spool.parse(read(f));
+            long mtime = f.lastModified();
+            if (!f.delete() && f.exists()) { Sh.log("spool: cannot delete " + n); continue; }
+            if (dropOlderThan > 0 && mtime < dropOlderThan) { Sh.log("spool: dropped stale " + line); continue; }
+            dispatch(line);
         }
     }
 

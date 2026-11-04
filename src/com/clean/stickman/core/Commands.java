@@ -4,7 +4,6 @@ package com.clean.stickman.core;
 public final class Commands {
     private Commands() {}
 
-    static final String FIFO = Originals.DIR + "/act.fifo";
 
     public static String screensaver(boolean on) {
         return Originals.setting("secure", "screensaver_enabled", on ? "1" : "0");
@@ -81,6 +80,8 @@ public final class Commands {
 
     public static String act(String id, String arg) {
         String line = (arg == null || arg.length() == 0) ? id : id + " " + arg;
-        return "echo " + Originals.q(line) + " > " + FIFO;
+        // Spool protocol (see Spool): write <name>.tmp then rename to <name>.act; <name> = <epoch-ms>-<pid>-<random>.
+        return "d=" + Spool.DIR + "; mkdir -p $d; t=$(date +%s%N); t=${t%??????}; n=$d/$t-$$-$RANDOM; "
+            + "echo " + Originals.q(line) + " > $n.tmp && mv $n.tmp $n.act";
     }
 }

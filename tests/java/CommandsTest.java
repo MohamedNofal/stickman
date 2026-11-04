@@ -40,7 +40,7 @@ public class CommandsTest {
     }
     public void testScreensaverAndActAndTime() {
         T.yes(Commands.screensaver(false).contains("screensaver_enabled 0"), "ss");
-        T.yes(Commands.act("open_screen", "x.Y").contains("echo 'open_screen x.Y' > /data/local/tmp/stickman/act.fifo"), "act");
+        T.yes(Commands.act("open_screen", "x.Y").contains("echo 'open_screen x.Y' > $n.tmp && mv $n.tmp $n.act"), "act");
         String t = Commands.setTime(1700000000000L);
         T.yes(t.contains("cmd alarm set-time 1700000000000") && t.contains("ntp_server time.google.com") && t.contains("auto_time 1"), t);
         T.yes(Commands.animation(0.5f).contains("window_animation_scale 0.5"), "anim");
