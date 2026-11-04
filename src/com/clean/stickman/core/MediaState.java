@@ -16,8 +16,16 @@ public final class MediaState {
 
     private static final Pattern STATE = Pattern.compile("^state=PlaybackState \\{state=(\\d+)\\b");
     private static final Set<String> PROTECTED = new HashSet<>(Arrays.asList("2", "3", "6"));
+    private static final Set<String> PLAYING = new HashSet<>(Arrays.asList("3"));
 
-    public static Set<String> protectedPackages(String dump) {
+    public static Set<String> protectedPackages(String dump) { return withStates(dump, PROTECTED); }
+
+    /** Packages whose session is PLAYING (3). */
+    public static Set<String> playingPackages(String dump) { return withStates(dump, PLAYING); }
+
+    public static boolean isPlaying(String dump) { return !playingPackages(dump).isEmpty(); }
+
+    private static Set<String> withStates(String dump, Set<String> states) {
         Set<String> out = new LinkedHashSet<>();
         if (dump == null) return out;
         String pkg = null;
@@ -26,7 +34,7 @@ public final class MediaState {
             if (l.startsWith("package=")) pkg = l.substring("package=".length()).trim();
             else {
                 Matcher m = STATE.matcher(l);
-                if (m.find() && PROTECTED.contains(m.group(1)) && pkg != null && !pkg.isEmpty()) out.add(pkg);
+                if (m.find() && states.contains(m.group(1)) && pkg != null && !pkg.isEmpty()) out.add(pkg);
             }
         }
         return out;

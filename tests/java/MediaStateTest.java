@@ -27,4 +27,11 @@ public class MediaStateTest {
         T.eq(new HashSet<String>(),
             MediaState.protectedPackages(f.replace("PlaybackState {state=2,", "PlaybackState {state=1,")), "stopped");
     }
+
+    public void testIsPlaying() {
+        T.yes(MediaState.isPlaying(session("a.b", 1) + session("c.d", 3)), "one playing");
+        T.yes(!MediaState.isPlaying(session("a.b", 2) + session("c.d", 6) + session("e.f", 1)), "paused/buffering not playing");
+        T.yes(!MediaState.isPlaying(null), "null");
+        T.eq(new HashSet<>(Arrays.asList("c.d")), MediaState.playingPackages(session("a.b", 2) + session("c.d", 3)), "playing pkgs");
+    }
 }
