@@ -44,13 +44,17 @@ public class Bridge {
     /** True if some VPN other than ours is up (we would displace it by establishing ours). */
     public static boolean otherVpnActive(Context c) {
         if (BridgeService.running) return false;
-        ConnectivityManager cm = (ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (cm == null) return false;
-        Network[] ns = cm.getAllNetworks();
-        if (ns == null) return false;
-        for (Network n : ns) {
-            NetworkCapabilities nc = cm.getNetworkCapabilities(n);
-            if (nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            Network[] ns = cm.getAllNetworks();
+            if (ns == null) return false;
+            for (Network n : ns) {
+                NetworkCapabilities nc = cm.getNetworkCapabilities(n);
+                if (nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true;
+            }
+        } catch (RuntimeException e) { // incl. SecurityException; courtesy check only, fail open
+            android.util.Log.w("Stickman", "otherVpnActive failed: " + e);
         }
         return false;
     }
