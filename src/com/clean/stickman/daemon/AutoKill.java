@@ -27,6 +27,10 @@ final class AutoKill {
         t.setDaemon(true);
         return t;
     });
+    /** Serialises kills (boost / on-leave / interval). Never taken on the foreground thread. */
+    final Object killLock = new Object();
+    /** Guards only pendingLeave; held for microseconds, never during a kill. */
+    private final Object leaveLock = new Object();
     private ScheduledFuture<?> pendingLeave;
     private volatile long lastIntervalKill = System.currentTimeMillis();
 
@@ -39,13 +43,15 @@ final class AutoKill {
     }
 
     /** Each foreground change restarts the 10 s countdown; it fires once the user stays put. */
-    private synchronized void onForeground() {
-        if (pendingLeave != null) pendingLeave.cancel(false);
-        pendingLeave = null;
-        if (!d.conf().onLeave) return;
-        pendingLeave = timer.schedule(() -> {
-            if (d.conf().onLeave) autoKill();
-        }, LEAVE_DELAY_MS, TimeUnit.MILLISECONDS);
+    private void onForeground() {
+        synchronized (leaveLock) {
+            if (pendingLeave != null) pendingLeave.cancel(false);
+            pendingLeave = null;
+            if (!d.conf().onLeave) return;
+            pendingLeave = timer.schedule(() -> {
+                if (d.conf().onLeave) autoKill();
+            }, LEAVE_DELAY_MS, TimeUnit.MILLISECONDS);
+        }
     }
 
     private void intervalTick() {
@@ -64,7 +70,7 @@ final class AutoKill {
 
     private void autoKill() {
         try {
-            List<String> killed = killCandidates(false);
+            List<String> killed = killCandidates();
             Sh.log("STATUS autokill killed=" + String.join(",", killed));
         } catch (Throwable t) {
             Sh.log("autokill error: " + t);
@@ -73,7 +79,7 @@ final class AutoKill {
 
     void boost() {
         long before = memAvailableKb();
-        List<String> killed = killCandidates(true);
+        List<String> killed = killCandidates();
         Sh.run("pm trim-caches 999G");
         try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
         long after = memAvailableKb();
@@ -82,17 +88,22 @@ final class AutoKill {
         Sh.log("STATUS boost freed_mb=" + freed + " killed=" + killed.size());
     }
 
-    /** Recomputes candidates at kill time (fresh fg + media state), then kills each. */
-    private synchronized List<String> killCandidates(boolean trimFirst) {
+    /** Recomputes candidates at kill time (fresh fg + media state), then trims and kills each. */
+    private List<String> killCandidates() {
+        synchronized (killLock) { return killCandidatesLocked(); }
+    }
+
+    private List<String> killCandidatesLocked() {
         StickdConf c = d.conf();
         List<LruParser.Proc> procs = LruParser.parse(Sh.run("dumpsys activity lru"));
         String fg = d.foreground();
-        List<String> cands = KillPolicy.candidates(procs, fg, c.whitelist, MediaState.playingPackages(Sh.run("dumpsys media_session")));
+        List<String> cands = KillPolicy.candidates(procs, fg, c.whitelist, MediaState.protectedPackages(Sh.run("dumpsys media_session")));
         List<String> killed = new ArrayList<>();
         for (String pkg : cands) {
             if (pkg.equals(d.foreground())) continue;  // user switched to it meanwhile
-            // Trim fails harmlessly when the process is already trimmed or named differently: keep it quiet.
-            if (trimFirst) Sh.run("am send-trim-memory " + pkg + " COMPLETE >/dev/null 2>&1; true");
+            // Gentle first (boost, on-leave and interval alike). Trim fails harmlessly when the process is
+            // already trimmed or named differently: keep it quiet.
+            Sh.run("am send-trim-memory " + pkg + " COMPLETE >/dev/null 2>&1; true");
             // am kill refuses Amazon-protected packages (non-zero exit); only count real kills.
             String r = Sh.run((c.blacklist.contains(pkg) ? "am force-stop " : "am kill ") + pkg + " && echo KILLED");
             if (r.contains("KILLED")) killed.add(pkg);

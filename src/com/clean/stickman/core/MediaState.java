@@ -1,21 +1,32 @@
 package com.clean.stickman.core;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/** Reads {@code dumpsys media_session}: which packages have a session in state PLAYING (3). */
+/**
+ * Reads {@code dumpsys media_session}: packages with a session that auto-kill must protect, i.e. in
+ * PlaybackState PLAYING (3), PAUSED (2) or BUFFERING (6). STOPPED (1), NONE (0), null and others are not protected.
+ */
 public final class MediaState {
     private MediaState() {}
 
-    public static Set<String> playingPackages(String dump) {
+    private static final Pattern STATE = Pattern.compile("^state=PlaybackState \\{state=(\\d+)\\b");
+    private static final Set<String> PROTECTED = new HashSet<>(Arrays.asList("2", "3", "6"));
+
+    public static Set<String> protectedPackages(String dump) {
         Set<String> out = new LinkedHashSet<>();
         if (dump == null) return out;
         String pkg = null;
         for (String raw : dump.split("\n")) {
             String l = raw.trim();
             if (l.startsWith("package=")) pkg = l.substring("package=".length()).trim();
-            else if (l.startsWith("state=PlaybackState {state=3,") || l.startsWith("state=PlaybackState {state=3}")) {
-                if (pkg != null && !pkg.isEmpty()) out.add(pkg);
+            else {
+                Matcher m = STATE.matcher(l);
+                if (m.find() && PROTECTED.contains(m.group(1)) && pkg != null && !pkg.isEmpty()) out.add(pkg);
             }
         }
         return out;

@@ -3,6 +3,7 @@ package com.clean.stickman.daemon;
 import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EventParser;
+import com.clean.stickman.core.KillPolicy;
 import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.Spool;
@@ -15,10 +16,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,11 +40,6 @@ public final class Stickd {
     /** Foreground-change hook for later features (auto-kill, stay-awake...). */
     public interface FgListener { void onForeground(String pkg, String prevPkg); }
 
-    /** Home/launcher packages plus Stickman itself: never force-stopped. */
-    public static final Set<String> NEVER_KILL = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-        "com.wolf.firelauncher", "com.amazon.tv.launcher", "com.amazon.firehomestarter", "com.clean.stickman")));
-
-    private static final Pattern PKG = Pattern.compile("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+");
     private static final Pattern SCREEN_ARG = Pattern.compile("[A-Za-z0-9_.$/]+");
 
     public final String dir;
@@ -134,11 +128,15 @@ public final class Stickd {
         }
     }
 
-    synchronized void onForeground(String pkg) {
-        String prev = fgPkg;
-        if (pkg.equals(prev)) return;
-        fgPkg = pkg;
-        String p = applyProfile();
+    /** Only the state update + profile write happen under the Stickd lock; listeners run after it is released. */
+    void onForeground(String pkg) {
+        String prev, p;
+        synchronized (this) {
+            prev = fgPkg;
+            if (pkg.equals(prev)) return;
+            fgPkg = pkg;
+            p = applyProfile();
+        }
         Sh.log("STATUS fg " + pkg + " profile=" + p);
         for (FgListener l : fgListeners) {
             try { l.onForeground(pkg, prev); } catch (Throwable t) { Sh.log("fg listener error: " + t); }
@@ -227,7 +225,7 @@ public final class Stickd {
         register(Actions.PREVIOUS, a -> Sh.run("cmd media_session dispatch previous"));
         register(Actions.KILL_CURRENT, a -> {
             String pkg = fgPkg;
-            if (pkg == null || NEVER_KILL.contains(pkg) || !PKG.matcher(pkg).matches()) {
+            if (KillPolicy.isNeverKill(pkg)) {
                 Sh.log("kill_current skipped: " + pkg);
                 return;
             }

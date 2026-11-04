@@ -45,4 +45,11 @@ public class KillPolicyTest {
             T.yes(!c.contains(keep), "kept " + keep + ": " + c);
         T.eq(new HashSet<>(c).size(), c.size(), "distinct");
     }
+
+    public void testIsNeverKill() {
+        for (String p : new String[] {"com.clean.netfilter", "com.android.proxyhandler", "com.wolf.firelauncher",
+                "com.amazon.tv.launcher", "com.amazon.firehomestarter", "com.clean.stickman", null, "bad pkg; rm"})
+            T.yes(KillPolicy.isNeverKill(p), "never kill " + p);
+        T.yes(!KillPolicy.isNeverKill("org.videolan.vlc"), "vlc killable");
+    }
 }

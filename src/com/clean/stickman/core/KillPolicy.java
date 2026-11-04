@@ -30,7 +30,7 @@ public final class KillPolicy {
     private static final String[] KILL_ADJ = {"cch", "prev", "svcb", "svcl"};
     private static final Set<String> KILL_STATE = new HashSet<>(Arrays.asList("CEM", "CAC", "LAST"));
 
-    public static boolean neverKill(String pkg) {
+    public static boolean isNeverKill(String pkg) {
         if (pkg == null || NEVER_KILL.contains(pkg)) return true;
         for (String p : NEVER_KILL_PREFIX) if (pkg.startsWith(p)) return true;
         String l = pkg.toLowerCase();
@@ -44,18 +44,18 @@ public final class KillPolicy {
         return false;
     }
 
-    public static List<String> candidates(List<LruParser.Proc> procs, String fgPkg, Set<String> whitelist, Set<String> playing) {
+    public static List<String> candidates(List<LruParser.Proc> procs, String fgPkg, Set<String> whitelist, Set<String> mediaProtected) {
         Set<String> keep = new HashSet<>();
         if (fgPkg != null) keep.add(fgPkg);
         if (whitelist != null) keep.addAll(whitelist);
-        if (playing != null) keep.addAll(playing);
+        if (mediaProtected != null) keep.addAll(mediaProtected);
         for (LruParser.Proc p : procs) {
             String adjClass = p.adj.replaceAll("[^A-Za-z].*$", "");
             if (PROTECTED_CLASS.contains(adjClass) || PROTECTED_CLASS.contains(p.state)) keep.add(p.pkg);
         }
         Set<String> out = new LinkedHashSet<>();
         for (LruParser.Proc p : procs) {
-            if (keep.contains(p.pkg) || neverKill(p.pkg)) continue;
+            if (keep.contains(p.pkg) || isNeverKill(p.pkg)) continue;
             if (killable(p)) out.add(p.pkg);
         }
         return new ArrayList<>(out);
