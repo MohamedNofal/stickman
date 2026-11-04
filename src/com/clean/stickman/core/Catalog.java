@@ -34,7 +34,7 @@ public final class Catalog {
         {"com.amazon.tv.csapp", "Customer service", "Help app; rarely used"},
     };
 
-    /** {label, intent action}. */
+    /** {label, target}: an intent action, or a component (contains '/') started with am start -n. */
     public static final String[][] SHORTCUTS = {
         {"Display & Sounds", "com.amazon.device.settings.action.DISPLAY_AND_SOUNDS"},
         {"Network", "android.settings.WIFI_SETTINGS"},
@@ -45,9 +45,10 @@ public final class Catalog {
         {"Inputs", "com.amazon.tv.inputpreference.action.LAUNCH_INPUTS"},
         {"Quick settings", "com.amazon.tv.quicksettings.ui.action.SETTING_ID_QS"},
         {"Profiles", "com.amazon.tv.action.LAUNCH_PROFILE_PICKER"},
-        {"Ambient / screensaver", "com.amazon.device.settings.action.AMBIENT_MODE"},
+        {"Ambient / screensaver", "com.amazon.device.settings.action.SCREENSAVERS"},
         {"AV sync", "com.amazon.device.settings.action.AVSYNC_TUNING_ACTION"},
         {"Notifications", "com.amazon.tv.action.NOTIFICATION_CENTER"},
+        {"Troubleshooting", "com.amazon.firetv.troubleshooting/.ui.MainActivity"},
         {"Privacy & advertising", "com.amazon.device.settings.action.PRIVACY_SETTINGS"},
         {"Data monitor", "com.amazon.device.settings.action.DATA_MONITOR"},
     };
@@ -62,7 +63,9 @@ public final class Catalog {
         {"Off", null},
     };
 
+    /** null unless id is a plain NextDNS profile id. */
     public static String nextDns(String id) {
+        if (id == null || !id.matches("[A-Za-z0-9-]{1,63}")) return null;
         return id + ".dns.nextdns.io";
     }
 }

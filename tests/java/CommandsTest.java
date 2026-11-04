@@ -18,6 +18,26 @@ public class CommandsTest {
         T.yes(c.contains("/proc/net/tcp") && c.contains("tcp6") && c.contains("0A"), c);
         T.yes(c.contains("PROXY kept") && c.contains("PROXY cleared") && c.contains("PROXY none"), c);
     }
+    public void testClearDeadProxyFailsClosed() {
+        String c = Commands.clearDeadProxy();
+        T.yes(c.contains("*[!0-9]*") && c.contains("[ -z \"$hex\" ]"), "guards non-numeric/empty port: " + c);
+        T.yes(c.indexOf("[ -z \"$hex\" ]") < c.indexOf("PROXY cleared"), "guard precedes clear");
+    }
+    public void testNextDnsValidation() {
+        T.eq("abc123.dns.nextdns.io", Catalog.nextDns("abc123"), "ok");
+        T.eq(null, Catalog.nextDns("a;rm -rf /"), "inject");
+        T.eq(null, Catalog.nextDns("a b"), "space");
+        T.eq(null, Catalog.nextDns(""), "empty");
+        T.eq(null, Commands.privateDns("a;b"), "bad host");
+    }
+    public void testShortcutsScreensaverAndTroubleshooting() {
+        boolean ss = false, tr = false;
+        for (String[] s : Catalog.SHORTCUTS) {
+            if (s[1].equals("com.amazon.device.settings.action.SCREENSAVERS")) ss = true;
+            if (s[0].equals("Troubleshooting") && s[1].equals("com.amazon.firetv.troubleshooting/.ui.MainActivity")) tr = true;
+        }
+        T.yes(ss && tr, "ss=" + ss + " tr=" + tr);
+    }
     public void testScreensaverAndActAndTime() {
         T.yes(Commands.screensaver(false).contains("screensaver_enabled 0"), "ss");
         T.yes(Commands.act("open_screen", "x.Y").contains("echo 'open_screen x.Y' > /data/local/tmp/stickman/act.fifo"), "act");

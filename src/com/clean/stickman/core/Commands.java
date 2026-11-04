@@ -27,6 +27,7 @@ public final class Commands {
 
     public static String privateDns(String host) {
         if (host == null) return Originals.setting("global", "private_dns_mode", "off");
+        if (!host.matches("[A-Za-z0-9.-]+")) return null;
         return Originals.setting("global", "private_dns_mode", "hostname") + "; "
             + Originals.setting("global", "private_dns_specifier", host) + "; "
             + act(Actions.DNS_CHECK, null);
@@ -43,6 +44,7 @@ public final class Commands {
     }
 
     public static String keepAsleep(String pkg, boolean on) {
+        if (!Originals.validPkg(pkg)) return null;
         if (on) {
             return Originals.bucket(pkg, "rare") + "; " + Originals.appop(pkg, "RUN_ANY_IN_BACKGROUND", "ignore");
         }
@@ -55,7 +57,7 @@ public final class Commands {
 
     /** null when pkg is protected. */
     public static String debloat(String pkg, boolean disable) {
-        if (Catalog.isProtected(pkg)) return null;
+        if (!Originals.validPkg(pkg) || Catalog.isProtected(pkg)) return null;
         if (disable) return Originals.disablePkg(pkg);
         return "pm enable " + pkg;
     }
@@ -70,9 +72,11 @@ public final class Commands {
     public static String clearDeadProxy() {
         return "p=$(settings get global http_proxy); "
             + "case \"$p\" in ''|null|:0) echo PROXY none;; *) "
-            + "port=${p##*:}; hex=$(printf '%04X' \"$port\" 2>/dev/null); "
-            + "if [ -n \"$hex\" ] && cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -q \":$hex [0-9A-Fa-f:]* 0A \"; "
-            + "then echo PROXY kept; else settings put global http_proxy :0; echo PROXY cleared; fi;; esac";
+            + "port=${p##*:}; hex=; "
+            + "case \"$port\" in ''|*[!0-9]*) ;; *) hex=$(printf '%04X' \"$port\" 2>/dev/null);; esac; "
+            + "if [ -z \"$hex\" ]; then echo PROXY kept; "
+            + "elif cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -q \":$hex [0-9A-Fa-f:]* 0A \"; then echo PROXY kept; "
+            + "else settings put global http_proxy :0; echo PROXY cleared; fi;; esac";
     }
 
     public static String act(String id, String arg) {
