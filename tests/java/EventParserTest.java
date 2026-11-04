@@ -22,4 +22,13 @@ public class EventParserTest {
             "    mResumedActivity: ActivityRecord{18bef71 u0 app.wako/.MainActivity t260}\n"), "resumed");
         T.eq(null, EventParser.dumpsysResumed(""), "empty");
     }
+
+    public void testRemapKeyEpochMs() {
+        T.eq(1793831929889L, EventParser.remapKeyEpochMs("         1793831929.889  9787  9787 I RemapD  : KEY 103"), "key line");
+        T.eq(1793831929889L, EventParser.remapKeyEpochMs("1793831929.889 1 2 I RemapD: KEY 4 new"), "compact");
+        T.eq(-1L, EventParser.remapKeyEpochMs("--------- beginning of main"), "header");
+        T.eq(-1L, EventParser.remapKeyEpochMs("         1793831929.889  9787  9787 I RemapD  : started"), "not KEY");
+        T.eq(-1L, EventParser.remapKeyEpochMs("         1793831929.889  9787  9787 I Other   : KEY 103"), "other tag");
+        T.eq(-1L, EventParser.remapKeyEpochMs(null), "null");
+    }
 }

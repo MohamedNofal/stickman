@@ -8,6 +8,19 @@ import java.util.regex.Pattern;
 public final class EventParser {
     private EventParser() {}
 
+    /** {@code logcat -v epoch} line from remapd: "<sec>.<ms> <pid> <tid> I RemapD : KEY <code>". */
+    private static final Pattern REMAP_KEY =
+        Pattern.compile("^\\s*(\\d+)\\.(\\d{3})\\s+\\d+\\s+\\d+\\s+[VDIWEF]\\s+RemapD\\s*: KEY ");
+
+    /** Epoch ms of a RemapD KEY line, or -1 when the line is not one. */
+    public static long remapKeyEpochMs(String line) {
+        if (line == null) return -1;
+        Matcher m = REMAP_KEY.matcher(line);
+        if (!m.find()) return -1;
+        try { return Long.parseLong(m.group(1)) * 1000 + Integer.parseInt(m.group(2)); }
+        catch (NumberFormatException e) { return -1; }
+    }
+
     private static final Pattern RESUMED =
         Pattern.compile("wm_set_resumed_activity: \\[\\d+,([A-Za-z0-9_.]+)/[^,\\]]*");
 

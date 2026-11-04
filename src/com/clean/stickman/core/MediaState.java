@@ -16,11 +16,11 @@ public final class MediaState {
 
     private static final Pattern STATE = Pattern.compile("^state=PlaybackState \\{state=(\\d+)\\b");
     private static final Set<String> PROTECTED = new HashSet<>(Arrays.asList("2", "3", "6"));
-    private static final Set<String> PLAYING = new HashSet<>(Arrays.asList("3"));
+    private static final Set<String> PLAYING = new HashSet<>(Arrays.asList("3", "6"));
 
     public static Set<String> protectedPackages(String dump) { return withStates(dump, PROTECTED); }
 
-    /** Packages whose session is PLAYING (3). */
+    /** Packages whose session is PLAYING (3) or BUFFERING (6): a buffering stall must not drop stay-awake. */
     public static Set<String> playingPackages(String dump) { return withStates(dump, PLAYING); }
 
     public static boolean isPlaying(String dump) { return !playingPackages(dump).isEmpty(); }

@@ -2,10 +2,15 @@ package com.clean.stickman.daemon;
 
 import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.DnsGuard;
+import com.clean.stickman.core.EventParser;
 import com.clean.stickman.core.MediaState;
+import com.clean.stickman.core.SleepSchedule;
 import com.clean.stickman.core.SleepTimer;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -29,11 +34,10 @@ final class Sleep {
         t.setDaemon(true);
         return t;
     });
-    // Sleep-timer state; guarded by this.
-    private int minutes;
-    private long endAt;
-    private ScheduledFuture<?> fadeTask, endTask;
-    private boolean fading;
+    /** Sleep-timer decisions (own lock). Shell work for the timer runs on {@link #timer} only, in order. */
+    private final SleepSchedule sched = new SleepSchedule();
+    /** RemapD KEY watcher during a fade; touched only on the timer thread. */
+    private Process keyWatcher;
     // DNS guard; guarded by this.
     private ScheduledFuture<?> dnsTask;
     private int dnsGen;
@@ -41,17 +45,15 @@ final class Sleep {
     Sleep(Stickd d) { this.d = d; }
 
     void install() {
-        d.register(Actions.SLEEP_TIMER, a -> {
-            int cur;
-            synchronized (this) { cur = minutes; }
-            set(SleepTimer.next(cur));
-        });
+        d.register(Actions.SLEEP_TIMER, a -> set(SleepTimer.next(sched.minutes())));
         d.register(Actions.SLEEP_TIMER_SET, a -> {
             int m = SleepTimer.parseMinutes(a);
             if (m < 0) { Sh.log("sleep_timer_set bad arg: " + a); return; }
             set(m);
         });
         d.register(Actions.DNS_CHECK, a -> dnsCheck());
+        // A previous stickd may have died mid-fade: clear any overlay it left behind.
+        timer.execute(() -> Sh.run(SleepTimer.FADE_END));
         // A previous stickd may have died while owning stayon: give it back.
         if (d.file(STAYON_MARKER).exists()) stayOn(false);
         timer.scheduleWithFixedDelay(this::stayAwakeTick, STAY_AWAKE_TICK_S, STAY_AWAKE_TICK_S, TimeUnit.SECONDS);
@@ -61,47 +63,83 @@ final class Sleep {
     }
 
     // ---- sleep timer ----
-    synchronized void set(int min) {
-        if (fadeTask != null) fadeTask.cancel(false);
-        if (endTask != null) endTask.cancel(false);
-        fadeTask = endTask = null;
-        if (fading) { fading = false; Sh.run(SleepTimer.FADE_END); }
-        minutes = min;
-        if (min == 0) {
-            endAt = 0;
-            Sh.log("STATUS sleep_timer off");
-            return;
-        }
+    void set(int min) {
         long now = System.currentTimeMillis();
-        endAt = now + min * 60_000L;
-        long fadeIn = Math.max(0, SleepTimer.fadeStartAt(endAt) - now);
-        fadeTask = timer.schedule(this::startFade, fadeIn, TimeUnit.MILLISECONDS);
-        endTask = timer.schedule(this::fireEnd, endAt - now, TimeUnit.MILLISECONDS);
-        Sh.log("STATUS sleep_timer " + min);
+        SleepSchedule.Plan p = sched.set(min, now);  // bumps the generation: older fade/end tasks become no-ops
+        timer.execute(() -> {
+            stopKeyWatcher();
+            if (p.fadeEnd) Sh.run(SleepTimer.FADE_END);
+        });
+        if (p.endInMs >= 0) {
+            timer.schedule(() -> startFade(p.gen), p.fadeInMs, TimeUnit.MILLISECONDS);
+            timer.schedule(() -> fireEnd(p.gen), p.endInMs, TimeUnit.MILLISECONDS);
+        }
+        Sh.log("STATUS sleep_timer " + p.status);
     }
 
-    private void startFade() {
-        synchronized (this) {
-            if (minutes == 0) return;
-            fading = true;
-            long left = (endAt - System.currentTimeMillis() + 999) / 1000;
-            int secs = (int) Math.max(1, Math.min(SleepTimer.FADE_MS / 1000, left));
-            Sh.run(SleepTimer.fadeStart(secs));
-        }
+    /** Timer thread. */
+    private void startFade(int gen) {
+        int secs = sched.startFade(gen, System.currentTimeMillis());
+        if (secs < 0) return;  // stale: the timer was re-set or cancelled
+        startKeyWatcher(gen);
+        Sh.run(SleepTimer.fadeStart(secs));
     }
 
-    private void fireEnd() {
-        synchronized (this) {
-            if (minutes == 0) return;
-            minutes = 0;
-            endAt = 0;
-            fadeTask = endTask = null;
-            fading = false;
-        }
+    /** Timer thread. */
+    private void fireEnd(int gen) {
+        if (!sched.end(gen)) return;
+        stopKeyWatcher();
         Sh.run("cmd media_session dispatch pause");
         Sh.run("input keyevent KEYCODE_SLEEP");
         Sh.run(SleepTimer.FADE_END);
         Sh.log("STATUS sleep_timer off");
+    }
+
+    /** Timer thread. A remote key press during the fade (remapd logs "KEY <code>") cancels the timer. */
+    private void onKeyDuringFade(int gen) {
+        if (sched.gen() != gen || !sched.dismiss()) return;
+        stopKeyWatcher();
+        Sh.run(SleepTimer.FADE_END);
+        Sh.log("STATUS sleep_timer off");
+    }
+
+    /** Timer thread. Follows fresh RemapD lines; lines older than the watcher start (logcat replay) are ignored. */
+    private void startKeyWatcher(int gen) {
+        stopKeyWatcher();
+        final long since = System.currentTimeMillis();
+        final Process p;
+        try {
+            p = new ProcessBuilder("/system/bin/logcat", "-v", "epoch", "-T", "1", "-s", "RemapD:I")
+                .redirectErrorStream(true).start();
+            p.getOutputStream().close();
+        } catch (Exception e) {
+            Sh.log("key watcher error: " + e);
+            return;
+        }
+        keyWatcher = p;
+        Thread t = new Thread(() -> {
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    long ms = EventParser.remapKeyEpochMs(line);
+                    if (ms >= since) {
+                        timer.execute(() -> onKeyDuringFade(gen));
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {
+                // destroyed by stopKeyWatcher
+            } finally {
+                p.destroy();
+            }
+        }, "stickd-fadekeys");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Timer thread. */
+    private void stopKeyWatcher() {
+        if (keyWatcher != null) { keyWatcher.destroy(); keyWatcher = null; }
     }
 
     // ---- stay-awake while media plays ----
@@ -134,37 +172,39 @@ final class Sleep {
     }
 
     // ---- DNS guard ----
-    private synchronized void dnsCheck() {
-        if (dnsTask != null) dnsTask.cancel(false);  // restart: the latest change is the one to judge
+    private void dnsCheck() {
+        Sh.log("dns_check started");
         final boolean[] probes = new boolean[DnsGuard.PROBE_AT_MS.length];
         final long t0 = System.currentTimeMillis();
-        final int gen = ++dnsGen;
-        Sh.log("dns_check started");
-        dnsTask = dnsTimer.schedule(new Runnable() {
-            int i = 0;
-            @Override public void run() {
-                try {
-                    synchronized (Sleep.this) { if (gen != dnsGen) return; }
-                    probes[i] = Sh.run("(" + DnsGuard.PROBE + ") >/dev/null 2>&1 && echo PROBE_OK").contains("PROBE_OK");
-                    i++;
-                    if (i < probes.length) {
-                        long wait = Math.max(0, t0 + DnsGuard.PROBE_AT_MS[i] - System.currentTimeMillis());
-                        synchronized (Sleep.this) {
-                            if (gen == dnsGen) dnsTask = dnsTimer.schedule(this, wait, TimeUnit.MILLISECONDS);
+        synchronized (this) {
+            if (dnsTask != null) dnsTask.cancel(false);  // restart: the latest change is the one to judge
+            final int gen = ++dnsGen;
+            dnsTask = dnsTimer.schedule(new Runnable() {
+                int i = 0;
+                @Override public void run() {
+                    try {
+                        synchronized (Sleep.this) { if (gen != dnsGen) return; }
+                        probes[i] = Sh.run("(" + DnsGuard.PROBE + ") >/dev/null 2>&1 && echo PROBE_OK").contains("PROBE_OK");
+                        i++;
+                        if (i < probes.length) {
+                            long wait = Math.max(0, t0 + DnsGuard.PROBE_AT_MS[i] - System.currentTimeMillis());
+                            synchronized (Sleep.this) {
+                                if (gen == dnsGen) dnsTask = dnsTimer.schedule(this, wait, TimeUnit.MILLISECONDS);
+                            }
+                            return;
                         }
-                        return;
+                        synchronized (Sleep.this) { if (gen != dnsGen) return; }
+                        if (DnsGuard.decide(probes)) {
+                            Sh.run(DnsGuard.REVERT);
+                            Sh.log("STATUS dns reverted");
+                        } else {
+                            Sh.log("STATUS dns ok");
+                        }
+                    } catch (Throwable t) {
+                        Sh.log("dns_check error: " + t);
                     }
-                    synchronized (Sleep.this) { if (gen != dnsGen) return; }
-                    if (DnsGuard.decide(probes)) {
-                        Sh.run(DnsGuard.REVERT);
-                        Sh.log("STATUS dns reverted");
-                    } else {
-                        Sh.log("STATUS dns ok");
-                    }
-                } catch (Throwable t) {
-                    Sh.log("dns_check error: " + t);
                 }
-            }
-        }, DnsGuard.PROBE_AT_MS[0], TimeUnit.MILLISECONDS);
+            }, DnsGuard.PROBE_AT_MS[0], TimeUnit.MILLISECONDS);
+        }
     }
 }
