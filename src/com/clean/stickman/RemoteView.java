@@ -121,11 +121,13 @@ public class RemoteView extends View {
     }
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
-        float pad = 8 * dp;
+        // body on the left, a reserved strip on its right for the hint pill (so the hint never covers a button)
+        float pad = RemoteLayout.BODY_PAD_DP * dp, side = (RemoteLayout.HINT_GAP_DP + RemoteLayout.HINT_AREA_DP) * dp;
         bh = h - 2 * pad;
         bw = bh / RemoteLayout.ASPECT;
-        if (bw > w - 2 * pad) { bw = w - 2 * pad; bh = bw * RemoteLayout.ASPECT; }
-        bx = (w - bw) / 2f;
+        float avail = w - pad - side;
+        if (bw > avail) { bw = Math.max(1, avail); bh = bw * RemoteLayout.ASPECT; }
+        bx = Math.max(pad, (w - bw - side) / 2f);
         by = (h - bh) / 2f;
         bodyShader = new LinearGradient(0, by, 0, by + bh, BODY_TOP, Theme.PANEL, Shader.TileMode.CLAMP);
     }
@@ -262,7 +264,7 @@ public class RemoteView extends View {
         text.setTextSize(bw * 0.04f);
         for (int i = 0; i < RemoteLayout.ROCKERS.length; i++) {
             float[] k = RemoteLayout.ROCKERS[i];
-            float x = bx + k[0] * bw, t = by + k[1] * bh, b = by + k[2] * bh, w = 0.105f * bw;
+            float x = bx + k[0] * bw, t = by + k[1] * bh, b = by + k[2] * bh, w = RemoteLayout.ROCKER_W * bw;
             rect.set(x - w, t - w, x + w, b + w);
             fill.setColor(BODY_TOP);
             c.drawRoundRect(rect, w, w, fill);
@@ -320,9 +322,8 @@ public class RemoteView extends View {
         }
 
         if (f) {
-            float o = 4 * dp;
-            shape(b, o);
-            stroke.setStrokeWidth((hasFocus ? 3 : 2) * dp);
+            shape(b, RemoteLayout.FOCUS_OFFSET_DP * dp);
+            stroke.setStrokeWidth((hasFocus ? RemoteLayout.FOCUS_STROKE_DP : 2) * dp);
             stroke.setColor(hasFocus ? Theme.ACCENT : Theme.WOOD);
             drawShape(c, b, stroke);
         }
@@ -353,29 +354,29 @@ public class RemoteView extends View {
         drawShape(c, b, stroke);
     }
 
+    /** Short tap-action pill in the strip right of the body, level with the focused button, pointing at it. */
     void drawHint(Canvas c, boolean hasFocus) {
         if (info == null) return;
         RemoteLayout.Btn b = RemoteLayout.find(focus);
         String h = info.hint(focus);
         if (b == null || h == null || h.isEmpty()) return;
         text.setTypeface(Typeface.DEFAULT);
-        text.setTextSize(13 * getResources().getDisplayMetrics().scaledDensity);
-        float maxW = getWidth() - 24 * dp;
-        h = ellipsize(h, maxW - 24 * dp);
-        float tw = text.measureText(h), ph = 26 * dp, pw = tw + 24 * dp;
-        float gap = 10 * dp, half = b.hh() * bw + 4 * dp;
-        float top = y(b) + half + gap;
-        boolean below = top + ph <= getHeight() - 2 * dp;
-        if (!below) top = y(b) - half - gap - ph;
-        float left = Math.max(4 * dp, Math.min(getWidth() - pw - 4 * dp, x(b) - pw / 2));
-        rect.set(left, top, left + pw, top + ph);
-        // pointer
-        float px = Math.max(left + ph / 2, Math.min(left + pw - ph / 2, x(b)));
-        path.reset();
-        if (below) { path.moveTo(px - 6 * dp, top + 0.5f); path.lineTo(px, top - 6 * dp); path.lineTo(px + 6 * dp, top + 0.5f); }
-        else { path.moveTo(px - 6 * dp, top + ph - 0.5f); path.lineTo(px, top + ph + 6 * dp); path.lineTo(px + 6 * dp, top + ph - 0.5f); }
-        path.close();
+        text.setTextSize(RemoteLayout.HINT_TEXT_SP * getResources().getDisplayMetrics().scaledDensity);
+        float maxText = getWidth() - (bx + bw) - (RemoteLayout.HINT_GAP_DP + RemoteLayout.HINT_MARGIN_DP + 24) * dp;
+        if (maxText < 20 * dp) return;
+        h = ellipsize(h, maxText);
+        float[] r = RemoteLayout.hintRect(b, bx, by, bw, bh, getWidth(), getHeight(), text.measureText(h), dp);
+        rect.set(r[0], r[1], r[2], r[3]);
+        float ph = rect.height();
         int edge = hasFocus ? Theme.ACCENT : Theme.WOOD;
+        // pointer from the pill's left edge towards the rim, at the button's height
+        float pw = RemoteLayout.HINT_POINTER_DP * dp;
+        float py = Math.max(rect.top + pw, Math.min(rect.bottom - pw, y(b)));
+        path.reset();
+        path.moveTo(rect.left + 0.5f, py - pw * 0.8f);
+        path.lineTo(rect.left - pw, py);
+        path.lineTo(rect.left + 0.5f, py + pw * 0.8f);
+        path.close();
         fill.setColor(edge);
         c.drawPath(path, fill);
         fill.setColor(HINT_BG);

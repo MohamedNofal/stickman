@@ -24,6 +24,31 @@ public class RemoteLayoutTest {
         }
     }
 
+    /** Focus rings (offset + half stroke, at the smallest designed body width) of two neighbours never touch. */
+    public void testFocusRingsClear() {
+        float m = RemoteLayout.focusMargin();
+        T.yes(m > 0.02f, "margin is real: " + m);
+        RemoteLayout.Btn[] b = RemoteLayout.BUTTONS;
+        for (int i = 0; i < b.length; i++)
+            for (int j = i + 1; j < b.length; j++)
+                T.yes(!RemoteLayout.overlaps(b[i], b[j], m), Keys.name(b[i].code) + " ring touches " + Keys.name(b[j].code));
+    }
+
+    /** The hint pill sits right of the body for every button, so it can never cover one. */
+    public void testHintOutsideBody() {
+        float dp = 2f, viewW = 367 * dp, viewH = 500 * dp, pad = RemoteLayout.BODY_PAD_DP * dp;
+        float bh = viewH - 2 * pad, bw = bh / RemoteLayout.ASPECT, bx = pad, by = pad;
+        T.yes(bx + bw + (RemoteLayout.HINT_GAP_DP + RemoteLayout.HINT_AREA_DP) * dp <= viewW, "hint area fits");
+        for (RemoteLayout.Btn x : RemoteLayout.BUTTONS) {
+            float[] r = RemoteLayout.hintRect(x, bx, by, bw, bh, viewW, viewH, 400 * dp, dp);
+            T.yes(r[0] >= bx + bw + 4 * dp, Keys.name(x.code) + " hint left of rim");
+            T.yes(r[2] <= viewW && r[2] > r[0], Keys.name(x.code) + " hint inside view");
+            T.yes(r[1] >= 0 && r[3] <= viewH, Keys.name(x.code) + " hint vertical");
+            float cy = by + x.cy * bh;
+            T.yes(cy >= r[1] && cy <= r[3], Keys.name(x.code) + " hint level with button");
+        }
+    }
+
     public void testOverlapDetects() {
         RemoteLayout.Btn a = new RemoteLayout.Btn(1, "a", 0.5f, 0.5f, 0.1f, true);
         RemoteLayout.Btn b = new RemoteLayout.Btn(2, "b", 0.55f, 0.5f, 0.1f, false);

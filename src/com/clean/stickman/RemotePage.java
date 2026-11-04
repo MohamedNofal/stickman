@@ -24,6 +24,9 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     static final long LISTEN_TIMEOUT_MS = 20000;
     /** Ignore the KEY line of the OK press that switched listening on. */
     static final long LISTEN_GRACE_MS = 400;
+    /** Linux code of Back: cancels listening instead of being "heard". */
+    static final int BACK = 158;
+    static final String CANCELLED = "Listening cancelled.";
 
     MainActivity a;
     RemoteView remote;
@@ -33,6 +36,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     Button prev, next, remove, listen;
     final Handler h = new Handler();
     boolean listening;
+    /** Until when a Back release (from the press that cancelled listening) is swallowed. */
+    long swallowBackUntil;
     long listenFrom, listenBaseAt;
 
     @Override public String title() { return "Remote"; }
@@ -45,7 +50,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         remote = new RemoteView(a);
         remote.setListener(this);
         remote.setInfo(this);
-        root.addView(remote, new LinearLayout.LayoutParams(0, -1, 1f));
+        root.addView(remote, new LinearLayout.LayoutParams(0, -1, 1.25f));
 
         LinearLayout side = Theme.column(a);
         side.addView(Theme.title(a, "Remote"));
@@ -102,7 +107,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         lc.addView(listenInfo);
         side.addView(lc);
 
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, -1, 1.15f);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, -1, 1f);
         sp.setMargins(Theme.dp(a, 16), 0, 0, 0);
         root.addView(Theme.scroll(a, side), sp);
 
@@ -233,8 +238,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listenBaseAt = LogTail.lastKeyAt;
         listen.setText("Listening…");
         listen.setSelected(true);
-        listenInfo.setText("Press any button on your remote (gives up after " + LISTEN_TIMEOUT_MS / 1000 + " s). "
-            + "Buttons that leave this screen, like Home or the app buttons, still do their job.");
+        listenInfo.setText("Press any button — Back to cancel. (Gives up after " + LISTEN_TIMEOUT_MS / 1000 + " s; "
+            + "buttons that leave this screen, like Home or the app buttons, still do their job.)");
         listenInfo.setTextColor(Theme.TEXT);
         remote.setListening(true);
         h.post(this::poll);
@@ -244,6 +249,11 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         if (!listening) return;
         long now = System.currentTimeMillis(), at = LogTail.lastKeyAt;
         int k = LogTail.lastKey;
+        if (at > listenBaseAt && at - listenFrom >= LISTEN_GRACE_MS && k == BACK) {
+            swallowBackUntil = System.currentTimeMillis() + 1500;   // its release may still reach the app
+            stopListening(CANCELLED);   // Back cancels (remapd logs it even when Back is remapped)
+            return;
+        }
         if (at > listenBaseAt && at - listenFrom >= LISTEN_GRACE_MS && RemoteLayout.find(k) != null) {
             stopListening("Heard " + Keys.name(k) + ".");
             remote.flash(k);
@@ -267,8 +277,26 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listenInfo.setTextColor(Theme.MUTED);
     }
 
-    /** While listening the physical press is read from remapd's log; keep it from also moving focus here. */
-    @Override public boolean onKey(KeyEvent e) { return listening; }
+    /**
+     * While listening the physical press is read from remapd's log; keep it from also moving focus here.
+     * Back cancels listening (no editor opens).
+     */
+    @Override public boolean onKey(KeyEvent e) {
+        boolean back = e.getKeyCode() == KeyEvent.KEYCODE_BACK;
+        if (!listening) {
+            // swallow the release of a Back press that cancelled listening (else it would close the app)
+            if (back && System.currentTimeMillis() < swallowBackUntil) {
+                if (e.getAction() == KeyEvent.ACTION_UP) swallowBackUntil = 0;
+                return true;
+            }
+            return false;
+        }
+        if (back) {
+            swallowBackUntil = e.getAction() == KeyEvent.ACTION_DOWN ? System.currentTimeMillis() + 1500 : 0;
+            stopListening(CANCELLED);
+        }
+        return true;
+    }
 
     @Override public void onShow() {
         if (a != null) reload();

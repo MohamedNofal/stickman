@@ -17,7 +17,7 @@ public class RemotePreview {
 
     public static void main(String[] args) throws Exception {
         int focus = args.length > 1 ? Integer.parseInt(args[1]) : 744;
-        int W = 760, H = 1000;          // ~ the RemoteView at 1920x1080 / density 320 (2 px per dp)
+        int W = 734, H = 1000;          // ~ the RemoteView at 1920x1080 / density 320 (2 px per dp)
         float dp = 2f;
         BufferedImage img = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
@@ -25,9 +25,11 @@ public class RemotePreview {
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setColor(new Color(BG, true)); g.fillRect(0, 0, W, H);
 
-        float pad = 10 * dp;
+        // same placement as RemoteView.onSizeChanged
+        float pad = RemoteLayout.BODY_PAD_DP * dp, side = (RemoteLayout.HINT_GAP_DP + RemoteLayout.HINT_AREA_DP) * dp;
         float bh = H - 2 * pad, bw = bh / RemoteLayout.ASPECT;
-        float bx = (W - bw) / 2, by = pad;
+        if (bw > W - pad - side) { bw = W - pad - side; bh = bw * RemoteLayout.ASPECT; }
+        float bx = Math.max(pad, (W - bw - side) / 2f), by = (H - bh) / 2f;
         float corner = bw * RemoteLayout.CORNER;
         // shadow + body + rim
         g.setColor(new Color(0, 0, 0, 110));
@@ -44,7 +46,7 @@ public class RemotePreview {
         g.draw(new Ellipse2D.Float(rcx - rr, rcy - rr, 2 * rr, 2 * rr));
         // rockers
         for (float[] k : RemoteLayout.ROCKERS) {
-            float x = bx + k[0] * bw, t = by + k[1] * bh, b = by + k[2] * bh, w = 0.105f * bw;
+            float x = bx + k[0] * bw, t = by + k[1] * bh, b = by + k[2] * bh, w = RemoteLayout.ROCKER_W * bw;
             RoundRectangle2D.Float rk = new RoundRectangle2D.Float(x - w, t - w, 2 * w, b - t + 2 * w, 2 * w, 2 * w);
             g.setColor(new Color(0xFF2A231C, true)); g.fill(rk);
             g.setColor(new Color(0xFF4A3D30, true)); g.draw(rk);
@@ -83,8 +85,8 @@ public class RemotePreview {
                 g.drawString(btn.label, x - fm.stringWidth(btn.label) / 2f, y + (fm.getAscent() - fm.getDescent()) / 2f);
             }
             if (f) {
-                g.setColor(new Color(ACCENT, true)); g.setStroke(new BasicStroke(3 * dp));
-                float o = 4 * dp;
+                g.setColor(new Color(ACCENT, true)); g.setStroke(new BasicStroke(RemoteLayout.FOCUS_STROKE_DP * dp));
+                float o = RemoteLayout.FOCUS_OFFSET_DP * dp;
                 if (btn.round) g.draw(new Ellipse2D.Float(x - r - o, y - r - o, 2 * (r + o), 2 * (r + o)));
                 else { float hw = btn.hw() * bw + o, hh = btn.hh() * bw + o; g.draw(new RoundRectangle2D.Float(x - hw, y - hh, 2 * hw, 2 * hh, 2 * hh, 2 * hh)); }
             }
@@ -97,20 +99,24 @@ public class RemotePreview {
                 g.setColor(new Color(ACCENT, true)); g.fill(new Ellipse2D.Float(x + dx - br, y + dy - br, 2 * br, 2 * br));
             }
         }
-        // hint callout under focused
+        // hint pill right of the body, level with the focused button (RemoteView.drawHint)
         RemoteLayout.Btn fb = RemoteLayout.find(focus);
         String hint = args.length > 2 ? args[2] : "Open Kodi";
-        g.setFont(new Font("SansSerif", Font.PLAIN, Math.round(13 * dp)));
+        g.setFont(new Font("SansSerif", Font.PLAIN, Math.round(RemoteLayout.HINT_TEXT_SP * dp)));
         FontMetrics fm = g.getFontMetrics();
-        float tw = fm.stringWidth(hint), ph = 26 * dp, pw = tw + 24 * dp;
-        float fx = bx + fb.cx * bw, fy = by + fb.cy * bh + fb.hh() * bw + 10 * dp;
-        if (fy + ph > H - 2 * dp) fy = by + fb.cy * bh - fb.hh() * bw - 10 * dp - ph;
-        float px = Math.max(4 * dp, Math.min(W - pw - 4 * dp, fx - pw / 2));
-        RoundRectangle2D.Float pill = new RoundRectangle2D.Float(px, fy, pw, ph, ph, ph);
+        float[] hr = RemoteLayout.hintRect(fb, bx, by, bw, bh, W, H, fm.stringWidth(hint), dp);
+        float ph = hr[3] - hr[1], pwid = RemoteLayout.HINT_POINTER_DP * dp;
+        float py = Math.max(hr[1] + pwid, Math.min(hr[3] - pwid, by + fb.cy * bh));
+        Path2D.Float ptr = new Path2D.Float();
+        ptr.moveTo(hr[0] + 0.5f, py - pwid * 0.8f); ptr.lineTo(hr[0] - pwid, py); ptr.lineTo(hr[0] + 0.5f, py + pwid * 0.8f); ptr.closePath();
+        g.setColor(new Color(ACCENT, true)); g.fill(ptr);
+        RoundRectangle2D.Float pill = new RoundRectangle2D.Float(hr[0], hr[1], hr[2] - hr[0], ph, ph, ph);
         g.setColor(new Color(0xF0100D0A, true)); g.fill(pill);
         g.setColor(new Color(ACCENT, true)); g.setStroke(new BasicStroke(1.5f * dp)); g.draw(pill);
         g.setColor(new Color(TEXT, true));
-        g.drawString(hint, px + 12 * dp, fy + ph / 2 + (fm.getAscent() - fm.getDescent()) / 2f);
+        g.drawString(hint, (hr[0] + hr[2]) / 2 - fm.stringWidth(hint) / 2f, hr[1] + ph / 2 + (fm.getAscent() - fm.getDescent()) / 2f);
+        // self-check: the pill is entirely right of the body rim
+        if (hr[0] < bx + bw) throw new IllegalStateException("hint overlaps body");
 
         javax.imageio.ImageIO.write(img, "png", new File(args[0]));
     }

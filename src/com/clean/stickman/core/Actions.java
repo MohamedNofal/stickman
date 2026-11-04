@@ -19,7 +19,26 @@ public final class Actions {
     public static final String DNS_CHECK = "dns_check";
     public static final String RELOAD = "reload";
 
-    static String actName(String id) {
+    /** Every action id, in menu order. */
+    public static final String[] ALL = {
+        BOOST, SLEEP_NOW, SLEEP_TIMER, SLEEP_TIMER_SET, SCREEN_OFF, SCREENSAVER_TOGGLE, SCREENSHOT,
+        PLAY_PAUSE, NEXT, PREVIOUS, KILL_CURRENT, OPEN_SCREEN, DNS_CHECK, RELOAD
+    };
+
+    /** Ids whose action line needs an argument. */
+    public static boolean needsArg(String id) { return SLEEP_TIMER_SET.equals(id) || OPEN_SCREEN.equals(id); }
+
+    /** Housekeeping ids the app runs itself; not offered as button actions. */
+    public static boolean internal(String id) { return DNS_CHECK.equals(id) || RELOAD.equals(id); }
+
+    /** Ids a button can be set to directly (no argument, not internal). open_screen is offered via its own submenu. */
+    public static java.util.List<String> menu() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String id : ALL) if (!needsArg(id) && !internal(id)) out.add(id);
+        return out;
+    }
+
+    public static String actName(String id) {
         switch (id) {
             case BOOST: return "Boost";
             case SLEEP_NOW: return "Sleep now";

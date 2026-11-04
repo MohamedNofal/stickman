@@ -34,21 +34,6 @@ public class ButtonEditor {
     static final String DOUBLE_NOTE = "adds a short delay to this button";
     /** remapd drops action lines of 256+ bytes; keep well clear. */
     static final int MAX_ACTION = 249;
-    static final int[] TIMER_MIN = { 15, 30, 60, 90, 120 };
-
-    /** {label, action id} of the plain Stickman actions (submenus are added in chooseStickman). */
-    static final String[][] STICKMAN = {
-        { "Boost (free memory)", Actions.BOOST },
-        { "Sleep now", Actions.SLEEP_NOW },
-        { "Sleep timer (cycle 15/30/60/90/off)", Actions.SLEEP_TIMER },
-        { "Screen off (black curtain)", Actions.SCREEN_OFF },
-        { "Toggle screensaver", Actions.SCREENSAVER_TOGGLE },
-        { "Screenshot", Actions.SCREENSHOT },
-        { "Play / pause", Actions.PLAY_PAUSE },
-        { "Next", Actions.NEXT },
-        { "Previous", Actions.PREVIOUS },
-        { "Close the current app", Actions.KILL_CURRENT },
-    };
 
     final MainActivity a;
     final RemapModel m;
@@ -263,23 +248,18 @@ public class ButtonEditor {
             .setNegativeButton("Cancel", null).show();
     }
 
+    /** Built from core/Actions: every argument-free, non-internal id, plus the open_screen submenu. */
     void chooseStickman(final Rule.Layer l) {
         final List<String> labels = new ArrayList<>(), acts = new ArrayList<>();
-        for (String[] s : STICKMAN) { labels.add(s[0]); acts.add("act " + s[1]); }
-        labels.add("Set the sleep timer…"); acts.add("@timer");
-        labels.add("Open an Amazon screen…"); acts.add("@screen");
+        for (String id : Actions.menu()) { labels.add(Actions.actName(id)); acts.add("act " + id); }
+        labels.add(Actions.actName(Actions.OPEN_SCREEN) + "…"); acts.add("@screen");
         try {
             a.getPackageManager().getPackageInfo(Store.WOLF_PKG, 0);
             labels.add("Go to Wolf home"); acts.add("start " + Store.WOLF);
         } catch (Exception ignored) {}
         a.dialog().setTitle("Stickman action").setItems(labels.toArray(new String[0]), (d, w) -> {
             String act = acts.get(w);
-            if (act.equals("@timer")) {
-                String[] n = new String[TIMER_MIN.length];
-                for (int i = 0; i < n.length; i++) n[i] = TIMER_MIN[i] + " minutes";
-                a.dialog().setTitle("Sleep timer").setItems(n, (d2, w2) ->
-                    set(l, "act " + Actions.SLEEP_TIMER_SET + " " + TIMER_MIN[w2])).setNegativeButton("Cancel", null).show();
-            } else if (act.equals("@screen")) {
+            if (act.equals("@screen")) {
                 String[] n = new String[Catalog.SHORTCUTS.length];
                 for (int i = 0; i < n.length; i++) n[i] = Catalog.SHORTCUTS[i][0];
                 a.dialog().setTitle("Open which screen?").setItems(n, (d2, w2) ->
