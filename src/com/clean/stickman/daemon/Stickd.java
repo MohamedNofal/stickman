@@ -3,6 +3,7 @@ package com.clean.stickman.daemon;
 import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EventParser;
+import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.Spool;
 import com.clean.stickman.core.StickdConf;
@@ -91,6 +92,7 @@ public final class Stickd {
         loadConfs();
         registerCore();
         // Later tasks register their handlers / fg listeners here.
+        new AutoKill(this).install();
 
         // The events buffer may hold no resume line yet: seed the foreground from dumpsys.
         String seed = EventParser.dumpsysResumed(Sh.run("dumpsys activity activities | grep -m1 mResumedActivity"));
@@ -165,9 +167,14 @@ public final class Stickd {
     private void readSpool() {
         File d = file("act");
         // Actions queued long before stickd started (e.g. a sleep_now while it was down) are dropped, not replayed.
-        drainSpool(d, System.currentTimeMillis() - STALE_ACT_AT_START_MS);
+        long dropBefore = System.currentTimeMillis() - STALE_ACT_AT_START_MS;
         while (true) {
-            try { drainSpool(d, 0); } catch (Throwable t) { Sh.log("spool error: " + t); }
+            try {
+                drainSpool(d, dropBefore);
+                dropBefore = 0;  // only the startup drain drops stale actions
+            } catch (Throwable t) {
+                Sh.log("spool error: " + t);
+            }
             sleep(POLL_MS);
         }
     }
@@ -229,7 +236,7 @@ public final class Stickd {
         });
         register(Actions.OPEN_SCREEN, a -> {
             if (!SCREEN_ARG.matcher(a).matches()) { Sh.log("open_screen bad arg: " + a); return; }
-            Sh.run(a.indexOf('/') >= 0 ? "am start -n " + a : "am start -a " + a);
+            Sh.run((a.indexOf('/') >= 0 ? "am start -n " : "am start -a ") + Originals.q(a));
         });
         register(Actions.SLEEP_NOW, a -> Sh.run("input keyevent KEYCODE_SLEEP"));
         register(Actions.RELOAD, a -> {

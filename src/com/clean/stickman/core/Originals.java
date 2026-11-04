@@ -7,7 +7,7 @@ public final class Originals {
     public static final String DIR = "/data/local/tmp/stickman";
     public static final String FILE = DIR + "/originals";
 
-    static String q(String s) {
+    public static String q(String s) {
         return "'" + s.replace("'", "'\\''") + "'";
     }
 

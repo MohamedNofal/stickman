@@ -20,11 +20,16 @@ public final class Sh {
             Drain out = new Drain(p.getInputStream());
             Drain err = new Drain(p.getErrorStream());
             out.start(); err.start();
-            if (!p.waitFor(TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            boolean done = p.waitFor(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (!done) {
                 p.destroy();
-                log("sh timeout: " + cmd);
             }
             out.join(1000); err.join(1000);
+            if (!done || p.exitValue() != 0) {
+                String e = err.text().trim().replaceAll("\\s*\n\\s*", " | ");
+                if (e.length() > 300) e = e.substring(0, 300);
+                log("sh " + (done ? "exit " + p.exitValue() : "timeout") + ": " + cmd + (e.isEmpty() ? "" : " stderr: " + e));
+            }
             return out.text();
         } catch (Exception e) {
             log("sh error: " + e);

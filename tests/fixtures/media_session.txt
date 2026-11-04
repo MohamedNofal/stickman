@@ -1,0 +1,74 @@
+MEDIA SESSION SERVICE (dumpsys media_session)
+
+7 sessions listeners.
+Global priority session is null
+User Records:
+Record for full_user=0
+  Volume key long-press listener: null
+  Volume key long-press listener package: 
+  Media key listener: null
+  Media key listener package: 
+  OnMediaKeyEventDispatchedListener: added 0 listener(s)
+  OnMediaKeyEventSessionChangedListener: added 1 listener(s)
+    from com.android.bluetooth
+  Last MediaButtonReceiver: MBR {pi=PendingIntent{b1f6f0: PendingIntentRecord{2a37469 app.wako broadcastIntent}}, type=0}
+  Media button session is app.wako/androidx.media3.session.id.wako-player-2194433769436 (userId=0)
+  Sessions Stack - have 4 sessions:
+    androidx.media3.session.id.wako-player-2194433769436 app.wako/androidx.media3.session.id.wako-player-2194433769436 (userId=0)
+      ownerPid=13250, ownerUid=10250, userId=0
+      package=app.wako
+      launchIntent=null
+      mediaButtonReceiver=MBR {pi=PendingIntent{b1f6f0: PendingIntentRecord{2a37469 app.wako broadcastIntent}}, type=0}
+      active=true
+      flags=7
+      rating type=0
+      controllers: 3
+      state=PlaybackState {state=2, position=656074, buffered position=692064, speed=0.0, updated=2818813, actions=7339997, custom actions=[], active item id=0, error=null}
+      audioAttrs=AudioAttributes: usage=USAGE_MEDIA content=CONTENT_TYPE_MOVIE flags=0x800 tags= bundle=null
+      volumeType=1, controlType=2, max=0, current=0
+      metadata: size=16, description=Dexter, 2006, wako.app
+      queueTitle=null, size=1
+    spotify-android-tv-media-session com.spotify.tv.android/spotify-android-tv-media-session (userId=0)
+      ownerPid=2234, ownerUid=10243, userId=0
+      package=com.spotify.tv.android
+      launchIntent=PendingIntent{d6c9107: PendingIntentRecord{dd41234 com.spotify.tv.android startActivity}}
+      mediaButtonReceiver=MBR {pi=PendingIntent{90fc85d: PendingIntentRecord{fb2d5d2 com.spotify.tv.android broadcastIntent}}, type=1}
+      active=false
+      flags=3
+      rating type=0
+      controllers: 1
+      state=PlaybackState {state=0, position=0, buffered position=0, speed=1.0, updated=24085, actions=2368383, custom actions=[], active item id=-1, error=null}
+      audioAttrs=AudioAttributes: usage=USAGE_MEDIA content=CONTENT_TYPE_UNKNOWN flags=0x800 tags= bundle=null
+      volumeType=1, controlType=2, max=0, current=0
+      metadata: null
+      queueTitle=null, size=0
+    TtsPlayerServer com.amazon.vizzini/TtsPlayerServer (userId=0)
+      ownerPid=2080, ownerUid=10210, userId=0
+      package=com.amazon.vizzini
+      launchIntent=null
+      mediaButtonReceiver=null
+      active=false
+      flags=0
+      rating type=0
+      controllers: 0
+      state=null
+      audioAttrs=AudioAttributes: usage=USAGE_MEDIA content=CONTENT_TYPE_UNKNOWN flags=0x800 tags= bundle=null
+      volumeType=1, controlType=2, max=0, current=0
+      metadata: size=1, description=null, null, null
+      queueTitle=null, size=0
+    AlexaMediaPlayerRuntime com.amazon.alexamediaplayer.runtime.ftv/AlexaMediaPlayerRuntime (userId=0)
+      ownerPid=3875, ownerUid=10116, userId=0
+      package=com.amazon.alexamediaplayer.runtime.ftv
+      launchIntent=null
+      mediaButtonReceiver=MBR {pi=PendingIntent{eb736a3: PendingIntentRecord{bba1da0 com.amazon.alexamediaplayer.runtime.ftv broadcastIntent}}, type=1}
+      active=false
+      flags=3
+      rating type=0
+      controllers: 1
+      state=PlaybackState {state=0, position=0, buffered position=0, speed=0.0, updated=0, actions=6, custom actions=[], active item id=-1, error=null}
+      audioAttrs=AudioAttributes: usage=USAGE_MEDIA content=CONTENT_TYPE_UNKNOWN flags=0x800 tags= bundle=null
+      volumeType=1, controlType=2, max=0, current=0
+      metadata: size=1, description=null, null, null
+      queueTitle=null, size=0
+Audio playback (lastly played comes first)
+  uid=10250 packages=app.wako 

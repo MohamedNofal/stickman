@@ -1,0 +1,45 @@
+ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)
+  Activities:
+  #41: fg     TOP  LCM 3234:com.amazon.ftv.screensaver/u0a146 act:activities
+  #40: prev   LAST --- 329:com.wolf.firelauncher/u0a248 act:activities|recents
+  #39: cch    CAC  --- 32424:org.videolan.vlc/u0a244 act:activities|recents
+  #38: prcp   IMPB --- 1644:com.amazon.tv.ime/u0a195 act:treated
+  #37: cch    CAC  --- 13250:app.wako/u0a250 act:activities|recents
+  #36: cch+20 CACC --- 13387:com.amazon.webview.chromium:AWVArcusServiceProcess/u0a227 act:client
+  #35: cch+30 CACC --- 1882:com.amazon.webview.chromium:AWVMetricsProcess/u0a227 act:client
+  #34: vis    IMPF --- 2324:com.amazon.accessoryconfigservice/u0a74
+  Other:
+  #33: cch+ 5 CEM  --- 4192:com.amazon.bueller.photos/u0a124
+  #32: cch+ 5 CEM  --- 3599:com.android.proxyhandler/u0a75
+  #31: cch+15 CEM  --- 4122:com.amazon.prism.android.service/u0a161
+  #30: cch+15 CEM  --- 4028:com.amazon.tv.settings.v2/u0a208
+  #29: cch+25 CEM  --- 3997:com.amazon.neopactservice/u0a157
+  #28: cch+25 CEM  --- 3958:com.amazon.logan/u0a101
+  #27: cch+35 CEM  --- 3920:com.amazon.hedwig/u0a150
+  #26: prev   CEM  --- 3743:com.amazon.firebat/u0a138
+  #25: prev   CEM  --- 3737:com.amazon.firetv.youtube/u0a247
+  #24: cch+35 CEM  --- 3401:com.android.permissioncontroller/u0a235
+  #23: cch+45 CEM  --- 3540:com.amazon.ceviche/u0a127
+  #22: home   CEM  --- 523:com.amazon.tv.launcher/u0a199
+  #21: vis    IMPF --- 1672:com.amazon.device.messaging/u0a88
+  #20: psvc   PER  LCM 2013:com.android.providers.media.module/u0a234
+  #19: prcl   TRNB --- 6766:com.nordvpn.android/u0a246
+  #18: svc    SVC  --- 30572:com.amazon.whisperlink.core.android/u0a108
+  #17: svcb   SVC  --- 30397:com.amazon.whisperjoin.middleware.v2.np/u0a212
+  #16: vis    IMPF --- 2412:com.amazon.device.software.ota/u0a87
+  #15: vis    TRNB --- 4289:com.amazon.connectivitycontroller/u0a85
+  #14: psvc   PER  LCM 997:com.android.bluetooth/1002
+  #13: prcp   FGS  --- 3875:com.amazon.alexamediaplayer.runtime.ftv/u0a116
+  #12: prcp   FGS  --- 2234:com.spotify.tv.android/u0a243
+  #11: vis    IMPF --- 15822:com.amazon.systemnotices/u0a218
+  #10: prcp   FGS  --- 6079:com.clean.netfilter/u0a252
+  # 9: vis    BFGS --- 1390:android.ext.services/u0a236
+  # 8: vis    IMPF --- 2038:com.mediatek.tvinput/u0a52
+  # 7: pers   PER  LCM 2099:com.amazon.whad/u0a231
+  # 6: pers   PER  LCM 2080:com.amazon.vizzini/u0a210 act:client
+  # 5: pers   PER  LCM 1425:com.amazon.imp/u0a153
+  # 4: pers   PER  LCM 1233:com.android.networkstack.process/1073
+  # 3: pers   PER  LCM 1345:com.amazon.tcomm/u0a176
+  # 2: pers   PER  LCM 1315:com.amazon.device.services/1000
+  # 1: pers   PER  LCM 1098:com.android.systemui/u0a99
+  # 0: sys    PER  LCM 697:system/1000
