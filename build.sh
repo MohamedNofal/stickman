@@ -21,7 +21,8 @@ java -cp "$D8_JAR" com.android.tools.r8.D8 \
    $(find "$OUT/classes" -name '*.class')
 
 echo "[3/5] link resources -> base apk (aapt2)"
-aapt2 link -o "$OUT/base.apk" \
+aapt2 compile --dir res -o "$OUT/res.zip"
+aapt2 link -o "$OUT/base.apk" "$OUT/res.zip" \
    -I "$ANDROID_JAR" \
    --manifest AndroidManifest.xml \
    --min-sdk-version 21 --target-sdk-version 30

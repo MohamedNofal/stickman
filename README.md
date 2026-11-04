@@ -1,5 +1,7 @@
 # Remote Remap for Fire TV (no root)
 
+<img src="art/icon-512.png" width="96" align="right" alt="icon">
+
 Remap the buttons on an Amazon Fire TV remote, including **Home** and the app shortcut buttons (Netflix, Prime Video, …), with **no root**. The original action never fires. There's no flash of the Amazon home screen and no half-opened Netflix.
 
 Tested on a Fire TV Stick 4K Max (Fire OS 8 / Android 11, model `AFTMA08C15`).
@@ -57,7 +59,7 @@ sudo apt install gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
 ANDROID_JAR=/path/to/android.jar D8_JAR=/path/to/d8.jar ./build.sh   # -> shellbridge.apk
 ```
 
-`build.sh` creates its own signing keystore on first run (`sb.keystore`, git-ignored).
+`build.sh` creates its own signing keystore on first run (`sb.keystore`, git-ignored). Icon and banner are drawn by `art/make_icons.py` (PIL) into `res/`.
 
 ## Remote key codes (Linux, Fire TV 4K Max remote)
 
