@@ -150,16 +150,16 @@ public class SettingsPage extends Page {
         new Thread(() -> {
             final long t = fetchTime();
             a.runOnUiThread(() -> {
-                if (t <= 0) { result.setText("Couldn't reach google.com to read the time."); return; }
+                if (t <= 0) { result.setText("Couldn't reach time server"); return; }
                 send(Commands.setTime(t), "clock", "Setting clock to "
                     + new SimpleDateFormat("d MMM yyyy HH:mm", Locale.UK).format(new Date(t)) + "…");
             });
         }, "fixclock").start();
     }
 
-    /** Date header of a HEAD request; https first, then http (a far-off clock can break TLS validation). */
+    /** Date header of an https HEAD request (https only: a plain-http Date could be spoofed). */
     static long fetchTime() {
-        for (String u : new String[] { "https://www.google.com", "http://www.google.com" }) {
+        for (String u : new String[] { "https://www.google.com" }) {
             HttpURLConnection c = null;
             try {
                 c = (HttpURLConnection) new URL(u).openConnection();

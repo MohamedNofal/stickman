@@ -356,8 +356,28 @@ static void device_lost(const char *why) {
     close(rfd); rfd = -1; grabbed = 0;
 }
 
+/* pid in PID_PATH if it names a live process whose comm is exactly "remapd" (and isn't us), else 0 */
+static int other_instance(void) {
+    FILE *f = fopen(PID_PATH, "r");
+    if (!f) return 0;
+    int pid = 0;
+    if (fscanf(f, "%d", &pid) != 1) pid = 0;
+    fclose(f);
+    if (pid <= 0 || pid == (int)getpid()) return 0;
+    char path[64], comm[32] = "";
+    snprintf(path, sizeof path, "/proc/%d/comm", pid);
+    f = fopen(path, "r");
+    if (!f) return 0;
+    if (!fgets(comm, sizeof comm, f)) comm[0] = 0;
+    fclose(f);
+    comm[strcspn(comm, "\n")] = 0;
+    return strcmp(comm, "remapd") == 0 ? pid : 0;
+}
+
 int main(int argc, char **argv) {
     conf_path = argc > 1 ? argv[1] : DEF_CONF;
+    int other = other_instance();   /* before grabbing anything: only one process may own the remote */
+    if (other) { alog("remapd already running pid %d", other); return 0; }
     signal(SIGCHLD, SIG_IGN); signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
     L = lyr_new(250, 600);
     if (!L) return 1;

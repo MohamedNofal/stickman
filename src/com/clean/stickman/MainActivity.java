@@ -34,6 +34,8 @@ public class MainActivity extends Activity implements Bridge.Listener {
     int current = -1;
     LogTail tail;
     boolean hadLogs;
+    /** The open-time ensure was skipped because another VPN is up. */
+    boolean vpnPaused;
 
     /** Later tasks swap their real pages in here. */
     Page makePage(int i) {
@@ -98,8 +100,11 @@ public class MainActivity extends Activity implements Bridge.Listener {
         if (req == 1 && res == RESULT_OK) ensureOnOpen();
     }
 
+    /** Not user-initiated: with another VPN up, skip silently (status line says paused); no dialog on every open. */
     void ensureOnOpen() {
-        if (Store.enabled(this)) run(null, Ensure.MARKER);
+        if (!Store.enabled(this)) return;
+        if (Bridge.otherVpnActive(this)) { vpnPaused = true; updateStatusLine(); return; }
+        Bridge.run(this, Ensure.MARKER, false);
     }
 
     @Override
@@ -183,6 +188,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
      */
     void run(final Runnable onGo, final String... cmds) {
         final Runnable go = () -> {
+            vpnPaused = false;
             if (onGo != null) onGo.run();
             for (String c : cmds) if (c != null) Bridge.run(this, c, false);
         };
@@ -221,6 +227,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         String s;
         int color = Theme.MUTED;
         if (Bridge.busy) s = "Working…";
+        else if (vpnPaused && Store.enabled(this)) { s = "VPN active — Stickman paused"; color = Theme.ACCENT; }
         else if (Bridge.VPN_BUSY.equals(r)) { s = "Another VPN is on: not applied"; color = Theme.ACCENT; }
         else if (r.startsWith("FAIL")) { s = "Problem: " + r.substring(4).trim(); color = Theme.ACCENT; }
         else if (!Store.enabled(this)) s = "Stickman is OFF";

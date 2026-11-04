@@ -15,9 +15,21 @@ public final class EnsureScript {
     public static final String OLD_DIR = "/data/local/tmp/remap";
     public static final String OLD_PKG = "com.clean.keyshift";
 
+    /**
+     * Shell test: process $VAR is exactly NAME, by /proc comm (remapd: exe basename; stickd: app_process --nice-name)
+     * or else by the first NUL-separated cmdline arg. Never a substring grep: the ensure shell's own cmdline
+     * contains both names.
+     */
+    static String isProc(String var, String name) {
+        return "{ [ \"$(cat /proc/$" + var + "/comm 2>/dev/null)\" = " + name + " ] || "
+            + "[ \"$(tr '\\000' '\\n' < /proc/$" + var + "/cmdline 2>/dev/null | head -n 1)\" = " + name + " ]; }";
+    }
+
     /** Shell function: alive NAME -> true when NAME.pid names a live NAME process; sets $P. */
     private static final String ALIVE_FN =
-        "alive() { P=$(cat " + DIR + "/$1.pid 2>/dev/null); [ -n \"$P\" ] && grep -q $1 /proc/$P/cmdline 2>/dev/null; }; ";
+        "alive() { P=$(cat " + DIR + "/$1.pid 2>/dev/null); [ -n \"$P\" ] && "
+        + "{ [ \"$(cat /proc/$P/comm 2>/dev/null)\" = \"$1\" ] || "
+        + "[ \"$(tr '\\000' '\\n' < /proc/$P/cmdline 2>/dev/null | head -n 1)\" = \"$1\" ]; }; }; ";
 
     private static String path(String p) {
         if (p == null || !p.matches("/[A-Za-z0-9._~=+/-]+")) throw new IllegalArgumentException("bad path: " + p);
@@ -36,7 +48,7 @@ public final class EnsureScript {
 
     private static String killPid(String name) {
         return "P=$(cat " + DIR + "/" + name + ".pid 2>/dev/null); "
-            + "[ -n \"$P\" ] && grep -q " + name + " /proc/$P/cmdline 2>/dev/null && kill $P; "
+            + "[ -n \"$P\" ] && " + isProc("P", name) + " && kill $P; "
             + "rm -f " + DIR + "/" + name + ".pid; ";
     }
 
@@ -57,14 +69,15 @@ public final class EnsureScript {
         s.append("cmd appops set " + PKG + " SYSTEM_ALERT_WINDOW allow 2>/dev/null; ");
         // 5. migration from KeyShift: stop its remapd first (only one process may grab the remote)
         if (migrate) {
-            s.append("if [ -e " + OLD_DIR + " ] || pm path " + OLD_PKG + " >/dev/null 2>&1; then ");
+            s.append("if [ -e " + OLD_DIR + " ] || pm path " + OLD_PKG + " 2>/dev/null | grep -q '^package:'; then ");
             s.append("O=$(cat " + OLD_DIR + "/remapd.pid 2>/dev/null); ");
-            s.append("[ -n \"$O\" ] && grep -q remapd /proc/$O/cmdline 2>/dev/null && kill $O; ");
+            s.append("[ -n \"$O\" ] && " + isProc("O", "remapd") + " && kill $O; ");
             s.append("for O in $(pidof remapd 2>/dev/null); do grep -q " + OLD_DIR + "/ /proc/$O/cmdline 2>/dev/null && kill $O; done; ");
             s.append("pm uninstall " + OLD_PKG + " >/dev/null 2>&1; ");
             s.append("rm -rf " + OLD_DIR + "; sleep 0.3; echo MIGRATED; fi; ");
             s.append("W=$(cat /data/local/tmp/wolfd.pid 2>/dev/null); ");
-            s.append("[ -n \"$W\" ] && grep -q wolfd /proc/$W/cmdline 2>/dev/null && kill -- -$W 2>/dev/null; ");
+            // wolfd was a shell script (comm "sh"): match its cmdline, but never our own shell
+            s.append("[ -n \"$W\" ] && [ \"$W\" != \"$$\" ] && grep -q wolfd /proc/$W/cmdline 2>/dev/null && kill -- -$W 2>/dev/null; ");
             s.append("rm -f /data/local/tmp/wolfd.pid; ");
         }
         // 6. retire Home Switch
@@ -77,7 +90,8 @@ public final class EnsureScript {
         // 9. (before starting, so stickd's "STATUS started version=" reports it)
         s.append("echo " + version + " > version; echo \"$A\" > apk; ");
         // 8. start what is not alive; a running stickd re-reads changed confs
-        s.append("if ! alive remapd; then setsid nohup " + DIR + "/remapd " + DIR + "/remap.conf </dev/null >/dev/null 2>&1 & sleep 0.4; fi; ");
+        s.append("if ! alive remapd; then setsid nohup " + DIR + "/remapd " + DIR + "/remap.conf </dev/null >/dev/null 2>&1 & ");
+        s.append("i=0; while [ $i -lt 20 ] && ! alive remapd; do sleep 0.1; i=$((i+1)); done; fi; ");
         s.append("if alive stickd; then [ $CH = 1 ] && { " + Commands.act(Actions.RELOAD, null) + "; }; ");
         s.append("else CLASSPATH=" + apk + " setsid nohup app_process /system/bin --nice-name=stickd com.clean.stickman.daemon.Stickd " + DIR
             + " </dev/null >/dev/null 2>&1 & ");

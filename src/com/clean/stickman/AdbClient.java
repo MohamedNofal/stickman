@@ -5,15 +5,19 @@ import android.util.Log;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
+import com.clean.stickman.core.AdbLimits;
+
 /** Tiny adb wire-protocol client over MiniTcp: CNXN + AUTH, then one-shot shell: commands. */
 public class AdbClient {
     static final String TAG = "Stickman";
     static final int CNXN = 0x4e584e43, AUTH = 0x48545541, OPEN = 0x4e45504f,
             OKAY = 0x59414b4f, CLSE = 0x45534c43, WRTE = 0x45545257;
-    static final int VERSION = 0x01000000, MAXDATA = 4096;
+    static final int VERSION = 0x01000000, MAXDATA = AdbLimits.OURS;
 
     final MiniTcp tcp;
     int nextLocalId = 1;
+    /** adbd's max payload from its CNXN reply (arg1); 0 until connected. */
+    int remoteMaxData;
 
     int mCmd, mA0, mA1;
     byte[] mData;
@@ -49,7 +53,12 @@ public class AdbClient {
         boolean sentSig = false, sentPub = false;
         while (true) {
             recv(sentPub ? authWaitMs : 5000);
-            if (mCmd == CNXN) { Log.i(TAG, "adb: connected: " + new String(mData, "UTF-8").trim()); return; }
+            if (mCmd == CNXN) {
+                remoteMaxData = mA1;
+                Log.i(TAG, "adb: maxdata ours=" + MAXDATA + " remote=" + mA1);
+                Log.i(TAG, "adb: connected: " + new String(mData, "UTF-8").trim());
+                return;
+            }
             if (mCmd != AUTH || mA0 != 1) throw new IOException("unexpected adb msg " + Integer.toHexString(mCmd));
             if (!sentSig) {
                 send(AUTH, 2, 0, key.sign(mData)); sentSig = true;
@@ -65,8 +74,11 @@ public class AdbClient {
 
     /** Runs `shell:<cmd>` and returns its combined output (until adbd closes the stream). */
     public String exec(String cmd, long timeoutMs) throws Exception {
+        byte[] open = ("shell:" + cmd + "\0").getBytes("UTF-8");
+        if (!AdbLimits.fits(open.length, MAXDATA, remoteMaxData))
+            throw new IOException("command too large: " + open.length + " > " + AdbLimits.effective(MAXDATA, remoteMaxData));
         int local = nextLocalId++;
-        send(OPEN, local, 0, ("shell:" + cmd + "\0").getBytes("UTF-8"));
+        send(OPEN, local, 0, open);
         int remote = 0;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         long end = android.os.SystemClock.elapsedRealtime() + timeoutMs;

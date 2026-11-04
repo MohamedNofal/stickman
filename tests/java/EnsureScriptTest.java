@@ -23,7 +23,11 @@ public class EnsureScriptTest {
         T.yes(s.contains("appops set com.clean.stickman SYSTEM_ALERT_WINDOW allow"), "overlay appop");
         T.yes(s.contains("pm grant com.clean.stickman android.permission.READ_LOGS"), "read logs");
         T.yes(s.contains("am force-stop com.clean.homeswitch"), "homeswitch");
-        T.yes(s.contains("/proc/$P/cmdline"), "alive check");
+        T.yes(s.contains("/proc/$P/comm"), "alive check by comm");
+        T.yes(s.contains("/proc/$P/cmdline"), "alive fallback: cmdline arg0");
+        T.yes(!s.contains("grep -q remapd") && !s.contains("grep -q stickd") && !s.contains("grep -q $1"), "no substring cmdline grep");
+        T.yes(s.contains("! alive remapd; do sleep 0.1"), "waits for remapd instead of fixed sleep");
+        T.yes(!s.contains("sleep 0.4"), "no fixed remapd sleep");
         T.yes(s.contains("echo 7 > version") || s.contains("echo 7 >version"), "writes version");
         T.yes(s.contains("echo REMAPD"), "prints pids");
         T.yes(s.contains("STICKD"), "prints stickd pid");
@@ -41,7 +45,7 @@ public class EnsureScriptTest {
         T.yes(on.contains("/data/local/tmp/remap/remapd.pid"), "kills old remapd");
         T.yes(on.contains("rm -rf /data/local/tmp/remap;"), "removes old dir");
         T.yes(on.contains("[ -e /data/local/tmp/remap ]"), "guarded by dir");
-        T.yes(on.contains("pm path com.clean.keyshift"), "guarded by package");
+        T.yes(on.contains("pm path com.clean.keyshift 2>/dev/null | grep -q '^package:'"), "guarded by pm path output, not exit status");
         T.yes(on.indexOf("/data/local/tmp/remap/remapd.pid") < on.indexOf("pm uninstall com.clean.keyshift"), "kill before uninstall");
         T.yes(on.indexOf("pm uninstall com.clean.keyshift") < on.indexOf("--nice-name=stickd"), "migrate before start");
         T.yes(!off.contains("pm uninstall com.clean.keyshift"), "no uninstall when not migrating");
@@ -54,6 +58,29 @@ public class EnsureScriptTest {
         T.yes(s.contains("/data/local/tmp/stickman/stickd.pid"), "stickd pid file");
         T.yes(s.contains("kill"), "kills");
         T.yes(s.trim().endsWith("echo STOPPED"), "prints STOPPED");
+    }
+
+    /** Realistic big config: 45 rules over 3 profiles + full stickd.conf must fit our 256K adb payload. */
+    public void testRealisticConfFitsAdbPayload() {
+        com.clean.stickman.core.RemapModel m = new com.clean.stickman.core.RemapModel();
+        String[] profiles = { "default", "org.xbmc.kodi", "com.netflix.ninja" };
+        int[] codes = com.clean.stickman.core.Keys.ALL;
+        com.clean.stickman.core.Rule.Layer[] layers = com.clean.stickman.core.Rule.Layer.values();
+        int n = 0;
+        for (int p = 0; p < profiles.length; p++)
+            for (int i = 0; i < 15; i++, n++)
+                m.set(profiles[p], codes[i], layers[i % 3], i % 2 == 0
+                    ? "start com.example.some.long.packagename" + i + "/com.example.some.long.packagename.ui.MainActivity"
+                    : "act sleep_timer_set 30");
+        T.yes(n >= 40, "≥40 rules");
+        String stickd = "autokill.on_leave=1\nautokill.interval_min=30\n"
+            + "autokill.whitelist=com.spotify.tv.android,org.xbmc.kodi,com.plexapp.android,com.google.android.youtube.tv\n"
+            + "autokill.blacklist=com.amazon.avod,com.netflix.ninja,com.disney.disneyplus,com.bbc.iplayer.android\n"
+            + "stayawake.media=1\n";
+        String s = EnsureScript.build(APK, LIB, 1, m.serialize(), stickd, true);
+        int len = com.clean.stickman.core.AdbLimits.shellPayloadLen(s);
+        System.out.println("  realistic ensure payload = " + len + " bytes (" + n + " rules)");
+        T.yes(len < 256 * 1024, "fits 256K: " + len);
     }
 
     public void testRejectsUnsafePaths() {
