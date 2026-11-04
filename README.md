@@ -1,4 +1,4 @@
-# Remote Remap for Fire TV (no root)
+# KeyShift: remote button remapper for Fire TV (no root)
 
 <img src="art/icon-512.png" width="96" align="right" alt="icon">
 
@@ -43,10 +43,10 @@ You need a computer with `adb` **once**, for setup.
 2. From the computer:
    ```sh
    adb connect <fire-tv-ip>:5555
-   adb install shellbridge.apk               # from the Releases page, or build it yourself
-   adb shell appops set com.clean.shellbridge ACTIVATE_VPN allow   # pre-approve the VPN
+   adb install keyshift.apk               # from the Releases page, or build it yourself
+   adb shell appops set com.clean.keyshift ACTIVATE_VPN allow   # pre-approve the VPN
    ```
-3. Open **Remote Remap** on the TV. When **"Allow USB debugging?"** appears, tick **Always allow** and press **OK**. Wake the TV first if the screensaver is on, or the prompt can be hidden behind it.
+3. Open **KeyShift** on the TV. When **"Allow USB debugging?"** appears, tick **Always allow** and press **OK**. Wake the TV first if the screensaver is on, or the prompt can be hidden behind it.
 
 After that the computer isn't needed. ADB debugging must stay enabled, since the app talks to the TV's own adbd.
 
@@ -56,8 +56,10 @@ Requirements: JDK 17+, Android SDK `platforms/android-34` and `build-tools` (`d8
 
 ```sh
 sudo apt install gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
-ANDROID_JAR=/path/to/android.jar D8_JAR=/path/to/d8.jar ./build.sh   # -> shellbridge.apk
+ANDROID_JAR=/path/to/android.jar D8_JAR=/path/to/d8.jar ./build.sh   # -> keyshift.apk
 ```
+
+Package: `com.clean.keyshift` (formerly `com.clean.shellbridge` / "Remote Remap"). On first run KeyShift imports the rules already in `/data/local/tmp/remap/remap.conf`, so upgrading from the old package keeps your mappings.
 
 `build.sh` creates its own signing keystore on first run (`sb.keystore`, git-ignored). Icon and banner are drawn by `art/make_icons.py` (PIL) into `res/`.
 

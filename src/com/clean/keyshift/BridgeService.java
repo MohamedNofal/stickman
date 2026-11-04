@@ -1,4 +1,4 @@
-package com.clean.shellbridge;
+package com.clean.keyshift;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -19,14 +19,14 @@ public class BridgeService extends VpnService {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = getSystemService(NotificationManager.class);
-            nm.createNotificationChannel(new NotificationChannel("bridge", "Remote Remap", NotificationManager.IMPORTANCE_MIN));
+            nm.createNotificationChannel(new NotificationChannel("bridge", "KeyShift", NotificationManager.IMPORTANCE_MIN));
             startForeground(1, new Notification.Builder(this, "bridge")
-                .setContentTitle("Remote Remap").setContentText("Applying button mappings")
+                .setContentTitle("KeyShift").setContentText("Applying button mappings")
                 .setSmallIcon(android.R.drawable.ic_menu_manage).build());
         }
         if (!running) {
             running = true;
-            new Thread(new BridgeWorker(this), "shellbridge").start();
+            new Thread(new BridgeWorker(this), "keyshift").start();
         }
         return START_NOT_STICKY;
     }
@@ -37,7 +37,7 @@ public class BridgeService extends VpnService {
         Intent consent = VpnService.prepare(this);
         if (consent != null) throw new Exception("VPN consent missing: appops set " + getPackageName() + " ACTIVATE_VPN allow");
         Builder b = new Builder();
-        b.setSession("Remote Remap");
+        b.setSession("KeyShift");
         b.addAddress("10.99.0.1", 32);
         b.addRoute("10.99.0.2", 32);
         b.setMtu(1500);

@@ -1,4 +1,4 @@
-package com.clean.shellbridge;
+package com.clean.keyshift;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(18, 20, 26));
 
         TextView title = new TextView(this);
-        title.setText("Remote Remap");
+        title.setText("KeyShift");
         title.setTextSize(30); title.setTextColor(Color.WHITE);
         root.addView(title);
 
@@ -147,7 +147,7 @@ public class MainActivity extends Activity {
     }
 
     void apply() {
-        if (RemapConfig.enabled(this)) Bridge.run(this, RemapConfig.ensureCmd(this), false);
+        if (RemapConfig.enabled(this)) Bridge.run(this, RemapConfig.ENSURE, false);
         else Bridge.run(this, RemapConfig.stopCmd(), false);
     }
 

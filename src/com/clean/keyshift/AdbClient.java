@@ -1,4 +1,4 @@
-package com.clean.shellbridge;
+package com.clean.keyshift;
 
 import android.util.Log;
 
@@ -7,7 +7,7 @@ import java.io.IOException;
 
 /** Tiny adb wire-protocol client over MiniTcp: CNXN + AUTH, then one-shot shell: commands. */
 public class AdbClient {
-    static final String TAG = "ShellBridge";
+    static final String TAG = "KeyShift";
     static final int CNXN = 0x4e584e43, AUTH = 0x48545541, OPEN = 0x4e45504f,
             OKAY = 0x59414b4f, CLSE = 0x45534c43, WRTE = 0x45545257;
     static final int VERSION = 0x01000000, MAXDATA = 4096;
@@ -45,7 +45,7 @@ public class AdbClient {
 
     /** Returns normally once adbd sent CNXN (authorized). Waits up to authWaitMs for the TV prompt. */
     public void connect(AdbKey key, long authWaitMs) throws Exception {
-        send(CNXN, VERSION, MAXDATA, "host::shellbridge\0".getBytes("UTF-8"));
+        send(CNXN, VERSION, MAXDATA, "host::keyshift\0".getBytes("UTF-8"));
         boolean sentSig = false, sentPub = false;
         while (true) {
             recv(sentPub ? authWaitMs : 5000);
@@ -55,7 +55,7 @@ public class AdbClient {
                 send(AUTH, 2, 0, key.sign(mData)); sentSig = true;
                 Log.i(TAG, "adb: sent signature");
             } else if (!sentPub) {
-                send(AUTH, 3, 0, key.publicKeyPayload("shellbridge@firetv")); sentPub = true;
+                send(AUTH, 3, 0, key.publicKeyPayload("keyshift@firetv")); sentPub = true;
                 Log.w(TAG, "adb: key not yet trusted -> sent public key; ACCEPT THE PROMPT ON THE TV");
             } else {
                 throw new IOException("adb auth rejected");

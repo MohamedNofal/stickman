@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 ANDROID_JAR=${ANDROID_JAR:-/opt/android-sdk/platforms/android-34/android.jar}
 D8_JAR=${D8_JAR:-/opt/android-sdk/build-tools/35.0.0/lib/d8.jar}
-PKG=com.clean.shellbridge
+PKG=com.clean.keyshift
 OUT=build
 rm -rf "$OUT"; mkdir -p "$OUT/classes"
 
@@ -46,6 +46,6 @@ if [ ! -f "$KS" ]; then
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=shellbridge"
 fi
 apksigner sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
-   --out shellbridge.apk "$OUT/app-aligned.apk"
+   --out keyshift.apk "$OUT/app-aligned.apk"
 
-echo "DONE -> $(pwd)/shellbridge.apk"
+echo "DONE -> $(pwd)/keyshift.apk"

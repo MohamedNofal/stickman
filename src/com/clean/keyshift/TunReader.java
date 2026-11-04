@@ -1,4 +1,4 @@
-package com.clean.shellbridge;
+package com.clean.keyshift;
 
 /** Pumps packets from the tun fd into MiniTcp. Top-level class (no inner/anon classes). */
 public class TunReader implements Runnable {

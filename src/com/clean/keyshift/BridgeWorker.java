@@ -1,4 +1,4 @@
-package com.clean.shellbridge;
+package com.clean.keyshift;
 
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
@@ -8,7 +8,7 @@ import java.io.FileOutputStream;
 
 /** VPN up -> userspace TCP to adbd -> adb auth -> run queued shell commands -> VPN down. */
 public class BridgeWorker implements Runnable {
-    static final String TAG = "ShellBridge";
+    static final String TAG = "KeyShift";
     final BridgeService svc;
 
     public BridgeWorker(BridgeService svc) { this.svc = svc; }
@@ -28,8 +28,11 @@ public class BridgeWorker implements Runnable {
             tcp.connect();
             AdbClient adb = new AdbClient(tcp);
             adb.connect(AdbKey.loadOrCreate(svc.getFilesDir()), 90000);
+            if (RemapConfig.needsImport(svc))
+                RemapConfig.importConf(svc, adb.exec("cat " + RemapConfig.D + "/remap.conf 2>/dev/null", 10000));
             String cmd;
             while ((cmd = Bridge.take()) != null) {
+                if (cmd.equals(RemapConfig.ENSURE)) cmd = RemapConfig.ensureCmd(svc);
                 result = adb.exec(cmd, 20000).trim();
                 Log.i(TAG, "shell result: " + result);
                 if (result.matches("(?s).*REMAPD \\d+.*")) RemapConfig.markEnsured(svc);

@@ -1,4 +1,4 @@
-package com.clean.shellbridge;
+package com.clean.keyshift;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -40,6 +40,42 @@ public class RemapConfig {
     static boolean enabled(Context c) { return prefs(c).getBoolean("enabled", true); }
     static void setEnabled(Context c, boolean on) { prefs(c).edit().putBoolean("enabled", on).apply(); }
 
+    /** Marker queued instead of a concrete command: the worker builds ensureCmd() at run time. */
+    static final String ENSURE = "@ensure";
+
+    static boolean needsImport(Context c) { return !prefs(c).getBoolean("importDone", false); }
+
+    /** First run: adopt the rules remapd is already using (e.g. written by an earlier version). */
+    static void importConf(Context c, String conf) {
+        SharedPreferences.Editor e = prefs(c).edit().putBoolean("importDone", true);
+        int n = 0;
+        android.content.pm.PackageManager pm = c.getPackageManager();
+        for (String line : conf.split("\n")) {
+            String[] p = line.trim().split("\\s+", 3);
+            if (p.length < 2 || p[0].startsWith("#")) continue;
+            int code;
+            try { code = Integer.parseInt(p[0]); } catch (NumberFormatException ex) { continue; }
+            String rule = null;
+            if (p[1].equals("start") && p.length == 3) {
+                String label = p[2];
+                try {
+                    label = pm.getActivityInfo(android.content.ComponentName.unflattenFromString(p[2]), 0).loadLabel(pm).toString();
+                } catch (Exception ignored) {}
+                rule = "start\t" + p[2] + "\t" + label;
+            } else if (p[1].equals("key") && p.length == 3) {
+                int t = Integer.parseInt(p[2].trim()); String name = "key " + t;
+                for (int i = 0; i < TARGETS.length; i++) if (TARGETS[i] == t) name = TARGET_NAMES[i];
+                rule = "key\t" + t + "\t" + name;
+            } else if (p[1].equals("none")) rule = "none";
+            if (rule != null) {
+                if (n == 0) for (int k : CODES) e.remove("k" + k);   // replace defaults with the imported set
+                e.putString("k" + code, rule); n++;
+            }
+        }
+        e.commit();
+        android.util.Log.i("KeyShift", "imported " + n + " rules from existing config");
+    }
+
     static String describe(String rule) {
         if (rule == null) return "default";
         String[] p = rule.split("\t");
@@ -50,7 +86,7 @@ public class RemapConfig {
     }
 
     static String confText(Context c) {
-        StringBuilder sb = new StringBuilder("# written by Remote Remap\n");
+        StringBuilder sb = new StringBuilder("# written by KeyShift\n");
         for (int code : CODES) {
             String r = get(c, code);
             if (r == null) continue;

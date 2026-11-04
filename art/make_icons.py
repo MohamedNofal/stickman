@@ -1,4 +1,4 @@
-"""Draws the Remote Remap launcher icon + Fire TV banner (run: python3 art/make_icons.py)."""
+"""Draws the KeyShift launcher icon + Fire TV banner (run: python3 art/make_icons.py)."""
 import math, os
 from PIL import Image, ImageDraw, ImageFont
 
@@ -71,8 +71,8 @@ def banner():
     for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
               "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"):
         if os.path.exists(f): font = ImageFont.truetype(f, int(H * 0.17)); break
-    d.text((W * 0.38, H * 0.27), "Remote", font=font, fill=(255, 255, 255))
-    d.text((W * 0.38, H * 0.50), "Remap", font=font, fill=(255, 220, 190))
+    d.text((W * 0.38, H * 0.27), "Key", font=font, fill=(255, 255, 255))
+    d.text((W * 0.38, H * 0.50), "Shift", font=font, fill=(255, 220, 190))
     return img
 
 def save(img, size, path):

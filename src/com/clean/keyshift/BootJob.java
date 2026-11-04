@@ -1,4 +1,4 @@
-package com.clean.shellbridge;
+package com.clean.keyshift;
 
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
@@ -24,8 +24,8 @@ public class BootJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         if (RemapConfig.enabled(this) && !RemapConfig.ensuredThisBoot(this)) {
-            Log.i("ShellBridge", "BootJob: new boot -> starting remapd");
-            Bridge.run(this, RemapConfig.ensureCmd(this), true);
+            Log.i("KeyShift", "BootJob: new boot -> starting remapd");
+            Bridge.run(this, RemapConfig.ENSURE, true);
         }
         return false;
     }
