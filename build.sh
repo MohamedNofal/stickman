@@ -4,12 +4,12 @@ cd "$(dirname "$0")"
 
 ANDROID_JAR=${ANDROID_JAR:-/opt/android-sdk/platforms/android-34/android.jar}
 D8_JAR=${D8_JAR:-/opt/android-sdk/build-tools/35.0.0/lib/d8.jar}
-PKG=com.clean.keyshift
+PKG=com.clean.stickman
 OUT=build
 rm -rf "$OUT"; mkdir -p "$OUT/classes"
 
 echo "[0/5] build native remapd (armv7 static)"
-( cd native && arm-linux-gnueabihf-gcc -O2 -static -w -o remapd remapd.c && arm-linux-gnueabihf-strip remapd )
+( cd native && arm-linux-gnueabihf-gcc -O2 -static -w -o remapd remapd.c layers.c && arm-linux-gnueabihf-strip remapd )
 
 echo "[1/5] compile java -> classes (javac against android.jar)"
 javac --release 8 -cp "$ANDROID_JAR" -d "$OUT/classes" \
@@ -46,6 +46,6 @@ if [ ! -f "$KS" ]; then
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=shellbridge"
 fi
 apksigner sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
-   --out keyshift.apk "$OUT/app-aligned.apk"
+   --out stickman.apk "$OUT/app-aligned.apk"
 
-echo "DONE -> $(pwd)/keyshift.apk"
+echo "DONE -> $(pwd)/stickman.apk"

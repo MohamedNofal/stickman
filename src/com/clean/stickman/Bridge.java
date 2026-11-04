@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 import android.content.Context;
 import android.content.Intent;

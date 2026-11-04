@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;

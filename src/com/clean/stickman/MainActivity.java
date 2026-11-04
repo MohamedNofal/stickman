@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(18, 20, 26));
 
         TextView title = new TextView(this);
-        title.setText("KeyShift");
+        title.setText("Stickman");
         title.setTextSize(30); title.setTextColor(Color.WHITE);
         root.addView(title);
 

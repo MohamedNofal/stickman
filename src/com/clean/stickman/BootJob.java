@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
@@ -24,7 +24,7 @@ public class BootJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         if (RemapConfig.enabled(this) && !RemapConfig.ensuredThisBoot(this)) {
-            Log.i("KeyShift", "BootJob: new boot -> starting remapd");
+            Log.i("Stickman", "BootJob: new boot -> starting remapd");
             Bridge.run(this, RemapConfig.ENSURE, true);
         }
         return false;

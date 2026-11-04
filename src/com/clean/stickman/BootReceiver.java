@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -9,7 +9,7 @@ import android.util.Log;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent i) {
-        Log.i("KeyShift", "boot broadcast: " + i.getAction());
+        Log.i("Stickman", "boot broadcast: " + i.getAction());
         BootJob.schedule(c);
         if (RemapConfig.enabled(c) && !RemapConfig.ensuredThisBoot(c))
             Bridge.run(c.getApplicationContext(), RemapConfig.ENSURE, true);

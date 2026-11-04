@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
@@ -8,7 +8,7 @@ import java.io.FileOutputStream;
 
 /** VPN up -> userspace TCP to adbd -> adb auth -> run queued shell commands -> VPN down. */
 public class BridgeWorker implements Runnable {
-    static final String TAG = "KeyShift";
+    static final String TAG = "Stickman";
     final BridgeService svc;
 
     public BridgeWorker(BridgeService svc) { this.svc = svc; }

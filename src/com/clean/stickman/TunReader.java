@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 /** Pumps packets from the tun fd into MiniTcp. Top-level class (no inner/anon classes). */
 public class TunReader implements Runnable {

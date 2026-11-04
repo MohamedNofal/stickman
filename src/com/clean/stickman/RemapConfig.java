@@ -1,4 +1,4 @@
-package com.clean.keyshift;
+package com.clean.stickman;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -73,7 +73,7 @@ public class RemapConfig {
             }
         }
         e.commit();
-        android.util.Log.i("KeyShift", "imported " + n + " rules from existing config");
+        android.util.Log.i("Stickman", "imported " + n + " rules from existing config");
     }
 
     static String describe(String rule) {
@@ -86,7 +86,7 @@ public class RemapConfig {
     }
 
     static String confText(Context c) {
-        StringBuilder sb = new StringBuilder("# written by KeyShift\n");
+        StringBuilder sb = new StringBuilder("# written by Stickman\n");
         for (int code : CODES) {
             String r = get(c, code);
             if (r == null) continue;
