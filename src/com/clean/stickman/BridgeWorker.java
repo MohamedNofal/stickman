@@ -32,14 +32,22 @@ public class BridgeWorker implements Runnable {
                 RemapConfig.importConf(svc, adb.exec("cat " + RemapConfig.D + "/remap.conf 2>/dev/null", 10000));
             String cmd;
             while ((cmd = Bridge.take()) != null) {
+                String orig = cmd;
                 if (cmd.equals(RemapConfig.ENSURE)) cmd = RemapConfig.ensureCmd(svc);
-                result = adb.exec(cmd, 20000).trim();
+                try {
+                    result = adb.exec(cmd, 20000).trim();
+                } catch (Throwable e) {
+                    Bridge.notifyResult(orig, String.valueOf(e.getMessage()), false);
+                    throw e;
+                }
                 Log.i(TAG, "shell result: " + result);
                 if (result.matches("(?s).*REMAPD \\d+.*")) RemapConfig.markEnsured(svc);
+                Bridge.notifyResult(orig, result, true);
             }
             result = "OK " + result;
         } catch (Throwable e) {
             result = "FAIL " + e.getMessage();
+            synchronized (Bridge.lock) { Bridge.queue.clear(); }   // don't retry forever
             Log.e(TAG, "bridge failed", e);
         } finally {
             if (tcp != null) tcp.close();
@@ -51,6 +59,9 @@ public class BridgeWorker implements Runnable {
         Bridge.busy = false;
         Log.i(TAG, "done: " + result);
         svc.finished();
-        if (Bridge.pending != null) Bridge.run(svc.getApplicationContext(), Bridge.take(), true);
+        if (Bridge.hasPending()) {
+            android.content.Intent i = new android.content.Intent(svc, BridgeService.class);
+            if (android.os.Build.VERSION.SDK_INT >= 26) svc.startForegroundService(i); else svc.startService(i);
+        }
     }
 }
