@@ -8,6 +8,16 @@ Package `com.clean.stickman`. Formerly **KeyShift** (`com.clean.keyshift`, befor
 
 Tested on a Fire TV Stick 4K Max (Fire OS 8 / Android 11, model `AFTMA08C15`).
 
+## Screenshots
+
+| Remote | Tasks |
+|---|---|
+| ![Remote](docs/screenshots/remote.png) | ![Tasks](docs/screenshots/tasks.png) |
+| **Speed** | **Debloat** |
+| ![Speed](docs/screenshots/speed.png) | ![Debloat](docs/screenshots/debloat.png) |
+| **Sleep** | |
+| ![Sleep](docs/screenshots/sleep.png) | |
+
 ## Features
 
 - **Remote**: a drawn remote you navigate with the D-pad.
