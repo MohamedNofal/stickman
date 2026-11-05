@@ -25,4 +25,12 @@ public class ActionsMenuTest {
     public void testAllIdsNamed() {
         for (String id : Actions.ALL) T.yes(!Actions.actName(id).equals(id), id + " named");
     }
+
+    public void testMenuExcludesTaskIds() {
+        List<String> menu = Actions.menu();
+        for (String id : new String[] {Actions.TASKS_START, Actions.TASKS_STOP, Actions.END, Actions.END_ALL}) {
+            T.yes(!menu.contains(id), id + " not in menu");
+            T.yes(!Actions.actName(id).equals(id), id + " named");
+        }
+    }
 }

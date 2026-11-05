@@ -18,18 +18,24 @@ public final class Actions {
     public static final String OPEN_SCREEN = "open_screen";
     public static final String DNS_CHECK = "dns_check";
     public static final String RELOAD = "reload";
+    public static final String TASKS_START = "tasks_start";
+    public static final String TASKS_STOP = "tasks_stop";
+    public static final String END = "end";
+    public static final String END_ALL = "end_all";
 
     /** Every action id, in menu order. */
     public static final String[] ALL = {
         BOOST, SLEEP_NOW, SLEEP_TIMER, SLEEP_TIMER_SET, SCREEN_OFF, SCREENSAVER_TOGGLE, SCREENSHOT,
-        PLAY_PAUSE, NEXT, PREVIOUS, KILL_CURRENT, OPEN_SCREEN, DNS_CHECK, RELOAD
+        PLAY_PAUSE, NEXT, PREVIOUS, KILL_CURRENT, OPEN_SCREEN, DNS_CHECK, RELOAD,
+        TASKS_START, TASKS_STOP, END, END_ALL
     };
 
     /** Ids whose action line needs an argument. */
-    public static boolean needsArg(String id) { return SLEEP_TIMER_SET.equals(id) || OPEN_SCREEN.equals(id); }
+    public static boolean needsArg(String id) { return SLEEP_TIMER_SET.equals(id) || OPEN_SCREEN.equals(id) || END.equals(id); }
 
     /** Housekeeping ids the app runs itself; not offered as button actions. */
-    public static boolean internal(String id) { return DNS_CHECK.equals(id) || RELOAD.equals(id); }
+    public static boolean internal(String id) { return DNS_CHECK.equals(id) || RELOAD.equals(id) || TASKS_START.equals(id)
+            || TASKS_STOP.equals(id) || END_ALL.equals(id); }
 
     /** Ids a button can be set to directly (no argument, not internal). open_screen is offered via its own submenu. */
     public static java.util.List<String> menu() {
@@ -54,6 +60,10 @@ public final class Actions {
             case OPEN_SCREEN: return "Open Amazon screen";
             case DNS_CHECK: return "DNS check";
             case RELOAD: return "Reload settings";
+            case TASKS_START: return "Start task sampling";
+            case TASKS_STOP: return "Stop task sampling";
+            case END: return "End app";
+            case END_ALL: return "End all apps";
             default: return id;
         }
     }
