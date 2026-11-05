@@ -32,10 +32,10 @@ public class BridgeService extends VpnService {
     }
 
     ParcelFileDescriptor establishTun() throws Exception {
-        // After a reboot no VPN is "prepared"; with ACTIVATE_VPN pre-granted this silently makes us
+        // After a reboot no VPN is "prepared"; once the owner accepted the VPN request (ACTIVATE_VPN) this silently makes us
         // the prepared VPN app (returns null). Needed when started from boot/job, not just the UI.
         Intent consent = VpnService.prepare(this);
-        if (consent != null) throw new Exception("VPN consent missing: appops set " + getPackageName() + " ACTIVATE_VPN allow");
+        if (consent != null) throw new Exception("VPN permission missing: open Stickman and accept its VPN request");
         Builder b = new Builder();
         b.setSession("Stickman");
         b.addAddress("10.99.0.1", 32);

@@ -82,18 +82,18 @@ Everything useful needs the `shell` user, which can read input devices, create v
 
 ## Install
 
-Download `stickman.apk` from the [latest release](https://github.com/MohamedNofal/stickman/releases/latest). You need a computer with `adb` **once**, for setup.
+No computer needed.
 
-1. On the Fire TV: **Settings, My Fire TV, Developer options, ADB debugging: ON**.
-2. From the computer:
-   ```sh
-   adb connect <fire-tv-ip>:5555
-   adb install stickman.apk
-   adb shell appops set com.clean.stickman ACTIVATE_VPN allow   # pre-approve the VPN
-   ```
-3. Wake the TV (the screensaver can hide the prompt), then open **Stickman**. When **"Allow USB debugging?"** appears, tick **Always allow** and press **OK**.
+1. On the Fire TV: **Settings, My Fire TV, About**, then press OK on your device name 7 times to unlock **Developer options**.
+2. **Settings, My Fire TV, Developer options**: turn on **ADB debugging**, and allow apps from unknown sources for **Downloader**.
+3. Install **Downloader** from the Appstore and open this address in it: `https://github.com/MohamedNofal/stickman/releases/latest/download/stickman.apk`. Install it.
+4. Open **Stickman**:
+   - Accept the **VPN request**. It's a tiny private VPN that only carries Stickman's own commands to the TV's debugging service; your internet traffic never goes through it.
+   - When **"Allow USB debugging?"** appears, tick **Always allow** and press **OK**. Wake the TV first if the screensaver is on, as it can hide the prompt.
 
-After that the computer isn't needed. **ADB debugging must stay enabled**, since the app talks to the TV's own adbd.
+**ADB debugging must stay on**, since the app talks to the TV's own adbd.
+
+With a computer instead: `adb connect <fire-tv-ip>:5555 && adb install stickman.apk`, then do step 4.
 
 ## Build
 

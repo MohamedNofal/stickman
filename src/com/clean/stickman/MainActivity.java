@@ -120,7 +120,18 @@ public class MainActivity extends Activity implements Bridge.Listener {
 
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
-        if (req == 1 && res == RESULT_OK) ensureOnOpen();
+        if (req != 1) return;
+        if (res == RESULT_OK) { ensureOnOpen(); return; }
+        // declined: nothing works without it, so say why and ask again (the system dialog is the only way in)
+        new ThemedDialog(this).title("Stickman needs the VPN permission")
+            .message("Stickman talks to your Fire TV's own debugging service through a tiny private VPN that only "
+                + "carries its own commands. Your normal internet traffic never goes through it.\n\nWithout it, "
+                + "Stickman can't remap buttons or change anything.")
+            .button("Ask again", () -> {
+                Intent c = VpnService.prepare(this);
+                if (c != null) startActivityForResult(c, 1); else ensureOnOpen();
+            })
+            .cancel("Not now").focusButton(0).show();
     }
 
     /** Not user-initiated: with another VPN up, skip silently (status line says paused); no dialog on every open. */

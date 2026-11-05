@@ -23,7 +23,7 @@ public class BridgeWorker implements Runnable {
         String result = "";
         try {
             tun = svc.establishTun();
-            if (tun == null) throw new Exception("VPN not allowed (appops ACTIVATE_VPN)");
+            if (tun == null) throw new Exception("VPN not allowed: open Stickman and accept its VPN request");
             tcp = new MiniTcp(new FileInputStream(tun.getFileDescriptor()), new FileOutputStream(tun.getFileDescriptor()), 5555);
             reader = new TunReader(tcp);
             Thread rt = new Thread(reader, "tunreader"); rt.setDaemon(true); rt.start();
