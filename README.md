@@ -61,7 +61,7 @@ ANDROID_JAR=/path/to/android.jar D8_JAR=/path/to/d8.jar ./build.sh   # -> keyshi
 
 Package: `com.clean.keyshift` (formerly `com.clean.shellbridge` / "Remote Remap"). On first run KeyShift imports the rules already in `/data/local/tmp/remap/remap.conf`, so upgrading from the old package keeps your mappings.
 
-`build.sh` creates its own signing keystore on first run (`sb.keystore`, git-ignored). Icon and banner are drawn by `art/make_icons.py` (PIL) into `res/`.
+`build.sh` creates its own signing keystore on first run (`sb.keystore`, git-ignored). Icon and banner are made by `art/make_icons.py` (PIL) into `res/` from the original "Tung Tung Tung Sahur" image (Wikimedia Commons, public domain, AI-generated; credit @noxaasht; see `art/SOURCE.md`).
 
 ## Remote key codes (Linux, Fire TV 4K Max remote)
 
