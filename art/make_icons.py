@@ -26,72 +26,107 @@ def gradient(w, h, c1, c2):
             px[x, y] = tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
     return g
 
-def popped(blur, dark, char_boost=1.08):
-    """Source with the background blurred + darkened and the character kept sharp (slightly brighter)."""
-    bg = SRC.filter(ImageFilter.GaussianBlur(blur)) if blur else SRC.copy()
-    bg = ImageEnhance.Brightness(bg).enhance(dark)
-    fg = ImageEnhance.Contrast(ImageEnhance.Brightness(SRC).enhance(char_boost)).enhance(1.06)
-    m = MASK.filter(ImageFilter.GaussianBlur(2))
-    return Image.composite(fg, bg, m)
+def char_mask():
+    """rembg mask + the right arm it missed (bright skin against the dark night, thresholded in a box),
+    eroded 1 px and feathered so no background fringe or rim halo survives."""
+    m = MASK.copy()
+    px, sp = m.load(), SRC.load()
+    for y in range(462, 738):
+        for x in range(722, 792):
+            r, g, b = sp[x, y]
+            if 0.299 * r + 0.587 * g + 0.114 * b > 95 and r > g > b and not (x > 760 and y > 712):
+                px[x, y] = 255
+    # the render has a near-white rim light down the left edge of the body: cut it (and a 2 px margin) out
+    band = Image.eval(MASK.filter(ImageFilter.MinFilter(17)), lambda v: 255 - v)   # outer ~8 px of the silhouette
+    bp = band.load()
+    rim = Image.new("L", m.size, 0); rp = rim.load()
+    for y in range(300, 780):
+        for x in range(480, 600):
+            r, g, b = sp[x, y]
+            if bp[x, y] > 128 and min(r, g, b) > 150 and max(r, g, b) - min(r, g, b) < 90:
+                rp[x, y] = 255
+    rim = rim.filter(ImageFilter.MaxFilter(5))
+    m = Image.composite(Image.new("L", m.size, 0), m, rim)
+    m = m.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(5))   # close holes, then erode
+    return m.filter(ImageFilter.GaussianBlur(1.2))
+
+CM = char_mask()
+
+def studio(w, h, cx, cy, r, hot=(0xFF, 0xB8, 0x5C), mid=(0xC4, 0x5E, 0x1E), edge=(0x24, 0x14, 0x0C)):
+    """Clean studio backdrop: warm amber spotlight fading to deep brown, slight vignette."""
+    g = Image.new("RGB", (w, h))
+    px = g.load()
+    for y in range(h):
+        for x in range(w):
+            d = min(1.0, (((x - cx) ** 2 + (y - cy) ** 2) ** 0.5) / r)
+            if d < 0.45:
+                t = d / 0.45; c = tuple(hot[i] + (mid[i] - hot[i]) * t for i in range(3))
+            else:
+                t = (d - 0.45) / 0.55; c = tuple(mid[i] + (edge[i] - mid[i]) * t for i in range(3))
+            px[x, y] = tuple(int(v) for v in c)
+    return g
+
+def figure(scale, erode=0):
+    """The character cut out of the source (RGBA) at the given scale, slightly punchier."""
+    fg = ImageEnhance.Contrast(ImageEnhance.Color(SRC).enhance(1.1)).enhance(1.05)
+    m = CM.filter(ImageFilter.MinFilter(erode)) if erode else CM
+    fg = fg.convert("RGBA"); fg.putalpha(m)
+    if scale != 1:
+        fg = fg.resize((int(SRC.width * scale), int(SRC.height * scale)), Image.LANCZOS)
+    return fg
+
+def place(bg, fig, ox, oy, shadow=True):
+    """Composite the figure with a soft contact shadow + subtle dark outline glow for depth."""
+    bg = bg.convert("RGBA")
+    if shadow:
+        a = fig.split()[3]
+        sh = Image.new("RGBA", fig.size, (12, 6, 2, 0)); sh.putalpha(a.point(lambda v: int(v * 0.55)))
+        sh = sh.filter(ImageFilter.GaussianBlur(max(4, fig.width // 60)))
+        bg.alpha_composite(sh, (ox + fig.width // 70, oy + fig.width // 90))
+    bg.alpha_composite(fig, (ox, oy))
+    return bg
 
 def icon():
-    img = popped(blur=6, dark=0.45)
-    # square crop centred on the face + upper torso (source px; face ~ (630, 290))
-    box = (372, 52, 372 + 516, 52 + 516)
-    img = img.crop(box).resize((S, S), Image.LANCZOS)
-    img = ImageEnhance.Color(img).enhance(1.12).convert("RGBA")
+    # head + shoulders on a dark backdrop with a warm glow behind the head, for contrast at small sizes
+    sc = S / 600.0
+    fig = figure(sc, erode=3)
+    bg = studio(S, S, S * 0.52, S * 0.36, S * 0.95, hot=(0xF2, 0x8C, 0x38), mid=(0x7A, 0x34, 0x12), edge=(0x1A, 0x0E, 0x08))
+    fx, fy = 640 * sc, 300 * sc                         # face centre in scaled source
+    img = place(bg, fig, int(S * 0.5 - fx), int(S * 0.45 - fy))
     mask = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, S, S], radius=S * 0.22, fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, S - 1, S - 1], radius=S * 0.22, fill=255)
     img.putalpha(mask)
     return img
 
 def banner():
     W, H = 1280, 720
-    img = gradient(W, H, BG1, BG2).convert("RGB")
-    # character on the left: scale the whole source so the figure fills the height
-    sc = H / 1150
-    pic = popped(blur=4, dark=0.40).crop((0, 20, SRC.width, 1170))
-    pic = pic.resize((int(pic.width * sc), H), Image.LANCZOS)
-    ox = int(W * 0.22 - 540 * sc)            # figure centre (~x540 incl. bat) -> 22% of width
-    # fade the photo out towards the text area
-    fade = Image.new("L", pic.size, 255)
-    fp = fade.load()
-    f0, f1 = int(W * 0.33) - ox, int(W * 0.46) - ox
-    for x in range(pic.width):
-        v = 255 if x < f0 else 0 if x >= f1 else int(255 * (f1 - x) / (f1 - f0))
-        for y in range(pic.height): fp[x, y] = v
-    # but never fade the character itself
-    cm = MASK.crop((0, 20, SRC.width, 1170)).resize(pic.size, Image.LANCZOS)
-    fade = Image.composite(Image.new("L", pic.size, 255), fade, cm)
-    img.paste(pic, (ox, 0), fade)
-    # darken the text side a bit so the warm gradient sits behind the title
-    shade = Image.new("L", (W, H), 0)
-    sp = shade.load()
-    for x in range(W):
-        v = int(max(0, min(1, (x - W * 0.45) / (W * 0.2))) * 110)
-        for y in range(H): sp[x, y] = v
-    img = Image.composite(Image.new("RGB", (W, H), INK), img, shade)
+    img = studio(W, H, W * 0.27, H * 0.45, W * 0.62)
+    sc = H * 0.98 / 1180
+    fig = figure(sc)
+    img = place(img, fig, int(W * 0.24 - 640 * sc), int(H * 0.02)).convert("RGB")
     d = ImageDraw.Draw(img)
     fpath = None
     for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
               "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"):
         if os.path.exists(f): fpath = f; break
-    area_x0, area_w = W * 0.45, W * 0.52
+    area_x0, area_w = W * 0.47, W * 0.48
     size = int(H * 0.22)
     while True:
         font = ImageFont.truetype(fpath, size) if fpath else ImageFont.load_default()
-        l, t, r, b = d.textbbox((0, 0), "Stickman", font=font, stroke_width=max(1, size // 18))
+        l, t, r, b = d.textbbox((0, 0), "Stickman", font=font)
         if r - l <= area_w or not fpath: break
         size -= 4
-    sw = max(1, size // 18)
     tx = area_x0 + (area_w - (r - l)) / 2 - l
-    ty = (H - (b - t)) / 2 - t - H * 0.03
-    d.text((tx + 9, ty + 9), "Stickman", font=font, fill=INK, stroke_width=sw, stroke_fill=INK)
-    d.text((tx, ty), "Stickman", font=font, fill=WHITE, stroke_width=sw, stroke_fill=(0x8B, 0x5A, 0x2B))
-    # wood-coloured underline accent
-    uy = ty + b + H * 0.04
-    d.rounded_rectangle([tx + l, uy, tx + r, uy + H * 0.025], radius=H * 0.0125, fill=BG1)
-    return img
+    ty = (H - (b - t)) / 2 - t - H * 0.04
+    # soft drop shadow, then clean white title
+    sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).text((tx + 6, ty + 10), "Stickman", font=font, fill=(20, 8, 2, 170))
+    img = img.convert("RGBA"); img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(8)))
+    d = ImageDraw.Draw(img)
+    d.text((tx, ty), "Stickman", font=font, fill=WHITE)
+    uy = ty + b + H * 0.045
+    d.rounded_rectangle([tx + l, uy, tx + l + (r - l) * 0.38, uy + H * 0.02], radius=H * 0.01, fill=(0xFF, 0xD0, 0x8A))
+    return img.convert("RGB")
 
 def save(img, size, path):
     p = os.path.join(ROOT, path); os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -102,6 +137,8 @@ for dpi, px in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xx
     save(ic, (px, px), f"res/mipmap-{dpi}/ic_launcher.png")
 save(ic, (512, 512), "art/icon-512.png")
 bn = banner()
-save(bn, (320, 180), "res/drawable-xhdpi/banner.png")
+# banner is 320x180 dp: give every density its real pixel size so Fire TV never upscales it
+for dpi, f in (("xhdpi", 2), ("xxhdpi", 3), ("xxxhdpi", 4)):
+    save(bn, (320 * f, 180 * f), f"res/drawable-{dpi}/banner.png")
 save(bn, (640, 360), "art/banner-640.png")
 print("icons written")

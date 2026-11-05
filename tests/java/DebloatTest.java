@@ -153,7 +153,7 @@ public class DebloatTest {
             if (l.startsWith("com.amazon.dcp") || l.startsWith("com.amazon.device.settings") || l.startsWith("com.amazon.tv.devicecontrol"))
                 T.yes(!adv.contains(p), "family offered: " + p);
         }
-        T.eq(4, d.recommended().size(), "all recommended still offered");
+        T.eq(Catalog.DEBLOAT_RECOMMENDED.length, d.recommended().size(), "all recommended still offered");
         System.out.println("  advanced offered over real list: " + adv.size() + " of " + real.size());
     }
     public void testRulingFamiliesBlocked() {

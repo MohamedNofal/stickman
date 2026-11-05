@@ -54,12 +54,55 @@ public final class Catalog {
         "library", ".sdk", "contracts", "resources", "ooberesource", "overlay", "metrics.api",
     };
 
-    /** {pkg, label, why}; installed on the Fire TV 4K Max (ags.app and alexashopping were absent, dropped). */
+    /**
+     * {pkg, label, why}. All present on the Fire TV 4K Max (tests/fixtures/amazon_pkgs.txt). Curated from the
+     * tv-tweak 4k-max-2023 profile (ads/promo/cruft/smarthome tiers) minus dumbtv's never-disable list, minus anything
+     * {@link #isProtected} and minus its "aggressive" tier (Silk, install manager, remote config) which stays in Advanced.
+     */
     public static final String[][] DEBLOAT_RECOMMENDED = {
+        // ads & tracking
+        {"com.amazon.tv.acr", "Content recognition", "Identifies what's on screen to target ads"},
+        {"com.amazon.aca", "Content recognition helper", "Watches HDMI and app switches for ad targeting"},
+        {"com.amazon.hybridadidservice", "Advertising ID", "Ad-tracking identifier service"},
+        {"com.amazon.device.telemetry.emitter", "Telemetry", "Sends usage data to Amazon"},
+        {"com.amazon.wirelessmetrics.service", "Wi-Fi metrics", "Reports network statistics to Amazon"},
+        {"com.amazon.perfc", "Performance logger", "Background performance reporting"},
+        {"com.amazon.perfcollection", "Performance collector", "Background performance reporting"},
+        {"com.amazon.dp.logger", "Device logger", "Background usage logging"},
+        // promos
+        {"com.amazon.tv.ftvambient", "Ambient screensaver", "Photo screensaver; the biggest app (~100 MB)"},
+        {"com.amazon.ftv.screensaver", "Screensaver", "Amazon screensaver host"},
+        {"com.amazon.sneakpeek", "Sneak peek", "Autoplaying trailers on the Amazon home"},
+        {"com.amazon.media.recommendations", "Recommendations", "Feeds sponsored rows on the Amazon home"},
+        {"com.amazon.shoptv.client", "Shopping", "Amazon shopping on TV"},
+        {"com.amazon.shoptv.firetv.client", "Shopping (Fire TV)", "Amazon shopping on TV"},
+        {"com.amazon.minitv.android.app", "miniTV", "Amazon miniTV promo app"},
+        {"com.amazon.gamehub", "Game hub", "Games promo page"},
+        {"com.amazon.bueller.music", "Amazon Music", "Amazon Music app"},
+        {"com.amazon.bueller.photos", "Amazon Photos", "Amazon Photos app (~27 MB)"},
+        // leftovers
         {"com.amazon.tv.alexaalerts", "Alexa alerts", "Alexa reminders and alarm pop-ups"},
+        {"com.amazon.tv.alexanotifications", "Alexa notifications", "Alexa notification pop-ups"},
         {"com.amazon.tv.releasenotes", "Release notes", "Post-update 'what's new' screens"},
-        {"com.amazon.ods.kindleconnect", "Kindle connect", "Kindle sync service that runs in the background"},
+        {"com.amazon.tmm.tutorial", "Tutorials", "First-run tutorial videos"},
+        {"com.amazon.firetv.troubleshooting", "Troubleshooting", "Amazon troubleshooting app"},
+        {"com.amazon.tv.support", "Support videos", "Help and how-to videos"},
         {"com.amazon.tv.csapp", "Customer service", "Help app; rarely used"},
+        {"com.amazon.tahoe", "Kids mode", "Amazon Kids profiles (keep if you use them)"},
+        {"com.amazon.tv.legal.notices", "Legal notices", "Licence text viewer (~6 MB)"},
+        {"com.amazon.ods.kindleconnect", "Kindle connect", "Kindle sync service that runs in the background"},
+        {"com.amazon.uxnotification", "UX notifications", "Promo notification pop-ups"},
+        {"com.amazon.systemnotices", "System notices", "Amazon notice pop-ups"},
+        {"com.amazon.dummy.alarmclock", "Placeholder: clock", "Empty stub app"},
+        {"com.amazon.dummy.calendar", "Placeholder: calendar", "Empty stub app"},
+        {"com.amazon.dummy.contacts", "Placeholder: contacts", "Empty stub app"},
+        {"com.amazon.dummy.gallery", "Placeholder: gallery", "Empty stub app"},
+        {"com.amazon.dummy.music", "Placeholder: music", "Empty stub app"},
+        {"com.amazon.dummy.soundpicker", "Placeholder: sounds", "Empty stub app"},
+        // smart home
+        {"com.amazon.tv.matter", "Matter", "Smart-home Matter controller (keep if you use smart home)"},
+        {"com.amazon.tv.mattercohost", "Matter co-host", "Smart-home Matter hub (keep if you use smart home)"},
+        {"com.amazon.whad", "Echo home audio", "Wireless home-audio device service (~15 MB)"},
     };
 
     /** {label, target}: an intent action, or a component (contains '/') started with am start -n. */
