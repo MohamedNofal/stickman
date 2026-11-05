@@ -34,7 +34,8 @@ public final class ResultText {
         if (b.contains("REMAPD") || b.contains("STICKD")) {
             boolean remap = b.matches("(?s).*REMAPD \\d+.*"), stick = b.matches("(?s).*STICKD \\d+.*");
             if (remap && stick) return "Checked: button remapping and background automation are running.";
-            return "Checked: " + (remap ? "" : "button remapping isn't running. ") + (stick ? "" : "background automation isn't running.");
+            if (!remap && !stick) return "Checked: button remapping and background automation aren't running.";
+            return remap ? "Checked: background automation isn't running." : "Checked: button remapping isn't running.";
         }
         return "Done.";
     }

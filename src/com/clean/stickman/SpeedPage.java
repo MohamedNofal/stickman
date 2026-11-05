@@ -111,8 +111,9 @@ public class SpeedPage extends ApplyPage {
     void showLive(String out) {
         String v = LiveValues.value(out, "ANIM");
         int i = LiveValues.indexOfScale(ANIM, v);
+        // the live value wins over the stored choice: no chip matches -> none selected, say what it is
         if (i >= 0) { putPref("anim", i); select(anim, i); animNow.setText(""); }
-        else if (pref("anim", -1) < 0) animNow.setText("Current: " + (v == null ? "unknown" : v + "×"));
+        else { select(anim, -1); animNow.setText("Current: " + LiveValues.describeScale(v)); }
     }
 
     String names(Set<String> pkgs) {
@@ -140,8 +141,10 @@ public class SpeedPage extends ApplyPage {
         String[] names = new String[apps.size()];
         for (int i = 0; i < names.length; i++) names[i] = apps.get(i)[0];
         new ThemedDialog(a).title("Keep which app asleep?").items(names, w -> {
-            String[] app = apps.get(w);
-            send(Commands.keepAsleep(app[1], true), "asleep:" + app[0], "Putting " + app[0] + " to sleep…");
+            final String[] app = apps.get(w);
+            ThemedDialog.confirm(a, "Keep " + app[0] + " asleep?", app[0] + " won't run in the background until you "
+                + "open it. You can wake it again from Kept-asleep apps.", "Keep asleep",
+                () -> send(Commands.keepAsleep(app[1], true), "asleep:" + app[0], "Putting " + app[0] + " to sleep…"));
         }).cancel("Cancel").show();
     }
 
@@ -166,8 +169,14 @@ public class SpeedPage extends ApplyPage {
             .cancel("Cancel").show();
     }
 
+    /** Boost closes apps: ask first (focus on Cancel). */
     void boost() {
         if (!stickdOn()) return;
+        ThemedDialog.confirm(a, "Boost now?", "Close background apps and trim memory? The app you're using, home, "
+            + "playing media and your never-close apps are left alone.", "Boost", this::boostNow);
+    }
+
+    void boostNow() {
         boostAt = System.currentTimeMillis();
         boostInfo.setText("Boosting…");
         send(Commands.act(Actions.BOOST, null), "boost", "Boosting…");
@@ -220,8 +229,10 @@ public class SpeedPage extends ApplyPage {
         String[] names = new String[pkgs.size()];
         for (int i = 0; i < names.length; i++) names[i] = ButtonEditor.appLabel(a, pkgs.get(i));
         new ThemedDialog(a).title("Kept asleep (choose one to wake it)").items(names, w -> {
-            String n = names[w];
-            send(Commands.keepAsleep(pkgs.get(w), false), "awake:" + n, "Letting " + n + " run normally…");
+            final String n = names[w];
+            final String pkg = pkgs.get(w);
+            ThemedDialog.confirm(a, "Wake " + n + "?", n + " will be allowed to run in the background again.", "Wake it",
+                () -> send(Commands.keepAsleep(pkg, false), "awake:" + n, "Letting " + n + " run normally…"));
         }).cancel("Close").show();
     }
 }

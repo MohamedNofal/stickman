@@ -36,6 +36,16 @@ public class LiveValuesTest {
         T.eq(-1, LiveValues.indexOfScale(anim, "1.5"), "other");
     }
 
+    public void testDescribeScale() {
+        T.eq("1.5×", LiveValues.describeScale("1.5"), "unmatched scale shown");
+        T.eq("2×", LiveValues.describeScale("2.0"), "whole number");
+        T.eq("Off", LiveValues.describeScale("0.0"), "zero");
+        T.eq("1×", LiveValues.describeScale(null), "unset is default");
+        T.eq("unknown", LiveValues.describeScale("abc"), "garbage");
+        float[] anim = { 1f, 0.5f, 0f };
+        T.eq(-1, LiveValues.indexOfScale(anim, "1.5"), "1.5 selects no chip");
+    }
+
     public void testDescribeMs() {
         T.eq("Never", LiveValues.describeMs("-1"), "never");
         T.eq("Never", LiveValues.describeMs("2147483647"), "max");

@@ -123,16 +123,16 @@ public class SleepPage extends ApplyPage {
     @Override public void onTick() {
         if (a == null) return;
         String s = LogTail.status("sleep_timer");
-        String show = s == null ? "No sleep timer running." : "off".equals(s.trim()) ? "Sleep timer is off." : "Sleep timer: " + s.trim() + " min.";
+        String v = s == null ? null : s.trim();
+        // no STATUS line seen yet: the state is unknown, so no chip is selected
+        String show = v == null ? "Current: unknown" : "off".equals(v) ? "Sleep timer is off." : "Sleep timer: " + v + " min.";
         if (!show.equals(timerShown)) {
             timerShown = show;
             timerInfo.setText(show);
-            {
-                int sel = 0;
-                if (s == null) s = "off";
-                for (int i = 0; i < TIMER_MIN.length; i++) if (s.trim().equals(Integer.toString(TIMER_MIN[i]))) sel = i;
-                select(timer, sel);
-            }
+            int sel = -1;
+            if ("off".equals(v)) sel = 0;
+            else if (v != null) for (int i = 1; i < TIMER_MIN.length; i++) if (v.equals(Integer.toString(TIMER_MIN[i]))) sel = i;
+            select(timer, sel);
         }
     }
 

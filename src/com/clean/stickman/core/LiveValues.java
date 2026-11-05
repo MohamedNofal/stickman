@@ -54,6 +54,17 @@ public final class LiveValues {
         return -1;
     }
 
+    /** Human text for an animation scale: "1.5×", "Off" for 0; "unknown" when unreadable (null = default 1×). */
+    public static String describeScale(String v) {
+        if (v == null) return "1×";
+        float f;
+        try { f = Float.parseFloat(v.trim()); } catch (NumberFormatException e) { return "unknown"; }
+        if (f == 0f) return "Off";
+        String s = Float.toString(f);
+        if (s.endsWith(".0")) s = s.substring(0, s.length() - 2);
+        return s + "×";
+    }
+
     /** Human text for a timeout in ms: "Never", "45 min", "2 h", "90 s"; "unknown" when unreadable. */
     public static String describeMs(String v) {
         Long n = parseLong(v);

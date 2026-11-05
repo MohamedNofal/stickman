@@ -13,6 +13,13 @@ public class ResultTextTest {
         T.eq("Done.", ResultText.human("OK whatever raw"), "unknown -> Done");
     }
 
+    public void testPartialChecks() {
+        T.eq("Checked: background automation isn't running.", ResultText.human("OK REMAPD 12 STICKD -"), "stickd down");
+        T.eq("Checked: button remapping isn't running.", ResultText.human("OK REMAPD - STICKD 34"), "remapd down");
+        T.eq("Checked: button remapping and background automation aren't running.",
+            ResultText.human("OK REMAPD - STICKD -"), "both down");
+    }
+
     public void testFailures() {
         T.eq("Nothing has run yet.", ResultText.human(""), "empty");
         T.eq("Another VPN was on, so nothing was applied.", ResultText.human("FAIL vpn_busy"), "vpn");

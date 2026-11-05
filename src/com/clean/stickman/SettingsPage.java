@@ -127,8 +127,12 @@ public class SettingsPage extends Page {
 
     void toggleMaster() {
         if (Store.enabled(a)) {
-            mine.put(EnsureScript.stop(), "stop");
-            a.run(() -> { Store.setEnabled(a, false); refresh(); }, EnsureScript.stop());
+            // OFF stops remapping and automation: ask first (Cancel focused)
+            ThemedDialog.confirm(a, "Turn Stickman off?", "Your remote goes back to normal and background automation "
+                + "stops until you turn Stickman on again.", "Turn off", () -> {
+                mine.put(EnsureScript.stop(), "stop");
+                a.run(() -> { Store.setEnabled(a, false); refresh(); }, EnsureScript.stop());
+            });
         } else {
             a.run(() -> { Store.setEnabled(a, true); refresh(); }, Ensure.MARKER);
         }

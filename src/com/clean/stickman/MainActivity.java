@@ -186,8 +186,10 @@ public class MainActivity extends Activity implements Bridge.Listener {
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
-        if (current >= 0 && pages[current].onKey(e)) return true;
         int k = e.getKeyCode();
+        // a pending "swallow the BACK release" never outlives another key
+        if (e.getAction() == KeyEvent.ACTION_DOWN && k != KeyEvent.KEYCODE_BACK) backToSidebar = false;
+        if (current >= 0 && pages[current].onKey(e)) return true;
         if (k == KeyEvent.KEYCODE_BACK && e.getAction() == KeyEvent.ACTION_UP && backToSidebar) {
             backToSidebar = false;
             return true;
@@ -334,6 +336,13 @@ public class MainActivity extends Activity implements Bridge.Listener {
         View v = ok.get(FocusPick.first(rects, new int[] { cv.left, cv.top, cv.right, cv.bottom }));
         v.requestFocus();
         v.requestRectangleOnScreen(new Rect(0, 0, v.getWidth(), v.getHeight()), true);
+    }
+
+    /** A dialog opened (or the window lost focus): its keys aren't ours, so drop a pending BACK swallow. */
+    @Override
+    public void onWindowFocusChanged(boolean has) {
+        super.onWindowFocusChanged(has);
+        backToSidebar = false;
     }
 
     int indexOf(View v) {

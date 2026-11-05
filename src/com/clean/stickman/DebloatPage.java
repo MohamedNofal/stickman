@@ -62,6 +62,7 @@ public class DebloatPage extends ApplyPage {
     }
 
     @Override public void onShow() {
+        appLabels.clear();   // apps may have been installed/updated since the last show
         if (a != null && System.currentTimeMillis() - readAt > AUTO_READ_MS && !Bridge.otherVpnActive(a)) read();
     }
 
@@ -102,7 +103,8 @@ public class DebloatPage extends ApplyPage {
         for (final String pkg : model.disabledByUs) {
             LinearLayout row = Theme.row(a);
             row.addView(Theme.text(a, label(pkg), 15, Theme.TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
-            button(row, "Re-enable", v -> send(cmdAndRead(Debloat.enableOne(pkg)), "enabled:" + label(pkg), "Turning " + label(pkg) + " back on…"));
+            final String lb = label(pkg);
+            button(row, "Re-enable", v -> confirmEnable(pkg, lb));
             oursBox.addView(row);
         }
 
@@ -112,7 +114,7 @@ public class DebloatPage extends ApplyPage {
             else advBox.addView(Theme.text(a, adv.size() + " apps, A–Z. Disable asks first; you can turn any of "
                 + "them back on above.", 14, Theme.MUTED));
             java.util.List<String[]> rows = new java.util.ArrayList<>();
-            for (String pkg : adv) rows.add(new String[] { ButtonEditor.appLabel(a, pkg), pkg });
+            for (String pkg : adv) rows.add(new String[] { appLabel(pkg), pkg });
             java.util.Collections.sort(rows, (x, y) -> x[0].compareToIgnoreCase(y[0]));
             for (String[] r : rows) {
                 final String pkg = r[1], label = r[0];
@@ -132,6 +134,24 @@ public class DebloatPage extends ApplyPage {
     String label(String pkg) {
         for (String[] r : Catalog.DEBLOAT_RECOMMENDED) if (r[0].equals(pkg)) return r[1];
         return pkg;
+    }
+
+    /** App labels for the advanced list, looked up once per page show (not on every render). */
+    final java.util.Map<String, String> appLabels = new java.util.HashMap<>();
+
+    String appLabel(String pkg) {
+        String l = appLabels.get(pkg);
+        if (l == null) { l = ButtonEditor.appLabel(a, pkg); appLabels.put(pkg, l); }
+        return l;
+    }
+
+    /** Re-enabling changes a package too: ask first, Cancel focused. */
+    void confirmEnable(final String pkg, final String label) {
+        final String cmd = cmdAndRead(Debloat.enableOne(pkg));
+        if (cmd == null) return;
+        ThemedDialog.confirm(a, "Turn " + label + " back on?",
+            pkg + "\n\nIt goes back to how Amazon shipped it. You can disable it again from Recommended or Advanced.",
+            "Re-enable", () -> send(cmd, "enabled:" + label, "Turning " + label + " back on…"));
     }
 
     static String cmdAndRead(String cmd) { return cmd == null ? null : cmd + "; " + Debloat.READ_CMD; }
