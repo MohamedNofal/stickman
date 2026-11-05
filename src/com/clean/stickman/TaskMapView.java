@@ -14,6 +14,7 @@ import android.view.MotionEvent;
 import android.view.View;
 
 import com.clean.stickman.core.Brand;
+import com.clean.stickman.core.CollapseState;
 import com.clean.stickman.core.TaskSnapshot;
 import com.clean.stickman.core.TileNav;
 import com.clean.stickman.core.Treemap;
@@ -43,7 +44,7 @@ public class TaskMapView extends View {
     /** stickd's aggregate of small system packages (state sys; procs = package count). */
     public static final String SYS_OTHER = "_sys_other";
     public static final String MORE = Treemap.MORE;
-    static final double MIN_FRACTION = 0.04, RELAYOUT = 0.05;
+    static final double RELAYOUT = 0.05;
     static final long TWEEN_MS = 400;
     static final int MORE_FILL = 0xFF3A3028, PILL_BG = 0x73000000, BADGE_BG = 0xB3000000;
 
@@ -89,6 +90,13 @@ public class TaskMapView extends View {
 
     int focus = -1;
     String focusKey;
+    /**
+     * The key the user last chose (D-pad / touch). Survives that app folding into "+N more" (focus shows on MORE
+     * meanwhile) so focus returns to it when it grows back out.
+     */
+    String wantKey;
+    /** Last "+N more" membership, for the sticky CollapseState hysteresis. */
+    Set<String> prevHidden = new HashSet<>();
     boolean okDown, paused;
     long tweenStart;
     boolean tweening;
@@ -205,7 +213,10 @@ public class TaskMapView extends View {
         List<String> keys = new ArrayList<>(ordered.size());
         List<Double> weights = new ArrayList<>(ordered.size());
         for (TaskSnapshot.App a : ordered) { keys.add(a.pkg); weights.add(weight(a)); }
-        Treemap.Collapsed col = Treemap.collapse(keys, weights, MIN_FRACTION);
+        if (sortChanged) prevHidden = new HashSet<>();   // weights mean something else now
+        // keep-top-10 first, then sticky membership (3.5 % / 4.5 %) so an app hovering near 4 % doesn't flap
+        Treemap.Collapsed col = CollapseState.next(prevHidden, keys, weights, CollapseState.LO, CollapseState.HI);
+        prevHidden = new HashSet<>(col.hidden);
         hidden.clear();
         for (String k : col.hidden) hidden.add(apps.get(k));
         Collections.sort(hidden, TaskSnapshot.App.BY_RSS);
@@ -248,12 +259,16 @@ public class TaskMapView extends View {
         refreshText();
     }
 
-    /** Keeps focus on the same key; a key folded into "+N more" moves to it; a vanished key to the nearest tile. */
+    /**
+     * Focus follows wantKey: its tile if shown; the "+N more" tile while it is folded in there (wantKey kept, so focus
+     * returns when it grows back out); if it vanished, the tile nearest the old focus, which becomes the new wantKey.
+     */
     void refocus() {
         if (tiles.isEmpty()) { focus = -1; return; }
-        String want = focusKey;
+        String want = wantKey;
+        boolean folded = false;
         if (want != null && !want.equals(MORE)) {
-            for (TaskSnapshot.App a : hidden) if (a.pkg.equals(want)) { want = MORE; break; }
+            for (TaskSnapshot.App a : hidden) if (a.pkg.equals(want)) { want = MORE; folded = true; break; }
         }
         int idx = -1;
         for (int i = 0; i < tiles.size(); i++) if (tiles.get(i).key.equals(want)) { idx = i; break; }
@@ -269,6 +284,7 @@ public class TaskMapView extends View {
         if (idx < 0) idx = 0;
         focus = idx;
         focusKey = tiles.get(idx).key;
+        if (!(folded && MORE.equals(focusKey))) wantKey = focusKey;   // folded: remember the app, not MORE
         lastFocusCx = (float) rects.get(idx).cx();
         lastFocusCy = (float) rects.get(idx).cy();
     }
@@ -399,6 +415,7 @@ public class TaskMapView extends View {
         if (i < 0 || i >= tiles.size()) return;
         focus = i;
         focusKey = tiles.get(i).key;
+        wantKey = focusKey;
         lastFocusCx = (float) rects.get(i).cx();
         lastFocusCy = (float) rects.get(i).cy();
         invalidate();

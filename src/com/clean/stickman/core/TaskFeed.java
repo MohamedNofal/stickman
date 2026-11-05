@@ -8,7 +8,8 @@ import java.util.Map;
 
 /** Assembles TaskSnapshots from STATUS feed lines (the text after "STATUS "). */
 public final class TaskFeed {
-    private TaskSnapshot latest;
+    /** Written on the feed (LogTail) thread, read from the UI thread. */
+    private volatile TaskSnapshot latest;
     private long curSeq = -1, total, avail;
     private int cpu;
     private List<TaskSnapshot.App> cur = new ArrayList<>();
@@ -57,17 +58,20 @@ public final class TaskFeed {
                 }
                 case "tasks_end": {
                     long seq = Long.parseLong(kv(t, 1).get("seq"));
+                    boolean completed = false;
                     if (seq == curSeq && seq > latestSeq()) {
                         List<TaskSnapshot.App> apps = cur;
                         Collections.sort(apps, TaskSnapshot.App.BY_RSS);
                         latest = new TaskSnapshot(seq, total, avail, cpu, apps);
-                        Runnable l = listener;
-                        if (l != null) l.run();
+                        completed = true;
                     }
                     if (seq == curSeq) {
                         curSeq = -1;
                         cur = new ArrayList<>();
                     }
+                    // after the per-sample reset, so a listener that throws can't leave a half-reset assembler
+                    Runnable l = listener;
+                    if (completed && l != null) l.run();
                     break;
                 }
                 default:
