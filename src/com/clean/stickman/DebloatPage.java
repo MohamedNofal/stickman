@@ -8,6 +8,7 @@ import android.widget.TextView;
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
+import com.clean.stickman.core.Ota;
 
 import java.util.List;
 
@@ -23,6 +24,11 @@ public class DebloatPage extends ApplyPage {
     boolean advShown;
     Debloat model;
     long readAt;
+    /** OTA freeze state; null until the first state read comes back. */
+    Boolean otaFrozen;
+    long otaReadAt;
+    TextView otaStatus;
+    Button otaBtn;
 
     @Override public String title() { return "Debloat"; }
 
@@ -31,6 +37,13 @@ public class DebloatPage extends ApplyPage {
         LinearLayout top = Theme.row(a);
         button(top, "Refresh list", v -> read());
         l.addView(top);
+
+        LinearLayout oc = card(l, "System updates (OTA)", "Fire OS protects its updater, so it can't be switched "
+            + "off like the apps below. Freeze suspends the OTA app and its forced updater, and re-applies the freeze "
+            + "at boot. Apps still update from the Appstore.");
+        otaStatus = Theme.text(a, "Checking…", 15, Theme.MUTED);
+        oc.addView(otaStatus);
+        otaBtn = button(oc, "Freeze OTA…", v -> confirmOta());
 
         LinearLayout rc = card(l, "Recommended", "Safe Amazon extras you can switch off. Home, Settings, updates, "
             + "remotes and Net Filter can never be disabled here.");
@@ -72,13 +85,54 @@ public class DebloatPage extends ApplyPage {
 
     @Override public void onShow() {
         appLabels.clear();   // apps may have been installed/updated since the last show
-        if (a != null && System.currentTimeMillis() - readAt > AUTO_READ_MS && !Bridge.otherVpnActive(a)) read();
+        if (a == null || Bridge.otherVpnActive(a)) return;
+        if (System.currentTimeMillis() - readAt > AUTO_READ_MS) read();
+        if (otaFrozen == null || System.currentTimeMillis() - otaReadAt > AUTO_READ_MS)
+            send(Ota.stateCmd(), "otastate", "Checking OTA state…");
     }
 
     void render() {
         boolean had = a.focusInPage();
         renderRows();
+        renderOta();
         a.keepFocusInPage(had);   // removing the focused row must not throw focus to the sidebar
+    }
+
+    /** OTA card: status line + the Freeze/Unfreeze button label. */
+    void renderOta() {
+        if (otaStatus == null || otaBtn == null) return;
+        if (otaFrozen == null) {
+            otaStatus.setText("Checking…");
+            otaStatus.setTextColor(Theme.MUTED);
+            otaBtn.setText("Freeze OTA…");
+        } else if (otaFrozen) {
+            otaStatus.setText("Frozen — Fire OS system updates are blocked.");
+            otaStatus.setTextColor(Theme.ACCENT);
+            otaBtn.setText("Unfreeze OTA…");
+        } else {
+            otaStatus.setText("Allowed — Fire OS can download and install system updates.");
+            otaStatus.setTextColor(Theme.MUTED);
+            otaBtn.setText("Freeze OTA…");
+        }
+    }
+
+    void confirmOta() {
+        if (Boolean.TRUE.equals(otaFrozen)) {
+            ThemedDialog.confirm(a, "Allow Fire OS updates again?",
+                "Fire OS will be able to download and install system updates again. App updates are not affected.",
+                "Unfreeze", () -> {
+                    Store.setOtaFrozen(a, false);
+                    send(Ota.thawScript() + "; " + Ota.stateCmd(), "otathaw", "Unfreezing…");
+                });
+        } else {
+            ThemedDialog.confirm(a, "Freeze system updates?",
+                "Stops Fire OS from downloading or installing system updates until you unfreeze. Apps still update "
+                + "from the Appstore.\n\nFire OS protects its updater, so Stickman suspends it instead of disabling it. "
+                + "The freeze is re-applied at boot.", "Freeze", () -> {
+                    Store.setOtaFrozen(a, true);
+                    send(Ota.freezeScript() + "; " + Ota.stateCmd(), "otafreeze", "Freezing OTA…");
+                });
+        }
     }
 
     void renderRows() {
@@ -229,6 +283,15 @@ public class DebloatPage extends ApplyPage {
     }
 
     @Override String describe(String kind, String out) {
+        if (kind.equals("otastate") || kind.equals("otafreeze") || kind.equals("otathaw")) {
+            otaFrozen = Ota.parseFrozen(out);
+            otaReadAt = System.currentTimeMillis();
+            renderOta();
+            if (kind.equals("otastate")) return null;
+            Store.setOtaFrozen(a, otaFrozen);   // the device is the truth, not what we asked for
+            if (kind.equals("otafreeze")) return otaFrozen ? "OTA updates are frozen." : "Couldn't freeze OTA: " + firstLine(out);
+            return otaFrozen ? "Unfreeze didn't take: " + firstLine(out) : "OTA updates are allowed again.";
+        }
         if (kind.equals("check")) return checked(out);
         if (out.contains(Debloat.SEP)) { model = Debloat.parse(out); render(); }
         if (kind.equals("read")) { result.setText(""); return null; }

@@ -31,6 +31,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
   - About 37 recommended Amazon extras, with one-press Disable all.
   - **Free up space**: removes the updates Amazon keeps downloading for disabled apps.
   - **Check after an update**: switches off again anything an update turned back on.
+  - **Freeze OTA**: stops Fire OS system updates until you unfreeze. The updater is protected, so Stickman suspends it instead of disabling it and re-applies the freeze at boot; Appstore app updates are unaffected.
 - **Sleep**: sleep timer with fade, screen off with audio on, stay awake while media plays, HDMI-CEC switch.
 - **Privacy**: ad-blocking private DNS that switches itself off if the internet breaks, and limit ads and tracking.
 - **Shortcuts** to hidden Amazon settings, and a **Status** page.
@@ -47,7 +48,7 @@ Keep ADB debugging on: Stickman talks to the TV's own debugging service.
 ## Safety
 
 - **Emergency release:** hold **Back for 10 s**.
-- Stickman never touches the launcher, Settings, the system updater, remote services, or whatever is playing.
+- Stickman never touches the launcher, Settings, remote services, or whatever is playing. The system updater is only touched by the opt-in **Freeze OTA**.
 - Every change is recorded. **Settings, Restore defaults** puts everything back, even after you uninstall Stickman.
 
 ## More

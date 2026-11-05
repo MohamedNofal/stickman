@@ -8,6 +8,7 @@ import android.widget.TextView;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EnsureScript;
 import com.clean.stickman.core.Originals;
+import com.clean.stickman.core.Ota;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.ResultText;
 
@@ -89,11 +90,14 @@ public class SettingsPage extends Page {
         LinearLayout c4 = Theme.card(a);
         c4.addView(Theme.heading(a, "Restore defaults"));
         c4.addView(Theme.text(a, "Puts back every system change Stickman made: DNS, animations, sleep and screensaver values, "
-            + "standby buckets and disabled apps. Your button remaps stay.", 14, Theme.MUTED));
+            + "standby buckets, the OTA freeze and disabled apps. Your button remaps stay.", 14, Theme.MUTED));
         Button restore = Theme.button(a, "Restore defaults…");
         restore.setOnClickListener(v -> ThemedDialog.confirm(a, "Restore defaults?",
             "Put back every system setting Stickman changed?", "Restore",
-            () -> send(Originals.restoreScript(), "restore", "Restoring…")));
+            () -> {
+                Store.setOtaFrozen(a, false);
+                send(Ota.thawScript() + "; " + Originals.restoreScript(), "restore", "Restoring…");
+            }));
         c4.addView(restore);
         l.addView(c4);
 

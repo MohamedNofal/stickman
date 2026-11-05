@@ -19,7 +19,9 @@ public final class Ensure {
             version = c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionCode;
         } catch (Exception ignored) {}
         // migrate=true always: the script itself only acts when /data/local/tmp/remap or KeyShift exists.
-        return EnsureScript.build(ai.sourceDir, ai.nativeLibraryDir + "/libremapd.so", version,
+        String s = EnsureScript.build(ai.sourceDir, ai.nativeLibraryDir + "/libremapd.so", version,
             Store.remap(c).serialize(), Store.stickdText(c), true);
+        // Fire OS resets suspensions on some updates; re-freeze OTA on every ensure (cheap and idempotent).
+        return s + "; " + com.clean.stickman.core.Ota.ensureLine(Store.otaFrozen(c));
     }
 }

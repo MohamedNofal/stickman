@@ -155,6 +155,11 @@ public final class Store {
 
     public static void setEnabled(Context c, boolean on) { prefs(c).edit().putBoolean("enabled", on).apply(); }
 
+    // ---- OTA freeze (re-applied by the boot ensure script) ----
+    public static boolean otaFrozen(Context c) { return prefs(c).getBoolean("ota.frozen", false); }
+
+    public static void setOtaFrozen(Context c, boolean on) { prefs(c).edit().putBoolean("ota.frozen", on).apply(); }
+
     // ---- last ensure ("REMAPD <pid|-> STICKD <pid|->") ----
     static void setLastEnsure(Context c, String out) {
         prefs(c).edit().putString("lastEnsure", out).putLong("lastEnsureAt", System.currentTimeMillis()).apply();
