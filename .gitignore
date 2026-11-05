@@ -3,3 +3,4 @@ build/
 *.idsig
 *.keystore
 native/remapd
+native/fakeremote

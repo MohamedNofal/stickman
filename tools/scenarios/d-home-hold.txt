@@ -1,0 +1,7 @@
+# (d) Hold Home (172) 800 ms: no hold rule -> original Home held down at 600 ms (Amazon home appears).
+# devtest's caller brings Wolf back afterwards.
+sleep 300
+tap 172 800
+sleep 800
+#expect RemapD: key 172 held -> original
+#expect OUT KEY_HOMEPAGE DOWN

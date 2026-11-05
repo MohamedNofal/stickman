@@ -10,6 +10,8 @@ rm -rf "$OUT"; mkdir -p "$OUT/classes"
 
 echo "[0/5] build native remapd (armv7 static)"
 ( cd native && arm-linux-gnueabihf-gcc -O2 -static -w -o remapd remapd.c layers.c && arm-linux-gnueabihf-strip remapd )
+# dev-only test remote for tools/devtest.sh (NOT packaged in the APK)
+( cd native && arm-linux-gnueabihf-gcc -O2 -static -w -o fakeremote fakeremote.c && arm-linux-gnueabihf-strip fakeremote )
 
 echo "[1/5] compile java -> classes (javac against android.jar)"
 javac --release 8 -cp "$ANDROID_JAR" -d "$OUT/classes" \

@@ -1,0 +1,6 @@
+# (a) Tap D-pad Down (108, unmapped): passes straight through, virtual DOWN within 30 ms.
+sleep 300
+tap 108 80
+sleep 500
+#expect OUT KEY_DOWN DOWN 30
+#expect OUT KEY_DOWN UP

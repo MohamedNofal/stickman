@@ -10,6 +10,9 @@
  * Unmapped keys pass straight through with no added delay.
  * Safety: if remapd dies the kernel releases the grab; holding BACK for 10 s exits remapd.
  *
+ * Usage: remapd [conf] [device-name]  (device-name defaults to "Amazon Fire TV Remote"; tools/devtest.sh
+ * passes "Stickman Test Remote" to drive remapd from native/fakeremote instead of the real remote).
+ *
  * Config: /data/local/tmp/stickman/remap.conf (v2: "set", "profile <name>", "<code> <layer> <action>",
  * v1 "<code> <action>" = tap). Active profile: /data/local/tmp/stickman/profile (missing -> default).
  * Both are re-read when their mtime/size change. Actions:
@@ -37,7 +40,7 @@
 #include <unistd.h>
 #include "layers.h"
 
-#define REMOTE_NAME "Amazon Fire TV Remote"
+#define REMOTE_NAME "Amazon Fire TV Remote"   /* default device to grab; also the clone's name */
 #define VIRT_PHYS "remapd/virtual"
 #define MAXKEY LYR_MAXKEY
 #define PANIC_KEY KEY_BACK
@@ -61,6 +64,7 @@ static int nmapped;
 static char active_prof[128] = "default";
 
 static const char *conf_path;
+static const char *grab_name = REMOTE_NAME;   /* argv[2]: test mode, e.g. "Stickman Test Remote" */
 static long long conf_key = -2, prof_key = -2;   /* mtime ns + size; -1 = missing, -2 = never read */
 static lyr_state *L;
 static lyr_out outs[NOUT];
@@ -295,7 +299,7 @@ static int open_remote(void) {
         int fd = open(p, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
         if (fd < 0) { static int warned; if (warned++ < 8) alog("open %s: %s", p, strerror(errno)); continue; }
         char name[128] = {0}; ioctl(fd, EVIOCGNAME(sizeof name - 1), name);
-        if (!strcmp(name, REMOTE_NAME) && !is_virtual(fd)) { found = fd; alog("remote at %s", p); break; }
+        if (!strcmp(name, grab_name) && !is_virtual(fd)) { found = fd; alog("remote at %s", p); break; }
         close(fd);
     }
     closedir(d);
@@ -376,6 +380,7 @@ static int other_instance(void) {
 
 int main(int argc, char **argv) {
     conf_path = argc > 1 ? argv[1] : DEF_CONF;
+    if (argc > 2 && argv[2][0]) grab_name = argv[2];
     int other = other_instance();   /* before grabbing anything: only one process may own the remote */
     if (other) { alog("remapd already running pid %d", other); return 0; }
     signal(SIGCHLD, SIG_IGN); signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
@@ -383,7 +388,7 @@ int main(int argc, char **argv) {
     if (!L) return 1;
     FILE *pf = fopen(PID_PATH, "w");
     if (pf) { fprintf(pf, "%d\n", getpid()); fclose(pf); }
-    alog("remapd starting pid %d", getpid());
+    alog("remapd starting pid %d device \"%s\"", getpid(), grab_name);
 
     for (;;) {
         load_conf();

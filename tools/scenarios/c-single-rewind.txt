@@ -1,0 +1,6 @@
+# (c) Single Rewind (168 has only a double rule): the original Rewind comes out after the 250 ms window.
+sleep 300
+tap 168 80
+sleep 800
+#expect RemapD: key 168 tap -> original
+#expect OUT KEY_REWIND DOWN

@@ -1,0 +1,9 @@
+# (b) Double Rewind (168 double = act boost): remapd spools "boost", stickd logs STATUS boost.
+# Runs a REAL boost on the stick (kills background apps); a boost takes ~7-8 s, hence the long sleep.
+sleep 300
+tap 168 80
+sleep 100
+tap 168 80
+sleep 15000
+#expect RemapD: key 168 double -> act boost
+#expect Stickd: .*STATUS boost
