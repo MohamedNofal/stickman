@@ -731,4 +731,26 @@ Research: `docs/device/fire-tv-remotes.md`. Reference photos are in the controll
 - [ ] **Step 4:** `./build.sh`, then commit: `"remote presets for every Fire TV remote + owner's app-button order"`.
 
 ### Task 17: UI fixes from the on-device self-test
-(Defined from the self-test catalogue, `docs/device/ui-selftest.md`, once it lands.)
+
+**Files:** `MainActivity`, `Theme`, every `*Page`, `ButtonEditor`, `RemotePage`, `RemoteView`, plus a new `ThemedDialog` helper as needed.
+**Source of truth:** `docs/device/ui-selftest.md`. It lists 26 issues: 4 Major, 12 Minor and 10 Polish, each with steps, a screenshot name and a suggested fix. Fix **every Major and Minor**, and the Polish items where cheap.
+
+**Also fix these controller findings:**
+- **(C1)** In the button editor the D-pad lands on "Reset to original", not Save.
+  - Save must be the default focused action button, ordered first.
+  - "Reset to original" must ask for confirmation.
+  - Every dialog button gets the Theme ACCENT focus ring.
+- **(C2)** All choosers and dialogs use Stickman's theme: dark PANEL background, WOOD outline, ACCENT focus, TEXT colours. No stock grey Amazon dialogs with a teal highlight.
+- **(C3)** Remove the redundant system action-bar title ("Stickman") by using a NoActionBar theme. The in-app Stickman header stays.
+
+**Must hold:**
+- Every control is reachable with the D-pad.
+- No focus lands on an invisible or off-screen control.
+- Pressing RIGHT from the sidebar focuses the first visible control.
+- The sidebar scrolls, so all 8 items are reachable and visible.
+- Selected options always show the current value: read the live value via the bridge once per page show, falling back to the stored preference.
+- No destructive action fires from a focus the user can't see.
+
+- [ ] **Step 1:** Implement the fixes in the catalogue's order, then `./build.sh` and `tests/run.sh`.
+- [ ] **Step 2:** Re-test on the device with injected D-pad keys and screenshots. Check every catalogue item, and write ✓ or ✗ plus a screenshot per item in the report. Use the same safety rules as the self-test: navigate and cancel only, and don't apply system changes.
+- [ ] **Step 3:** Commit: `"UI fixes from on-device self-test"`.
