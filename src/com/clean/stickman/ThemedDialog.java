@@ -216,6 +216,13 @@ public class ThemedDialog {
         new ThemedDialog(c).title(title).message(msg).button("OK", null).show();
     }
 
+    /** Plain list with a Cancel button: choosing a row closes the dialog and reports its index (checked -1 = none). */
+    public static ThemedDialog list(Context c, String title, String[] items, int checked, Pick pick) {
+        return new ThemedDialog(c).title(title).items(items, checked, pick).cancel("Cancel").show();
+    }
+
+    public static ThemedDialog list(Context c, String title, String[] items, Pick pick) { return list(c, title, items, -1, pick); }
+
     /** Warning/confirm: [action] [Cancel], with focus on Cancel so OK can't fire the risky action by accident. */
     public static void confirm(Context c, String title, String msg, String action, Runnable r) {
         new ThemedDialog(c).title(title).message(msg).button(action, r).cancel("Cancel").focusButton(1).show();

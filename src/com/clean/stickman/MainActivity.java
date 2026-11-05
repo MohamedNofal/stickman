@@ -28,7 +28,7 @@ import java.util.ArrayList;
 
 /** App shell: left sidebar of sections + a content area that swaps Page views. Fully D-pad driven. */
 public class MainActivity extends Activity implements Bridge.Listener {
-    static final String[] SECTIONS = { "Remote", "Speed", "Sleep", "Privacy", "Debloat", "Shortcuts", "Status", "Settings" };
+    static final String[] SECTIONS = { "Remote", "Tasks", "Speed", "Sleep", "Privacy", "Debloat", "Shortcuts", "Status", "Settings" };
     static final String VPN_WARNING = "A VPN (e.g. NordVPN) is connected. Applying will disconnect it. Continue?";
 
     final Page[] pages = new Page[SECTIONS.length];
@@ -50,6 +50,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
     Page makePage(int i) {
         switch (SECTIONS[i]) {
             case "Remote": return new RemotePage();
+            case "Tasks": return new TasksPage();
             case "Status": return new StatusPage();
             case "Speed": return new SpeedPage();
             case "Sleep": return new SleepPage();
@@ -80,7 +81,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         brand.setTypeface(Typeface.DEFAULT_BOLD);
         brand.setPadding(Theme.dp(this, 4), 0, 0, Theme.dp(this, 10));
         side.addView(brand);
-        // the items scroll (the focused one is always brought into view), so all 8 are reachable at any size
+        // the items scroll (the focused one is always brought into view), so every section is reachable at any size
         sidebar = Theme.column(this);
         for (int i = 0; i < SECTIONS.length; i++) {
             final int idx = i;
@@ -189,6 +190,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         int k = e.getKeyCode();
         // a pending "swallow the BACK release" never outlives another key
         if (e.getAction() == KeyEvent.ACTION_DOWN && k != KeyEvent.KEYCODE_BACK) backToSidebar = false;
+        // first, before any other handling: e.g. the Tasks page's ⏯ (MEDIA_PLAY_PAUSE) and ☰ (MENU)
         if (current >= 0 && pages[current].onKey(e)) return true;
         if (k == KeyEvent.KEYCODE_BACK && e.getAction() == KeyEvent.ACTION_UP && backToSidebar) {
             backToSidebar = false;
