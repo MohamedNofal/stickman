@@ -21,6 +21,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8 / Android 11, model `AFTMA08C15`).
 - **Privacy**: Private-DNS ad-blocking presets with an automatic safety revert if connectivity fails, and limit ads and tracking. Works alongside Net Filter.
 - **Debloat**: a recommended list and an advanced list. Critical package families (launcher, Settings, OTA, remote/input services) are hard-blocked. Every change is journaled and can be restored.
 - **Shortcuts**: one-tap tiles into Amazon's hidden settings screens.
+- **Tasks**: a live treemap of running apps sized by RAM, coloured by CPU, with system processes in a strip below. Select a tile for details and End; Menu opens sort order and End all; Play/Pause freezes the page. Never ends the foreground app, playing media, whitelisted apps or Stickman itself.
 - **Status**: RAM, temperature, storage, Wi-Fi, Fire OS version, daemon health.
 - **Settings**: master off, restore defaults, double-tap/hold timings, fix the clock, clear a stuck HTTP proxy.
 
@@ -43,6 +44,11 @@ Everything useful needs the `shell` user, which can read input devices, create v
   - Stickman actions are written to the **`act/` spool** for stickd.
 - **`stickd`** (`daemon/Stickd.java`, plus `AutoKill`, `Sleep`): a Java daemon started with `app_process` as shell. It tracks the foreground app (and switches profiles), runs auto-kill and Boost, executes spooled actions, runs the sleep timer and stay-awake, and the DNS safety guard.
 - **The `act/` spool**: files in `/data/local/tmp/stickman/act/`, written as `.tmp` then renamed to `.act` (`core/Spool.java`). Used instead of a FIFO because SELinux forbids shell `mkfifo`. No sockets are opened.
+- **Tasks feed** (stickd -> logcat tag `Stickd`, read by the Tasks page): sampled every 2 s while the page is live, using `/proc` plus a `dumpsys` refresh every 10 s.
+  - `STATUS tasks total=<kB> avail=<kB> cpu=<pct> seq=<n>`, then one `STATUS task <pkg> rss=<kB> cpu=<pct> state=<fg|play|bg|cached|sys> up=<sec> procs=<n> seq=<n>` per app, then `STATUS tasks_end seq=<n>`. `seq` restarts at 1 for each sampling session.
+  - Spool actions `tasks_start` (sent again every 60 s; sampling stops 90 s after the last one) and `tasks_stop`, plus `end <pkg>` and `end_all`. None of them appear in the button-action menu.
+  - System processes not shown individually are summed into one `_sys_other` aggregate line, which keeps the feed small. stickd also tries to raise the logcat ring buffer to 1 MB (`logcat -G 1M`) so the feed isn't evicted between reads.
+  - Sampler cost measured on the stick: about 1 % of all CPUs (limit 3 %).
 - **Originals journal**: before a feature first changes a system value (DNS, animation, standby buckets, screensaver/sleep, disabled packages), the original is recorded in `/data/local/tmp/stickman/originals` (`core/Originals.java`). "Restore defaults" replays it.
 - **Boot**: `BootReceiver` (boot completed + package replaced) plus a persisted `BootJob` re-run the idempotent ensure script (`core/EnsureScript.java`) that installs and starts the daemons.
 
@@ -51,7 +57,7 @@ Everything useful needs the `shell` user, which can read input devices, create v
 | Bridge | `src/com/clean/stickman/{Bridge,BridgeService,BridgeWorker,MiniTcp,TunReader,AdbClient,AdbKey}.java` |
 | Pure logic (host-tested) | `src/com/clean/stickman/core/` (remap model, presets, catalogues, kill policy, sleep timer, DNS guard, parsers) |
 | Daemon | `src/com/clean/stickman/daemon/` |
-| UI | `MainActivity`, `RemotePage`, `RemoteView`, `ButtonEditor`, `SpeedPage`, `SleepPage`, `PrivacyPage`, `DebloatPage`, `ShortcutsPage`, `StatusPage`, `SettingsPage` |
+| UI | `MainActivity`, `RemotePage`, `RemoteView`, `ButtonEditor`, `SpeedPage`, `SleepPage`, `TasksPage`, `PrivacyPage`, `DebloatPage`, `ShortcutsPage`, `StatusPage`, `SettingsPage` |
 | Input daemon | `native/remapd.c`, `native/layers.c` |
 
 ## Install

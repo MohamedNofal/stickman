@@ -1,0 +1,16 @@
+# (e) Tasks page keys (page must be open and live on the stick): Play/Pause pauses, again resumes, Menu opens the menu, Back closes it.
+#detach
+sleep 500
+tap 164
+sleep 3000
+tap 164
+sleep 4000
+tap 139
+sleep 1500
+tap 158
+sleep 1500
+#expect Stickman: tasks paused
+#expect Stickd: STATUS tasks stopped
+#expect Stickman: tasks live
+#expect Stickd: STATUS tasks total=.*seq=1$ 9000
+#expect Stickman: tasks menu

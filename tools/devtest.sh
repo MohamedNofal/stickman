@@ -8,7 +8,7 @@
 #   4. starts the test remapd: test/remapd <production remap.conf> "Stickman Test Remote"
 #   5. getevent -lt on the remapd/virtual node, in the background
 #   6. feeds the scenario to fakeremote (down/up/tap/sleep lines; see native/fakeremote_parse.h)
-#   7. collects SENT lines, virtual-node events and `logcat -s RemapD Stickd`
+#   7. collects SENT lines, virtual-node events and `logcat -s RemapD Stickd Stickman`
 #   8. ALWAYS (trap) kills the test remapd + fakeremote and restarts the production remapd, then checks it
 #      grabbed the real remote
 #   9. prints a per-press summary: output keys, actions, latency SENT -> virtual output
@@ -62,7 +62,7 @@ restore() {
     # exact matches only: a pkill -f pattern would also match the sh -c running it
     sh_ 'for P in $(pidof getevent 2>/dev/null); do [ "$(tr "\000" " " </proc/$P/cmdline 2>/dev/null | cut -d" " -f1-2)" = "getevent -lt" ] && kill $P; done; true'
     sleep 0.5
-    sh_ 'pkill -x fakeremote 2>/dev/null; true'
+    sh_ 'pkill -x fakeremote 2>/dev/null; for P in $(pidof tail); do grep -q "'$T'/cmd" /proc/$P/cmdline 2>/dev/null && kill $P; done; true'
     [ -n "$FR_BG" ] && kill "$FR_BG" 2>/dev/null
     if [ -z "$(remapd_pid)" ]; then
         sh_ "cd $D && setsid nohup $D/remapd $D/remap.conf </dev/null >/dev/null 2>&1 &"
@@ -100,10 +100,17 @@ sh_ "chmod 755 $T/remapd $T/fakeremote"
 
 # 2. fakeremote (stdin = host fifo held open on fd 3)
 rm -f "$OUT/in"; mkfifo "$OUT/in"
-$ADB shell -T "$T/fakeremote" <"$OUT/in" >"$OUT/sent.log" 2>"$OUT/fakeremote.err" &
-FR_BG=$!
-exec 3>"$OUT/in"
-for i in $(seq 50); do grep -q READY "$OUT/sent.log" 2>/dev/null && break; sleep 0.1; done
+DETACH=0; grep -q '^#detach' "$SCEN" && DETACH=1   # "#detach": fakeremote runs on the stick (survives adb session drops caused by app Bridge commands)
+if [ $DETACH = 1 ]; then
+    sh_ "cd $T && : >cmd && rm -f sent.dev && setsid nohup sh -c 'tail -f $T/cmd | $T/fakeremote >$T/sent.dev 2>$T/fr.err' </dev/null >/dev/null 2>&1 &"
+    for i in $(seq 50); do sh_ "cat $T/sent.dev" | tr -d '\r' >"$OUT/sent.log"; grep -q READY "$OUT/sent.log" && break; sleep 0.2; done
+    : >"$OUT/fakeremote.err"
+else
+    $ADB shell -T "$T/fakeremote" <"$OUT/in" >"$OUT/sent.log" 2>"$OUT/fakeremote.err" &
+    FR_BG=$!
+    exec 3>"$OUT/in"
+    for i in $(seq 50); do grep -q READY "$OUT/sent.log" 2>/dev/null && break; sleep 0.1; done
+fi
 grep -q READY "$OUT/sent.log" || { log "fakeremote did not start: $(cat "$OUT/fakeremote.err")"; RC=1; exit; }
 M0=$(sed -n 's/^CLOCK mono=\([0-9]*\).*/\1/p' "$OUT/sent.log")
 
@@ -137,13 +144,18 @@ sleep 0.8
 # 6. scenario (fakeremote runs the sleeps itself); quit when done
 TOTAL=$(awk '$1=="sleep"{s+=$2} $1=="tap"{s+=($3==""||$3~/^#/)?80:$3} END{print int(s/1000)+5}' "$SCEN")
 log "running $SCEN (~${TOTAL}s)"
-{ grep -v '^#expect' "$SCEN"; echo quit; } >&3
-for i in $(seq $((TOTAL * 10))); do grep -q BYE "$OUT/sent.log" && break; sleep 0.1; done
+if [ $DETACH = 1 ]; then
+    { grep -v '^#expect' "$SCEN"; echo quit; } | $ADB shell "cat >>$T/cmd"
+    for i in $(seq $((TOTAL * 2))); do sh_ "cat $T/sent.dev" | tr -d '\r' >"$OUT/sent.log"; grep -q BYE "$OUT/sent.log" && break; sleep 0.5; done
+else
+    { grep -v '^#expect' "$SCEN"; echo quit; } >&3
+    for i in $(seq $((TOTAL * 10))); do grep -q BYE "$OUT/sent.log" && break; sleep 0.1; done
+fi
 sleep 1.5                                    # late actions (stickd STATUS after a spooled act)
 
 # 7. collect
 kill "$GE_BG" 2>/dev/null; GE_BG=
-sh_ 'logcat -d -v monotonic -s RemapD Stickd' | tr -d '\r' | awk -v t="$M0" '$1*1000 >= t-500' >"$OUT/logcat.log"
+sh_ 'logcat -d -v monotonic -s RemapD Stickd Stickman' | tr -d '\r' | awk -v t="$M0" '$1*1000 >= t-500' >"$OUT/logcat.log"
 
 # 8. restore now (so the summary is the last thing printed); 9. summary
 restore
@@ -171,7 +183,7 @@ for l in open(f"{out}/logcat.log", errors="replace"):
     if not m: continue
     ms = int(m[1]) * 1000 + int(m[2].ljust(3, "0")[:3])
     tag, msg = m[3], m[4]
-    if tag == "RemapD" and (" -> " in msg or msg.startswith("act ")) or tag == "Stickd" and ("STATUS" in msg or "act" in msg):
+    if tag == "RemapD" and (" -> " in msg or msg.startswith("act ")) or tag == "Stickd" and ("STATUS" in msg or "act" in msg) or tag == "Stickman" and msg.startswith("tasks "):
         acts.append((ms, f"{tag}: {msg}"))
 downs = [s for s in sent if s[2] == 1]
 if not downs:
