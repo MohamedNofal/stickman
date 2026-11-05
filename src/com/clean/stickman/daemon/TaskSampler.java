@@ -1,0 +1,397 @@
+package com.clean.stickman.daemon;
+
+import com.clean.stickman.core.Actions;
+import com.clean.stickman.core.EndPolicy;
+import com.clean.stickman.core.KillPolicy;
+import com.clean.stickman.core.LruParser;
+import com.clean.stickman.core.MediaState;
+import com.clean.stickman.core.ProcStats;
+import com.clean.stickman.core.StickdConf;
+import com.clean.stickman.core.TaskSnapshot;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Tasks page backend: while the page keeps sending {@code tasks_start}, samples /proc every 2 s and logs the
+ * {@code STATUS tasks / task / tasks_end} feed; also handles {@code end <pkg>} and {@code end_all}.
+ * Plain Java (no android.*).
+ */
+final class TaskSampler {
+    static final long SAMPLE_MS = 2000;
+    static final long INPUTS_MS = 10_000;
+    static final long KEEPALIVE_MS = 90_000;
+    static final long CLK_TCK = 100;
+
+    /** Where samples come from: /proc reads (null when unreadable), the /proc pid list, and shell commands. */
+    interface Src {
+        String read(String path);
+        String[] pids();
+        String sh(String cmd);
+    }
+
+    /** Receives one sample's feed lines (each starting "STATUS "). */
+    interface Out { void emit(List<String> lines); }
+
+    interface Str { String get(); }
+    interface Conf { StickdConf get(); }
+    interface Clock { long now(); }
+
+    private static final Pattern MEM_TOTAL = Pattern.compile("MemTotal:\\s+(\\d+)");
+    private static final Pattern MEM_AVAIL = Pattern.compile("MemAvailable:\\s+(\\d+)");
+
+    private final Src src;
+    private final Out out;
+    private final Str fg;
+    private final Conf conf;
+    private final Clock clock;
+
+    // session state (guarded by this)
+    private int gen;
+    private boolean active;
+    private volatile long lastKeepalive;
+    private long seq;
+    private long prevTotal = -1, prevIdle = -1;
+    private Map<String, Long> prevTicks;
+    // 10 s cached inputs (sampler thread, under this)
+    private long inputsAt = Long.MIN_VALUE;
+    private Set<String> playing = Collections.emptySet(), cached = Collections.emptySet(),
+        launchable = Collections.emptySet();
+    // fixed per device, read once
+    private int ncpu = -1, pageKb = -1;
+
+    TaskSampler(Src src, Out out, Str fg, Conf conf, Clock clock) {
+        this.src = src;
+        this.out = out;
+        this.fg = fg;
+        this.conf = conf;
+        this.clock = clock;
+    }
+
+    /** Real sampler for stickd: /proc via java.io, shell via Sh, lines to logcat. */
+    TaskSampler(Stickd d) {
+        this(new ProcSrc(), Sh::logLines, d::foreground, d::conf, System::currentTimeMillis);
+    }
+
+    void install(Stickd d) {
+        d.register(Actions.TASKS_START, a -> start());
+        d.register(Actions.TASKS_STOP, a -> stop());
+        d.register(Actions.END, this::end);
+        // A few force-stops plus dumpsys calls: off the spool thread so other actions are not delayed.
+        d.register(Actions.END_ALL, a -> {
+            Thread t = new Thread(this::endAllSafe, "stickd-endall");
+            t.setDaemon(true);
+            t.start();
+        });
+    }
+
+    /** Sampling stops when more than 90 s passed since the last keepalive. */
+    static boolean shouldStop(long lastKeepaliveMs, long nowMs) { return nowMs - lastKeepaliveMs > KEEPALIVE_MS; }
+
+    void keepalive() { lastKeepalive = clock.now(); }
+
+    // ---- session control ----
+
+    /** tasks_start: records the keepalive; starts a new session (seq from 1) when idle. */
+    synchronized void start() {
+        keepalive();
+        if (active) return;
+        active = true;
+        final int g = ++gen;
+        resetSession();
+        Thread t = new Thread(() -> loop(g), "stickd-tasks");
+        t.setDaemon(true);
+        t.start();
+        Sh.log("tasks sampling started");
+    }
+
+    /** tasks_stop. */
+    void stop() {
+        synchronized (this) {
+            if (!active) return;
+            active = false;
+            gen++;
+        }
+        Sh.log("STATUS tasks stopped");
+    }
+
+    private void resetSession() {
+        pidPkg.clear();
+        seq = 0;
+        prevTotal = prevIdle = -1;
+        prevTicks = null;
+    }
+
+    private void loop(int g) {
+        while (true) {
+            long t0 = clock.now();
+            int r;
+            try {
+                r = tick(g);
+            } catch (Throwable t) {
+                Sh.log("tasks sample error: " + t);
+                r = 1;
+            }
+            if (r < 0) return;          // superseded by stop / a newer session
+            if (r == 0) {               // keepalive expired
+                synchronized (this) {
+                    if (g != gen) return;
+                    active = false;
+                    gen++;
+                }
+                Sh.log("STATUS tasks stopped");
+                return;
+            }
+            long wait = SAMPLE_MS - (clock.now() - t0);
+            try { Thread.sleep(Math.max(100, wait)); } catch (InterruptedException ignored) {}
+        }
+    }
+
+    /** One sample of the current session; false when the keepalive expired. */
+    boolean tick() {
+        int g;
+        synchronized (this) { g = gen; }
+        return tick(g) > 0;
+    }
+
+    /**
+     * 1 = sampled, 0 = keepalive expired, -1 = session {@code g} is no longer current. The dumpsys refresh (up to
+     * seconds) runs outside the lock so tasks_start / tasks_stop on the spool thread never wait for it.
+     */
+    private int tick(int g) {
+        boolean refresh;
+        synchronized (this) {
+            if (g != gen) return -1;
+            long now = clock.now();
+            if (shouldStop(lastKeepalive, now)) return 0;
+            refresh = inputsAt == Long.MIN_VALUE || now - inputsAt >= INPUTS_MS;
+            if (refresh) inputsAt = now;
+        }
+        if (refresh) {
+            Set<String> pl = MediaState.playingPackages(src.sh("dumpsys media_session"));
+            Set<String> ca = cachedPackages(LruParser.parse(src.sh("dumpsys activity lru")));
+            Set<String> la = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
+            synchronized (this) { playing = pl; cached = ca; launchable = la; }
+        }
+        synchronized (this) {
+            if (g != gen) return -1;
+            out.emit(sample());
+            return 1;
+        }
+    }
+
+    /** Packages whose every lru process is cached (adj cch* or state CEM/CAC). */
+    static Set<String> cachedPackages(List<LruParser.Proc> procs) {
+        Map<String, Boolean> all = new HashMap<>();
+        for (LruParser.Proc p : procs) {
+            if (p.pkg == null) continue;
+            boolean c = p.adj.startsWith("cch") || "CEM".equals(p.state) || "CAC".equals(p.state);
+            Boolean prev = all.get(p.pkg);
+            all.put(p.pkg, prev == null ? c : (prev && c));
+        }
+        Set<String> out = new HashSet<>();
+        for (Map.Entry<String, Boolean> e : all.entrySet()) if (e.getValue()) out.add(e.getKey());
+        return out;
+    }
+
+    /** Reads /proc and formats one sample (seq incremented). */
+    private List<String> sample() {
+        if (ncpu < 0) ncpu = countCpus(src.read("/proc/cpuinfo"));
+        if (pageKb < 0) {
+            String ps = src.sh("getconf PAGESIZE").trim();
+            long b = ps.matches("\\d+") ? Long.parseLong(ps) : 4096;
+            pageKb = (int) Math.max(1, b / 1024);
+        }
+        long seqNow = ++seq;
+
+        // totals
+        long total = 0, idle = 0;
+        String stat = src.read("/proc/stat");
+        if (stat != null) {
+            int nl = stat.indexOf('\n');
+            String cpu = nl < 0 ? stat : stat.substring(0, nl);
+            String[] f = cpu.trim().split("\\s+");
+            total = ProcStats.totalJiffies(cpu);
+            idle = (f.length > 4 ? Long.parseLong(f[4]) : 0) + (f.length > 5 ? Long.parseLong(f[5]) : 0);
+        }
+        long dTotal = prevTotal < 0 ? 0 : total - prevTotal;
+        int cpuPct = prevTotal < 0 ? 0 : ProcStats.pct(dTotal - (idle - prevIdle), dTotal, ncpu);
+        prevTotal = total;
+        prevIdle = idle;
+        String mem = src.read("/proc/meminfo");
+        long memTotal = kb(MEM_TOTAL, mem), memAvail = kb(MEM_AVAIL, mem);
+        long nowTicks = 0;
+        String up = src.read("/proc/uptime");
+        if (up != null) {
+            try { nowTicks = (long) (Double.parseDouble(up.trim().split("\\s+")[0]) * CLK_TCK); }
+            catch (RuntimeException ignored) {}
+        }
+
+        // processes
+        List<ProcStats.Proc> procs = new ArrayList<>();
+        String[] pids = src.pids();
+        Set<String> live = new HashSet<>();
+        if (pids != null) {
+            for (String pid : pids) {
+                if (!isDigits(pid)) continue;
+                String pkg = pkgOfPid(pid, live);
+                if (pkg == null || EndPolicy.SELF.equals(pkg)) continue;
+                ProcStats.Proc p = new ProcStats.Proc();
+                p.pid = Integer.parseInt(pid);
+                p.pkg = pkg;
+                try {
+                    String sm = src.read("/proc/" + pid + "/statm");
+                    String st = src.read("/proc/" + pid + "/stat");
+                    if (sm == null || st == null) throw new IllegalStateException();
+                    p.rssKb = ProcStats.rssKbFromStatm(sm, pageKb);
+                    long[] c = ProcStats.cpuFromStat(st);
+                    p.ticks = c[0];
+                    p.startTicks = c[1];
+                } catch (RuntimeException e) {
+                    p.rssKb = -1;                                       // vanished mid-read
+                }
+                procs.add(p);
+            }
+        }
+        pidPkg.keySet().retainAll(live);  // forget exited pids (so a reused pid is read afresh)
+        List<TaskSnapshot.App> apps = ProcStats.aggregate(procs, prevTicks, dTotal, ncpu, nowTicks, CLK_TCK,
+            fg.get(), playing, cached, launchable);
+        Map<String, Long> ticks = new HashMap<>();
+        for (ProcStats.Proc p : procs) {
+            if (p.rssKb < 0) continue;
+            Long t = ticks.get(p.pkg);
+            ticks.put(p.pkg, (t == null ? 0 : t) + p.ticks);
+        }
+        prevTicks = ticks;
+
+        List<String> lines = new ArrayList<>(apps.size() + 2);
+        lines.add("STATUS " + ProcStats.formatTotals(memTotal, memAvail, cpuPct, seqNow));
+        for (TaskSnapshot.App a : apps) lines.add("STATUS " + ProcStats.formatTaskLine(a, seqNow));
+        lines.add("STATUS " + ProcStats.formatEnd(seqNow));
+        return lines;
+    }
+
+    /** pid -> package ("" = not a package process: kernel thread or native binary). Sampler thread only. */
+    private final Map<String, String> pidPkg = new HashMap<>();
+
+    /**
+     * Package of a pid from its cmdline, cached so steady-state samples skip most cmdline reads. Zygote forks that
+     * are not yet specialised ("zygote64", "&lt;pre-initialized&gt;", usap...) are never cached: they become apps.
+     */
+    private String pkgOfPid(String pid, Set<String> live) {
+        String c = pidPkg.get(pid);
+        if (c != null) {
+            live.add(pid);
+            return c.isEmpty() ? null : c;
+        }
+        String cmd = src.read("/proc/" + pid + "/cmdline");
+        if (cmd == null) return null;                    // gone
+        String pkg = ProcStats.pkgOf(cmd);
+        boolean settled = !(cmd.contains("zygote") || cmd.startsWith("<") || cmd.startsWith("usap"));
+        if (settled) {
+            pidPkg.put(pid, pkg == null ? "" : pkg);     // empty cmdline = kernel thread: skipped for good
+            live.add(pid);
+        }
+        return pkg;
+    }
+
+    private static boolean isDigits(String s) {
+        if (s == null || s.isEmpty()) return false;
+        for (int i = 0; i < s.length(); i++) if (s.charAt(i) < '0' || s.charAt(i) > '9') return false;
+        return true;
+    }
+
+    private static long kb(Pattern p, String text) {
+        if (text == null) return 0;
+        Matcher m = p.matcher(text);
+        return m.find() ? Long.parseLong(m.group(1)) : 0;
+    }
+
+    static int countCpus(String cpuinfo) {
+        int n = 0;
+        if (cpuinfo != null) for (String l : cpuinfo.split("\n")) if (l.startsWith("processor")) n++;
+        return n > 0 ? n : 4;
+    }
+
+    // ---- end / end_all ----
+
+    private StickdConf conf() {
+        StickdConf c = conf.get();
+        return c != null ? c : new StickdConf();
+    }
+
+    /** end &lt;pkg&gt;: fresh fg / media / launchable, then EndPolicy; force-stop only when allowed. */
+    void end(String arg) {
+        String pkg = arg == null ? "" : arg.trim();
+        Set<String> media = MediaState.protectedPackages(src.sh("dumpsys media_session"));
+        Set<String> launch = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
+        String why = EndPolicy.check(pkg, fg.get(), media, conf().whitelist, launch);
+        String shown = pkg.matches("[A-Za-z0-9_.]+") ? pkg : "?";
+        if (why != null) {
+            Sh.log("STATUS end " + shown + " refused=" + why);
+            return;
+        }
+        src.sh("am force-stop " + pkg);
+        invalidateInputs();
+        Sh.log("STATUS end " + pkg + " ok");
+    }
+
+    private void endAllSafe() {
+        try { Sh.log("STATUS end_all killed=" + endAll()); }
+        catch (Throwable t) { Sh.log("end_all error: " + t); }
+    }
+
+    /** end_all: every running launchable app EndPolicy allows (not fg / playing / protected), force-stopped. */
+    int endAll() {
+        Set<String> media = MediaState.protectedPackages(src.sh("dumpsys media_session"));
+        Set<String> launch = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
+        Set<String> running = new LinkedHashSet<>();
+        for (LruParser.Proc p : LruParser.parse(src.sh("dumpsys activity lru"))) if (p.pkg != null) running.add(p.pkg);
+        Set<String> white = conf().whitelist;
+        int n = 0;
+        for (String pkg : running) {
+            if (EndPolicy.check(pkg, fg.get(), media, white, launch) != null) continue;  // fg re-read per app
+            src.sh("am force-stop " + pkg);
+            n++;
+        }
+        invalidateInputs();
+        return n;
+    }
+
+    private synchronized void invalidateInputs() { inputsAt = Long.MIN_VALUE; }
+
+    // ---- real /proc source ----
+
+    static final class ProcSrc implements Src {
+        private byte[] buf = new byte[8192];
+
+        @Override public String read(String path) {
+            try (FileInputStream in = new FileInputStream(path)) {
+                int n = 0, r;
+                while ((r = in.read(buf, n, buf.length - n)) > 0) {
+                    n += r;
+                    if (n == buf.length) buf = java.util.Arrays.copyOf(buf, buf.length * 2);
+                }
+                return new String(buf, 0, n, StandardCharsets.ISO_8859_1);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override public String[] pids() { return new File("/proc").list(); }
+
+        @Override public String sh(String cmd) { return Sh.run(cmd); }
+    }
+}

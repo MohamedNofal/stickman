@@ -47,4 +47,20 @@ public class AutoKillLockTest {
         fg.interrupt();
         yes(ms < 1000, "applyProfile blocked " + ms + " ms behind a listener");
     }
+
+    /** Always-kill works without global auto-kill: a non-empty blacklist alone arms the on-leave timer. */
+    public void testBlacklistOnlyRunsWithoutOnLeave() throws Exception {
+        Stickd d = daemon("autokill.on_leave=0\nautokill.blacklist=com.x\n");
+        yes(!d.conf().onLeave && d.conf().blacklist.contains("com.x"), "conf parsed: " + d.conf().serialize());
+        AutoKill ak = new AutoKill(d);
+        ak.install();
+        d.onForeground("a.b");
+        yes(ak.leavePending(), "blacklist-only: leave timer scheduled");
+
+        Stickd e = daemon("autokill.on_leave=0\n");
+        AutoKill ak2 = new AutoKill(e);
+        ak2.install();
+        e.onForeground("a.b");
+        yes(!ak2.leavePending(), "nothing to do: no leave timer");
+    }
 }

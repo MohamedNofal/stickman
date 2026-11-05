@@ -21,14 +21,29 @@ public final class ProcStats {
     }
 
     public static long rssKbFromStatm(String statm, int pageKb) {
-        return Long.parseLong(statm.trim().split("\\s+")[1]) * pageKb;
+        return numField(statm, 0, 1) * pageKb;
     }
 
     /** {utime+stime, starttime} in clock ticks. */
     public static long[] cpuFromStat(String stat) {
-        String rest = stat.substring(stat.lastIndexOf(')') + 2).trim();
-        String[] f = rest.split("\\s+"); // f[0] is field 3 (state)
-        return new long[] {Long.parseLong(f[11]) + Long.parseLong(f[12]), Long.parseLong(f[19])};
+        int from = stat.lastIndexOf(')') + 1;  // field 3 (state) is token 0 after the comm
+        return new long[] {numField(stat, from, 11) + numField(stat, from, 12), numField(stat, from, 19)};
+    }
+
+    /**
+     * The idx-th (0-based) whitespace-separated token of s from offset {@code from}, as a long. A hand scan, not
+     * split(regex): the sampler parses a few hundred of these every 2 s.
+     */
+    static long numField(String s, int from, int idx) {
+        int n = s.length(), i = from, k = -1;
+        while (i < n) {
+            while (i < n && s.charAt(i) <= ' ') i++;
+            if (i >= n) break;
+            int st = i;
+            while (i < n && s.charAt(i) > ' ') i++;
+            if (++k == idx) return Long.parseLong(s.substring(st, i));
+        }
+        throw new NumberFormatException("no field " + idx);
     }
 
     public static long totalJiffies(String line) {

@@ -49,11 +49,20 @@ final class AutoKill {
         synchronized (leaveLock) {
             if (pendingLeave != null) pendingLeave.cancel(false);
             pendingLeave = null;
-            if (!d.conf().onLeave) return;
+            StickdConf c = d.conf();
+            // Always-kill (blacklist) works even with global on-leave auto-kill off.
+            if (!c.onLeave && c.blacklist.isEmpty()) return;
             pendingLeave = timer.schedule(() -> {
-                if (d.conf().onLeave) autoKill();
+                StickdConf now = d.conf();
+                if (now.onLeave) autoKill();
+                else if (!now.blacklist.isEmpty()) autoKillBlacklistOnly();
             }, LEAVE_DELAY_MS, TimeUnit.MILLISECONDS);
         }
+    }
+
+    /** True while an on-leave countdown is scheduled and not yet run (tests). */
+    boolean leavePending() {
+        synchronized (leaveLock) { return pendingLeave != null && !pendingLeave.isDone(); }
     }
 
     private void intervalTick() {
@@ -79,6 +88,17 @@ final class AutoKill {
         }
     }
 
+    /** On-leave with global auto-kill off: only the always-kill (blacklisted) candidates, force-stopped. */
+    private void autoKillBlacklistOnly() {
+        try {
+            List<String> killed;
+            synchronized (killLock) { killed = killCandidatesLocked(true); }
+            Sh.log("STATUS autokill killed=" + String.join(",", killed));
+        } catch (Throwable t) {
+            Sh.log("autokill error: " + t);
+        }
+    }
+
     private void boostSafe() {
         try { boost(); } catch (Throwable t) { Sh.log("boost error: " + t); }
     }
@@ -96,10 +116,10 @@ final class AutoKill {
 
     /** Recomputes candidates at kill time (fresh fg + media state), then trims and kills each. */
     private List<String> killCandidates() {
-        synchronized (killLock) { return killCandidatesLocked(); }
+        synchronized (killLock) { return killCandidatesLocked(false); }
     }
 
-    private List<String> killCandidatesLocked() {
+    private List<String> killCandidatesLocked(boolean blacklistOnly) {
         StickdConf c = d.conf();
         List<LruParser.Proc> procs = LruParser.parse(Sh.run("dumpsys activity lru"));
         String fg = d.foreground();
@@ -109,6 +129,7 @@ final class AutoKill {
             MediaState.protectedPackages(Sh.run("dumpsys media_session")), launchable);
         List<String> killed = new ArrayList<>();
         for (String pkg : cands) {
+            if (blacklistOnly && !c.blacklist.contains(pkg)) continue;
             if (pkg.equals(d.foreground())) continue;  // user switched to it meanwhile
             // Gentle first (boost, on-leave and interval alike). Trim fails harmlessly when the process is
             // already trimmed or named differently: keep it quiet.

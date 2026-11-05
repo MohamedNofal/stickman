@@ -55,6 +55,68 @@ public final class Sh {
         }
     }
 
+    /** toybox {@code log} cuts a message at 1024 bytes ("log cut at 1024 bytes"): chunks stay under that. */
+    static final int LOG_CHUNK = 1000;
+
+    /**
+     * Logs many lines with few {@code log} processes: lines are joined with newlines into chunks of at most
+     * {@link #LOG_CHUNK} chars; logcat prints each line of a multi-line entry with its own header, so readers still
+     * see one "Stickd: STATUS ..." line per line.
+     */
+    public static void logLines(java.util.List<String> lines) {
+        java.lang.reflect.Method m = nativeLog();
+        if (m != null) {
+            try {
+                for (String l : lines) {
+                    System.out.println(l);
+                    m.invoke(null, 4 /* Log.INFO */, TAG, l);
+                }
+                return;
+            } catch (Exception e) {
+                nativeLogFailed = true;
+            }
+        }
+        for (String c : chunks(lines, LOG_CHUNK)) log(c);
+    }
+
+    private static volatile java.lang.reflect.Method nativeLog;
+    private static volatile boolean nativeLogFailed;
+
+    /**
+     * android.util.Log.println(int, String, String) via reflection, or null (host JVM). Under app_process the
+     * framework classes are on the boot classpath and Log needs no Context; calling it writes straight to logd's
+     * socket, so the 2 s task feed costs no process spawns (a {@code log} fork per entry was ~1.5 % of all CPUs).
+     * Reflection keeps daemon/ free of android.* imports and host-compilable.
+     */
+    private static java.lang.reflect.Method nativeLog() {
+        if (nativeLogFailed) return null;
+        if (nativeLog == null) {
+            try {
+                nativeLog = Class.forName("android.util.Log").getMethod("println", int.class, String.class, String.class);
+            } catch (Throwable t) {
+                nativeLogFailed = true;
+                return null;
+            }
+        }
+        return nativeLog;
+    }
+
+    /** Lines joined by newlines into chunks of at most max chars (a single longer line is its own chunk). */
+    static java.util.List<String> chunks(java.util.List<String> lines, int max) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        StringBuilder b = new StringBuilder();
+        for (String l : lines) {
+            if (b.length() > 0 && b.length() + 1 + l.length() > max) {
+                out.add(b.toString());
+                b.setLength(0);
+            }
+            if (b.length() > 0) b.append('\n');
+            b.append(l);
+        }
+        if (b.length() > 0) out.add(b.toString());
+        return out;
+    }
+
     static final class Drain extends Thread {
         private final InputStream in;
         private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
