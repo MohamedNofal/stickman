@@ -27,6 +27,12 @@ public class BrandTest {
         }
     }
 
+    public void testFallbackDistinct() {
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int i = 0; i < 200; i++) seen.add(Brand.color("com.vendor" + i + ".app"));
+        T.yes(seen.size() >= 20, "distinct colours " + seen.size());
+    }
+
     public void testFallbackNotGrey() {
         for (int i = 0; i < 200; i++) {
             int c = Brand.color("pkg.n" + i);

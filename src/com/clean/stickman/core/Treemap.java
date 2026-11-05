@@ -48,7 +48,7 @@ public final class Treemap {
     }
 
     static double clean(Double w) {
-        return w == null || Double.isNaN(w) || w <= 0 ? EPS : w;
+        return w == null || Double.isNaN(w) || Double.isInfinite(w) || w <= 0 ? EPS : w;
     }
 
     public static List<Rect> layout(List<String> keys, List<Double> weights,
@@ -63,6 +63,10 @@ public final class Treemap {
         double total = 0;
         double[] a = new double[n];
         for (int i = 0; i < n; i++) { a[i] = clean(weights.get(i)); total += a[i]; }
+        if (Double.isInfinite(total)) {   // huge finite weights overflowing the sum
+            total = 0;
+            for (int i = 0; i < n; i++) { a[i] /= n; total += a[i]; }
+        }
         double scale = w * h / total;
         for (int i = 0; i < n; i++) a[i] *= scale;
 
@@ -114,13 +118,29 @@ public final class Treemap {
         return Math.max(s2 * max / sum2, sum2 / (s2 * min));
     }
 
+    /** Below this many entries no minimum of individual tiles is enforced. */
+    static final int KEEP_ABOVE = 12;
+    /** With more than KEEP_ABOVE entries, the top KEEP entries (by weight) always stay individual. */
+    static final int KEEP = 10;
+
     public static Collapsed collapse(List<String> keys, List<Double> weights, double minFraction) {
         int n = Math.min(keys.size(), weights.size());
+        final double[] cw = new double[n];
         double total = 0;
-        for (int i = 0; i < n; i++) total += clean(weights.get(i));
+        for (int i = 0; i < n; i++) { cw[i] = clean(weights.get(i)); total += cw[i]; }
+        boolean[] hide = new boolean[n];
+        for (int i = 0; i < n; i++) hide[i] = cw[i] / total < minFraction;
+        if (n > KEEP_ABOVE) {
+            Integer[] order = new Integer[n];
+            for (int i = 0; i < n; i++) order[i] = i;
+            // stable sort: ties keep input order
+            java.util.Arrays.sort(order, new java.util.Comparator<Integer>() {
+                @Override public int compare(Integer p, Integer q) { return Double.compare(cw[q], cw[p]); }
+            });
+            for (int r = 0; r < KEEP; r++) hide[order[r]] = false;
+        }
         List<String> hidden = new ArrayList<>();
-        for (int i = 0; i < n; i++)
-            if (clean(weights.get(i)) / total < minFraction) hidden.add(keys.get(i));
+        for (int i = 0; i < n; i++) if (hide[i]) hidden.add(keys.get(i));
         List<String> k = new ArrayList<>();
         List<Double> w = new ArrayList<>();
         if (hidden.size() <= 1) {
@@ -129,7 +149,7 @@ public final class Treemap {
         }
         double more = 0;
         for (int i = 0; i < n; i++) {
-            if (clean(weights.get(i)) / total < minFraction) { more += clean(weights.get(i)); continue; }
+            if (hide[i]) { more += cw[i]; continue; }
             k.add(keys.get(i)); w.add(weights.get(i));
         }
         k.add(MORE); w.add(more);
