@@ -65,18 +65,19 @@ public final class Sh {
      */
     public static void logLines(java.util.List<String> lines) {
         java.lang.reflect.Method m = nativeLog();
+        int done = 0;  // lines already written natively: the fallback must not log them again
         if (m != null) {
             try {
-                for (String l : lines) {
-                    System.out.println(l);
-                    m.invoke(null, 4 /* Log.INFO */, TAG, l);
+                for (; done < lines.size(); done++) {
+                    m.invoke(null, 4 /* Log.INFO */, TAG, lines.get(done));
+                    System.out.println(lines.get(done));
                 }
                 return;
             } catch (Exception e) {
                 nativeLogFailed = true;
             }
         }
-        for (String c : chunks(lines, LOG_CHUNK)) log(c);
+        for (String c : chunks(lines.subList(done, lines.size()), LOG_CHUNK)) log(c);
     }
 
     private static volatile java.lang.reflect.Method nativeLog;

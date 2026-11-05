@@ -63,4 +63,28 @@ public class AutoKillLockTest {
         e.onForeground("a.b");
         yes(!ak2.leavePending(), "nothing to do: no leave timer");
     }
+
+    /** Blacklist-only on-leave: the blacklisted candidate is force-stopped, a non-blacklisted candidate survives. */
+    public void testBlacklistOnlyKillsOnlyBlacklisted() throws Exception {
+        Stickd d = daemon("autokill.on_leave=0\nautokill.blacklist=com.x\n");
+        AutoKill ak = new AutoKill(d);
+        java.util.List<String> cmds = new java.util.ArrayList<>();
+        ak.sh = cmd -> {
+            cmds.add(cmd);
+            if (cmd.equals("dumpsys activity lru")) return "  #3: cch    CAC  --- 10:com.x/u0a1 act:activities\n"
+                + "  #2: cch    CAC  --- 11:com.y/u0a2 act:activities\n";
+            if (cmd.contains("query-activities")) return "com.x/.A\ncom.y/.A\n";
+            if (cmd.contains("&& echo KILLED")) return "KILLED\n";
+            return "";
+        };
+        java.util.List<String> killed;
+        synchronized (ak.killLock) { killed = ak.killCandidatesLocked(true); }
+        yes(killed.equals(java.util.Collections.singletonList("com.x")), "killed " + killed);
+        for (String c : cmds) yes(!c.contains("com.y"), "com.y touched: " + c);
+        yes(cmds.contains("am force-stop com.x && echo KILLED"), "force-stop com.x: " + cmds);
+        // with global auto-kill the same candidates both go
+        cmds.clear();
+        synchronized (ak.killLock) { killed = ak.killCandidatesLocked(false); }
+        yes(killed.size() == 2, "global: both killed " + killed);
+    }
 }

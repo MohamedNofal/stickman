@@ -22,6 +22,10 @@ public class TaskSamplerTest {
             files.put("/proc/12/statm", "1000 9999 100 1 0 200 0\n");
             files.put("/proc/13/cmdline", "");  // kernel thread
             files.put("/proc/14/cmdline", "com.gone.app\0");  // statm/stat unreadable: vanished
+            files.put("/proc/16/cmdline", "stickd\0");         // Stickman's own daemons: never in the feed
+            files.put("/proc/16/statm", "1000 300 100 1 0 200 0\n");
+            files.put("/proc/17/cmdline", "remapd\0");
+            files.put("/proc/17/statm", "1000 30 10 1 0 20 0\n");
         }
         public String read(String path) {
             if (path.equals("/proc/stat")) return "cpu  " + (jiffies / 2) + " 0 0 " + (jiffies / 2) + " 0 0 0 0 0 0\ncpu0 1 1 1 1\n";
@@ -32,7 +36,7 @@ public class TaskSamplerTest {
             }
             return files.get(path);
         }
-        public String[] pids() { return new String[] {"10", "11", "12", "13", "14", "self"}; }
+        public String[] pids() { return new String[] {"10", "11", "12", "13", "14", "16", "17", "self"}; }
         public String sh(String cmd) {
             if (cmd.contains("query-activities")) return "org.videolan.vlc/.StartActivity\n";
             return "";
@@ -81,6 +85,8 @@ public class TaskSamplerTest {
                 yes(s.endsWith(" " + seq), "seq on every line: " + s);
                 yes(!s.contains("com.clean.stickman"), "Stickman itself excluded: " + s);
                 yes(!s.contains("com.gone.app"), "vanished pid dropped: " + s);
+                yes(!s.contains("stickd") && !s.contains("remapd"), "own daemons dropped: " + s);
+                yes(!s.contains("_sys_other"), "nothing folded, no _sys_other line: " + s);
             }
             yes(l.size() == 3, "totals + vlc + end: " + l);
         }
@@ -120,5 +126,94 @@ public class TaskSamplerTest {
         src.files.put("/proc/15/cmdline", "com.new.app\0");
         t.tick();
         yes(String.join("|", out.get(1)).contains("task com.new.app "), "specialised fork shows: " + out.get(1));
+    }
+
+    static com.clean.stickman.core.TaskSnapshot.App app(String pkg, long rss, int cpu, String state) {
+        return new com.clean.stickman.core.TaskSnapshot.App(pkg, rss, cpu, state, 5, 1);
+    }
+
+    /** R7: launchable apps all listed; only the 8 largest sys packages listed, the rest folded into _sys_other. */
+    public void testSysFoldedIntoOther() {
+        List<com.clean.stickman.core.TaskSnapshot.App> in = new ArrayList<>();
+        in.add(app("org.videolan.vlc", 50, 1, "bg"));
+        in.add(app("com.tiny.app", 1, 0, "cached"));
+        for (int i = 1; i <= 11; i++) in.add(app("sys.p" + i, 1000 - i, i == 10 ? 60 : (i == 11 ? 70 : 2), "sys"));
+        List<com.clean.stickman.core.TaskSnapshot.App> out = TaskSampler.limitSys(in);
+        List<String> names = new ArrayList<>();
+        for (com.clean.stickman.core.TaskSnapshot.App a : out) names.add(a.pkg);
+        yes(names.contains("org.videolan.vlc") && names.contains("com.tiny.app"), "launchable apps kept: " + names);
+        for (int i = 1; i <= 8; i++) yes(names.contains("sys.p" + i), "largest sys kept: " + names);
+        yes(!names.contains("sys.p9") && !names.contains("sys.p10") && !names.contains("sys.p11"), "rest folded: " + names);
+        com.clean.stickman.core.TaskSnapshot.App o = out.get(out.size() - 1);
+        String line = com.clean.stickman.core.ProcStats.formatTaskLine(o, 4);
+        yes(line.equals("task _sys_other rss=" + (991 + 990 + 989) + " cpu=100 state=sys up=0 procs=3 seq=4"), line);
+        yes(out.size() == 2 + 8 + 1, "count " + out.size());
+
+        List<com.clean.stickman.core.TaskSnapshot.App> few = new ArrayList<>();
+        for (int i = 1; i <= 8; i++) few.add(app("sys.q" + i, i, 0, "sys"));
+        for (com.clean.stickman.core.TaskSnapshot.App a : TaskSampler.limitSys(few))
+            yes(!a.pkg.equals("_sys_other"), "8 sys packages: nothing folded");
+    }
+
+    /** Fake shell for end / end_all: canned dumpsys + launchable output; records every command. */
+    static class EndSrc extends FakeSrc {
+        final List<String> cmds = new ArrayList<>();
+        @Override public String sh(String cmd) {
+            cmds.add(cmd);
+            if (cmd.equals("dumpsys activity lru")) return "ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)\n"
+                + "  #9: fg     TOP  LCM 100:com.front.app/u0a1 act:activities\n"
+                + "  #8: cch    CAC  --- 101:com.playing.app/u0a2 act:activities\n"
+                + "  #7: cch    CAC  --- 102:com.white.app/u0a3 act:activities\n"
+                + "  #6: cch    CAC  --- 103:com.amazon.service/u0a4 act:activities\n"
+                + "  #5: cch    CAC  --- 104:com.clean.stickman/u0a5 act:activities\n"
+                + "  #4: prev   LAST --- 105:com.wolf.firelauncher/u0a6 act:activities\n"
+                + "  #3: cch    CAC  --- 106:org.videolan.vlc/u0a7 act:activities\n";
+            if (cmd.equals("dumpsys media_session")) return "    package=com.playing.app\n"
+                + "      state=PlaybackState {state=3, position=1, buffered position=0, speed=1.0}\n";
+            if (cmd.contains("query-activities")) return "com.front.app/.A\ncom.playing.app/.A\ncom.white.app/.A\n"
+                + "com.clean.stickman/.A\ncom.wolf.firelauncher/.A\norg.videolan.vlc/.StartActivity\n";
+            if (cmd.startsWith("am force-stop")) return "KILLED\n";
+            return "";
+        }
+        List<String> stops() {
+            List<String> o = new ArrayList<>();
+            for (String c : cmds) if (c.contains("force-stop")) o.add(c);
+            return o;
+        }
+    }
+
+    static TaskSampler endSampler(EndSrc src) {
+        com.clean.stickman.core.StickdConf c = new com.clean.stickman.core.StickdConf();
+        c.whitelist.add("com.white.app");
+        return new TaskSampler(src, l -> { }, () -> "com.front.app", () -> c, () -> 0L);
+    }
+
+    /** end_all force-stops only what EndPolicy allows: fg, playing, protected, system, never all survive. */
+    public void testEndAllOnlyAllowed() {
+        EndSrc src = new EndSrc();
+        int n = endSampler(src).endAll();
+        yes(src.stops().equals(Collections.singletonList("am force-stop org.videolan.vlc && echo KILLED")), "stops: " + src.stops());
+        yes(n == 1, "killed=" + n);
+    }
+
+    /** end_all counts confirmed kills only. */
+    public void testEndAllCountsConfirmedKills() {
+        EndSrc src = new EndSrc() {
+            @Override public String sh(String cmd) { return cmd.startsWith("am force-stop") ? "" : super.sh(cmd); }
+        };
+        yes(endSampler(src).endAll() == 0, "unconfirmed force-stop is not counted");
+    }
+
+    /** end issues no force-stop when it refuses, one when allowed. */
+    public void testEndRefusesWithoutKilling() {
+        for (String pkg : new String[] {"com.front.app", "com.playing.app", "com.white.app", "com.amazon.service",
+                "com.clean.stickman", "com.wolf.firelauncher", "x;reboot"}) {
+            EndSrc src = new EndSrc();
+            endSampler(src).end(pkg);
+            yes(src.stops().isEmpty(), pkg + " refused but issued " + src.stops());
+        }
+        EndSrc src = new EndSrc();
+        endSampler(src).end("org.videolan.vlc");
+        yes(src.stops().equals(Collections.singletonList("am force-stop org.videolan.vlc")), "allowed: " + src.stops());
     }
 }

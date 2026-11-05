@@ -72,6 +72,14 @@ final class TaskSampler {
     // fixed per device, read once
     private int ncpu = -1, pageKb = -1;
 
+    /** end_all runs here, one at a time, off the spool thread. */
+    private final java.util.concurrent.ExecutorService endAllExec =
+        java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "stickd-endall");
+            t.setDaemon(true);
+            return t;
+        });
+
     TaskSampler(Src src, Out out, Str fg, Conf conf, Clock clock) {
         this.src = src;
         this.out = out;
@@ -82,7 +90,7 @@ final class TaskSampler {
 
     /** Real sampler for stickd: /proc via java.io, shell via Sh, lines to logcat. */
     TaskSampler(Stickd d) {
-        this(new ProcSrc(), Sh::logLines, d::foreground, d::conf, System::currentTimeMillis);
+        this(new ProcSrc(), Sh::logLines, d::foreground, d::conf, () -> System.nanoTime() / 1_000_000);  // monotonic
     }
 
     void install(Stickd d) {
@@ -90,11 +98,7 @@ final class TaskSampler {
         d.register(Actions.TASKS_STOP, a -> stop());
         d.register(Actions.END, this::end);
         // A few force-stops plus dumpsys calls: off the spool thread so other actions are not delayed.
-        d.register(Actions.END_ALL, a -> {
-            Thread t = new Thread(this::endAllSafe, "stickd-endall");
-            t.setDaemon(true);
-            t.start();
-        });
+        d.register(Actions.END_ALL, a -> endAllExec.execute(this::endAllSafe));
     }
 
     /** Sampling stops when more than 90 s passed since the last keepalive. */
@@ -134,7 +138,12 @@ final class TaskSampler {
         prevTicks = null;
     }
 
+    /** logcat -G 1M was tried by this daemon (once per lifetime, best effort). */
+    private static final java.util.concurrent.atomic.AtomicBoolean logBufGrown = new java.util.concurrent.atomic.AtomicBoolean();
+
     private void loop(int g) {
+        // R7: a bigger main ring so the feed does not evict other STATUS lines as fast. Failures are ignored.
+        if (logBufGrown.compareAndSet(false, true)) src.sh("logcat -G 1M >/dev/null 2>&1; true");
         while (true) {
             long t0 = clock.now();
             int r;
@@ -247,7 +256,7 @@ final class TaskSampler {
             for (String pid : pids) {
                 if (!isDigits(pid)) continue;
                 String pkg = pkgOfPid(pid, live);
-                if (pkg == null || EndPolicy.SELF.equals(pkg)) continue;
+                if (pkg == null || EndPolicy.SELF.equals(pkg) || OWN_DAEMONS.contains(pkg)) continue;
                 ProcStats.Proc p = new ProcStats.Proc();
                 p.pid = Integer.parseInt(pid);
                 p.pkg = pkg;
@@ -278,7 +287,7 @@ final class TaskSampler {
 
         List<String> lines = new ArrayList<>(apps.size() + 2);
         lines.add("STATUS " + ProcStats.formatTotals(memTotal, memAvail, cpuPct, seqNow));
-        for (TaskSnapshot.App a : apps) lines.add("STATUS " + ProcStats.formatTaskLine(a, seqNow));
+        for (TaskSnapshot.App a : limitSys(apps)) lines.add("STATUS " + ProcStats.formatTaskLine(a, seqNow));
         lines.add("STATUS " + ProcStats.formatEnd(seqNow));
         return lines;
     }
@@ -305,6 +314,37 @@ final class TaskSampler {
             live.add(pid);
         }
         return pkg;
+    }
+
+    /** Stickman's own daemons (process names) never appear in the feed. */
+    static final Set<String> OWN_DAEMONS = new HashSet<>(java.util.Arrays.asList("stickd", "remapd"));
+    /** R7: sys packages listed individually (largest by rss); the rest fold into one {@link #SYS_OTHER} line. */
+    static final int SYS_SHOWN = 8;
+    static final String SYS_OTHER = "_sys_other";
+
+    /**
+     * Every non-sys app, plus the {@value #SYS_SHOWN} largest sys packages by rss; the remaining sys packages become
+     * one {@code _sys_other} entry (rss and cpu summed, cpu capped at 100, procs = packages folded, up=0), appended
+     * last and omitted when nothing was folded. Keeps the logcat feed small (controller ruling R7).
+     */
+    static List<TaskSnapshot.App> limitSys(List<TaskSnapshot.App> apps) {
+        List<TaskSnapshot.App> sys = new ArrayList<>(), out = new ArrayList<>();
+        for (TaskSnapshot.App a : apps) {
+            if ("sys".equals(a.state)) sys.add(a); else out.add(a);
+        }
+        Collections.sort(sys, TaskSnapshot.App.BY_RSS);
+        long rss = 0;
+        int cpu = 0, n = 0;
+        for (int i = 0; i < sys.size(); i++) {
+            TaskSnapshot.App a = sys.get(i);
+            if (i < SYS_SHOWN) { out.add(a); continue; }
+            rss += a.rssKb;
+            cpu += a.cpuPct;
+            n++;
+        }
+        Collections.sort(out, TaskSnapshot.App.BY_RSS);
+        if (n > 0) out.add(new TaskSnapshot.App(SYS_OTHER, rss, Math.min(100, cpu), "sys", 0, n));
+        return out;
     }
 
     private static boolean isDigits(String s) {
@@ -363,8 +403,7 @@ final class TaskSampler {
         int n = 0;
         for (String pkg : running) {
             if (EndPolicy.check(pkg, fg.get(), media, white, launch) != null) continue;  // fg re-read per app
-            src.sh("am force-stop " + pkg);
-            n++;
+            if (src.sh("am force-stop " + pkg + " && echo KILLED").contains("KILLED")) n++;  // confirmed kills only
         }
         invalidateInputs();
         return n;

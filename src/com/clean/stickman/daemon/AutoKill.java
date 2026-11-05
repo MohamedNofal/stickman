@@ -34,6 +34,10 @@ final class AutoKill {
     private ScheduledFuture<?> pendingLeave;
     private volatile long lastIntervalKill = System.currentTimeMillis();
 
+    /** Shell used for kills (tests swap in a recorder). */
+    interface Shell { String run(String cmd); }
+    Shell sh = Sh::run;
+
     AutoKill(Stickd d) { this.d = d; }
 
     void install() {
@@ -119,23 +123,23 @@ final class AutoKill {
         synchronized (killLock) { return killCandidatesLocked(false); }
     }
 
-    private List<String> killCandidatesLocked(boolean blacklistOnly) {
+    List<String> killCandidatesLocked(boolean blacklistOnly) {
         StickdConf c = d.conf();
-        List<LruParser.Proc> procs = LruParser.parse(Sh.run("dumpsys activity lru"));
+        List<LruParser.Proc> procs = LruParser.parse(sh.run("dumpsys activity lru"));
         String fg = d.foreground();
-        java.util.Set<String> launchable = KillPolicy.parseLaunchable(Sh.run(KillPolicy.LAUNCHABLE_CMD));
+        java.util.Set<String> launchable = KillPolicy.parseLaunchable(sh.run(KillPolicy.LAUNCHABLE_CMD));
         if (launchable.isEmpty()) Sh.log("autokill: no launchable apps listed; nothing killed");
         List<String> cands = KillPolicy.candidates(procs, fg, c.whitelist,
-            MediaState.protectedPackages(Sh.run("dumpsys media_session")), launchable);
+            MediaState.protectedPackages(sh.run("dumpsys media_session")), launchable);
         List<String> killed = new ArrayList<>();
         for (String pkg : cands) {
             if (blacklistOnly && !c.blacklist.contains(pkg)) continue;
             if (pkg.equals(d.foreground())) continue;  // user switched to it meanwhile
             // Gentle first (boost, on-leave and interval alike). Trim fails harmlessly when the process is
             // already trimmed or named differently: keep it quiet.
-            Sh.run("am send-trim-memory " + pkg + " COMPLETE >/dev/null 2>&1; true");
+            sh.run("am send-trim-memory " + pkg + " COMPLETE >/dev/null 2>&1; true");
             // am kill refuses Amazon-protected packages (non-zero exit); only count real kills.
-            String r = Sh.run((c.blacklist.contains(pkg) ? "am force-stop " : "am kill ") + pkg + " && echo KILLED");
+            String r = sh.run((c.blacklist.contains(pkg) ? "am force-stop " : "am kill ") + pkg + " && echo KILLED");
             if (r.contains("KILLED")) killed.add(pkg);
         }
         return killed;
