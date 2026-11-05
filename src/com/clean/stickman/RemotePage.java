@@ -10,6 +10,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.clean.stickman.core.Keys;
+import com.clean.stickman.core.ListenDecision;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.RemoteLayout;
 import com.clean.stickman.core.RemotePresets;
@@ -39,6 +40,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     String presetId = RemotePresets.DEFAULT;
     /** Slot being taught when listening was started from an unlearned button, else null. */
     String learnSlot;
+    /** Off-drawing key waiting to be offered ("Assign to…") once the window has focus again; 0 = none. */
+    int pendingOffer;
     final Handler h = new Handler();
     boolean listening;
     /** Until when a Back release (from the press that cancelled listening) is swallowed. */
@@ -106,7 +109,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         LinearLayout lc = Theme.card(a);
         lc.addView(Theme.heading(a, "Listen"));
         listen = Theme.button(a, "Listen for a button");
-        listen.setOnClickListener(v -> { if (!listening) startListening(); });
+        listen.setOnClickListener(v -> { if (!listening) startListening(null); });
         lc.addView(listen);
         listenInfo = Theme.text(a, "Press Listen, then press any button on your remote to jump straight to it.", 13, Theme.MUTED);
         lc.addView(listenInfo);
@@ -273,7 +276,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         a.dialog().setTitle("Teach “" + b.name + "”")
             .setMessage("Stickman doesn't know which key this button sends yet. Choose Listen, then press "
                 + b.name + " on your remote.")
-            .setPositiveButton("Listen", (d, w) -> { if (!listening) { learnSlot = slot; startListening(); } })
+            .setPositiveButton("Listen", (d, w) -> { if (!listening) startListening(slot); })
             .setNegativeButton("Cancel", null).show();
     }
 
@@ -285,6 +288,15 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         remote.flash(code);
         listenInfo.setText("Learned: " + remote.focused().name + " sends key " + code + ". Press OK on it to change what it does.");
         listenInfo.setTextColor(Theme.MUTED);
+    }
+
+    /** Show the pending "Assign to…" once the window has focus (e.g. after the app button's app is left). */
+    void tryOffer() {
+        if (pendingOffer <= 0 || listening) return;
+        if (!a.hasWindowFocus()) { h.postDelayed(this::tryOffer, 250); return; }
+        int code = pendingOffer;
+        pendingOffer = 0;
+        offerAssign(code);
     }
 
     /** A key that isn't on the drawing arrived while listening: offer the unlearned buttons. */
@@ -304,17 +316,24 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         return Store.enabled(a) && Store.pid(Store.lastEnsure(a), "REMAPD") != null;
     }
 
-    void startListening() {
+    /**
+     * Start listening; slot is the unlearned button being taught (null = plain Listen). learnSlot is set only
+     * when listening really starts, so a failed teach never leaks into a later plain Listen.
+     */
+    boolean startListening(String slot) {
+        learnSlot = null;
         if (!remapperRunning()) {
             listenInfo.setText("Remapper not running. Turn Stickman on in Settings and wait for “Running ✓”.");
             listenInfo.setTextColor(Theme.ACCENT);
-            return;
+            return false;
         }
         if (a.checkSelfPermission(android.Manifest.permission.READ_LOGS) != PackageManager.PERMISSION_GRANTED) {
             listenInfo.setText("Stickman can't see button presses yet. Reopen it once it shows “Running ✓”.");
             listenInfo.setTextColor(Theme.ACCENT);
-            return;
+            return false;
         }
+        pendingOffer = 0;
+        learnSlot = slot;
         listening = true;
         listenFrom = System.currentTimeMillis();
         listenBaseAt = LogTail.lastKeyAt;
@@ -325,6 +344,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listenInfo.setTextColor(Theme.TEXT);
         remote.setListening(true);
         h.post(this::poll);
+        return true;
     }
 
     void poll() {
@@ -336,23 +356,23 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
             stopListening(CANCELLED);   // Back cancels (remapd logs it even when Back is remapped)
             return;
         }
-        boolean heard = at > listenBaseAt && at - listenFrom >= LISTEN_GRACE_MS && k > 0;
-        int idx = heard ? RemoteLayout.indexOf(remote.buttons(), k) : -1;
-        if (heard && idx < 0 && learnSlot != null) {
+        boolean heard = at > listenBaseAt && at - listenFrom >= LISTEN_GRACE_MS;
+        int what = heard ? ListenDecision.decide(k, remote.buttons(), learnSlot) : ListenDecision.IGNORE;
+        if (what == ListenDecision.ASSIGN) {
             String slot = learnSlot;
             stopListening(null);
             assign(slot, k);
             return;
         }
-        if (heard && idx < 0 && !RemotePresets.unlearned(remote.buttons()).isEmpty()) {
-            stopListening("Heard " + Keys.name(k) + ", which isn't on this drawing.");
-            final int code = k;
-            h.postDelayed(() -> { if (a.hasWindowFocus()) offerAssign(code); }, 300);
+        if (what == ListenDecision.OFFER) {
+            stopListening("Heard " + Keys.name(k) + ", which isn't on this drawing. Choose which button it is.");
+            pendingOffer = k;
+            h.postDelayed(this::tryOffer, 300);
             return;
         }
-        if (heard && idx >= 0) {
-            final RemoteLayout.Btn b = remote.buttons()[idx];
-            boolean teaching = learnSlot != null;
+        if (what == ListenDecision.PICK || what == ListenDecision.ALREADY) {
+            final RemoteLayout.Btn b = remote.buttons()[RemoteLayout.indexOf(remote.buttons(), k)];
+            boolean teaching = what == ListenDecision.ALREADY;
             stopListening(teaching ? "That key is already " + b.name + " on this drawing. Try again?" : "Heard " + b.name + ".");
             remote.flash(k);
             if (!teaching) h.postDelayed(() -> { if (a.hasWindowFocus()) onPick(b); }, 650);
@@ -398,6 +418,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     @Override public void onShow() {
         if (a != null) reload();
+        if (a != null && pendingOffer > 0) h.postDelayed(this::tryOffer, 300);
     }
 
     @Override public void onHide() {

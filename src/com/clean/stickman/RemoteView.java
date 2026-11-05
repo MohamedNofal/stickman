@@ -85,7 +85,7 @@ public class RemoteView extends View {
         int i = RemotePresets.slotIndex(bs, slot);
         focus = i >= 0 ? i : RemoteLayout.indexOf(bs, 96);
         flashIdx = -1;
-        bodyW = -1;
+        place();
         if (listener != null) listener.onFocusButton(bs[focus]);
         invalidate();
     }
@@ -140,18 +140,18 @@ public class RemoteView extends View {
         invalidate();
     }
 
-    float bodyW = -1;
-
-    /** Body on the left, a reserved strip on its right for the hint pill (so the hint never covers a button). */
+    /**
+     * Body on the left, a reserved strip on its right for the hint pill (so the hint never covers a button).
+     * Computed on size / preset changes only, never in onDraw.
+     */
     void place() {
+        if (getWidth() <= 0 || getHeight() <= 0) { bw = 0; return; }
         float[] r = RemoteLayout.body(getWidth(), getHeight(), dp, preset.aspect);
-        if (r[2] == bodyW && r[3] == bh && r[0] == bx && r[1] == by) return;
         bx = r[0]; by = r[1]; bw = r[2]; bh = r[3];
-        bodyW = bw;
         bodyShader = new LinearGradient(0, by, 0, by + bh, BODY_TOP, Theme.PANEL, Shader.TileMode.CLAMP);
     }
 
-    @Override protected void onSizeChanged(int w, int h, int ow, int oh) { bodyW = -1; place(); }
+    @Override protected void onSizeChanged(int w, int h, int ow, int oh) { place(); }
 
     // ---- input ----
     @Override public boolean onKeyDown(int k, KeyEvent e) {
@@ -232,8 +232,7 @@ public class RemoteView extends View {
     }
 
     @Override protected void onDraw(Canvas c) {
-        place();
-        if (bw <= 1) return;
+        if (bw <= 1 || bodyShader == null) return;
         if (stepAnimations()) postInvalidateOnAnimation();
         float corner = bw * preset.corner;
 
@@ -289,7 +288,7 @@ public class RemoteView extends View {
         float x = x(b), y = y(b), r = b.r * bw;
         boolean plain = !inRing(b.code) && !inRocker(b.code);
         int btnFill = b.isApp() ? RemoteIcons.brandFill(b.name, BTN)
-            : b.code == 172 && "remote2026".equals(preset.id) ? HOME_2026 : BTN;   // the 2026 remote's orange Home
+            : b.code == 172 && preset.homeAccent ? HOME_2026 : BTN;
         shape(b, 0);
         if (b.code == 96) {
             fill.setColor(f ? FOCUS_FILL : OK_FILL);

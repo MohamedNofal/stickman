@@ -42,7 +42,8 @@ public class ButtonEditor {
     final RemapModel m;
     final String profile;
     final int code;
-    final RemoteLayout.Btn btn;
+    /** Replaced (withName) after a rename so titles show the new name at once. */
+    RemoteLayout.Btn btn;
     final String presetId;
     final Runnable onSaved;
     final String[] cur = new String[LAYERS.length];
@@ -262,33 +263,51 @@ public class ButtonEditor {
         box.addView(in);
         RemoteLayout.Btn[] orig = RemotePresets.get(presetId).buttons;
         final String dflt = orig[Math.max(0, RemotePresets.slotIndex(orig, btn.slot))].name;
-        a.dialog().setTitle("Rename button").setView(box)
-            .setPositiveButton("Save", (d, w) -> {
-                String s = in.getText().toString();
-                String why = RemotePresets.invalidLabel(s);
-                if (why != null) { message(a, "Can't use that name", why); return; }
-                Store.setLabel(a, presetId, btn.slot, s.trim());
-                title.setText(s.trim());
-                if (onSaved != null) onSaved.run();
-            })
-            .setNeutralButton("Default (" + dflt + ")", (d, w) -> {
-                Store.setLabel(a, presetId, btn.slot, null);
-                title.setText(dflt);
-                if (onSaved != null) onSaved.run();
-            })
+        final TextView err = Theme.text(a, "", 13, Theme.ACCENT);
+        err.setVisibility(View.GONE);
+        box.addView(err);
+        final AlertDialog d = a.dialog().setTitle("Rename button").setView(box)
+            .setPositiveButton("Save", null)   // replaced below so invalid input keeps the dialog open
+            .setNeutralButton("Default (" + dflt + ")", (x, w) -> renamed(null, dflt))
+            .setNegativeButton("Cancel", null).create();
+        d.show();
+        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String s = in.getText().toString();
+            String why = RemotePresets.invalidLabel(s);
+            if (why != null) { err.setText(why); err.setVisibility(View.VISIBLE); in.requestFocus(); return; }
+            renamed(s.trim(), s.trim());
+            d.dismiss();
+        });
+    }
+
+    /** Store the new label (null = default) and show name everywhere in this editor right away. */
+    void renamed(String stored, String name) {
+        Store.setLabel(a, presetId, btn.slot, stored);
+        btn = btn.withName(name);
+        title.setText(name);
+        refreshRows();
+        if (onSaved != null) onSaved.run();
+    }
+
+    /** Drop the learned code; its rules stay in effect unless the owner also removes them. */
+    void forget() {
+        a.dialog().setTitle("Forget learned key?")
+            .setMessage(btn.name + " goes back to “not learned yet”; you can teach it again with Listen.\n\n"
+                + "Rules you set for key " + code + " stay in effect (in every profile) unless you also remove them.")
+            .setPositiveButton("Forget", (d, w) -> forgotten(false))
+            .setNeutralButton("Also remove its rules", (d, w) -> forgotten(true))
             .setNegativeButton("Cancel", null).show();
     }
 
-    /** Drop the learned code (its rules in remap.conf stay; they still apply to that key). */
-    void forget() {
-        a.dialog().setTitle("Forget learned key?")
-            .setMessage(btn.name + " goes back to “not learned yet”. You can teach it again with Listen.")
-            .setPositiveButton("Forget", (d, w) -> {
-                Store.setLearned(a, presetId, btn.slot, 0);
-                if (dlg != null) dlg.dismiss();
-                if (onSaved != null) onSaved.run();
-            })
-            .setNegativeButton("Cancel", null).show();
+    void forgotten(boolean removeRules) {
+        Store.setLearned(a, presetId, btn.slot, 0);
+        if (removeRules) {
+            for (String p : m.profiles()) for (Rule.Layer l : LAYERS) m.set(p, code, l, null);
+            Store.saveRemap(a, m);
+            if (Store.enabled(a)) a.run(null, Ensure.MARKER);
+        }
+        if (dlg != null) dlg.dismiss();
+        if (onSaved != null) onSaved.run();
     }
 
     void set(Rule.Layer l, String action) {

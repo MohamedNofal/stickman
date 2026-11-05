@@ -24,6 +24,8 @@ public final class RemotePresets {
         public final String id, name, years;
         /** True when the drawing is a best guess (name says "(layout approximate)"). */
         public final boolean approximate;
+        /** Home drawn in the remote's accent colour (the 2026 remote's orange metal Home). */
+        public final boolean homeAccent;
         /** Body height / width, and corner radius as a fraction of the body width. */
         public final float aspect, corner;
         /** D-pad ring centre (fraction of height) and outer radius (width units). */
@@ -33,12 +35,13 @@ public final class RemotePresets {
         public final String[] rockerLabels;
         public final RemoteLayout.Btn[] buttons;
 
-        Preset(String id, String name, String years, boolean approximate, float aspect, float corner, float ringY,
+        Preset(String id, String name, String years, boolean approximate, boolean homeAccent, float aspect, float corner, float ringY,
                float ringR, float[][] rockers, String[] rockerLabels, RemoteLayout.Btn[] buttons) {
             this.id = id;
             this.name = name;
             this.years = years;
             this.approximate = approximate;
+            this.homeAccent = homeAccent;
             this.aspect = aspect;
             this.corner = corner;
             this.ringY = ringY;
@@ -73,6 +76,7 @@ public final class RemotePresets {
         static final float MIN_ASPECT = 2.3f, BOTTOM = 0.19f, PILL_R = 0.16f, PILL_PITCH = 0.21f;
         final String id, name, years;
         final boolean approximate;
+        boolean homeAccent;
         float corner = 0.30f, y, ringY = -1;
         final List<K> keys = new ArrayList<>();
         final List<float[]> at = new ArrayList<>();      // {cx, y, r, round}
@@ -87,6 +91,7 @@ public final class RemotePresets {
         }
 
         Builder corner(float c) { corner = c; return this; }
+        Builder homeAccent() { homeAccent = true; return this; }
 
         void put(K k, float cx, float y, float r, boolean round) {
             if (k == null) return;
@@ -176,7 +181,7 @@ public final class RemotePresets {
                 float[] r = rockers.get(i);
                 rk[i] = new float[] { r[0], r[1] / aspect, r[2] / aspect };
             }
-            return new Preset(id, name, years, approximate, aspect, corner, ringY / aspect, 0.32f, rk,
+            return new Preset(id, name, years, approximate, homeAccent, aspect, corner, ringY / aspect, 0.32f, rk,
                 rockerLabels.toArray(new String[0]), bs);
         }
     }
@@ -224,7 +229,7 @@ public final class RemotePresets {
             .row(0.22f, 0.07f, k(113), unknown("custom1", "Custom button 1", "1", null), unknown("custom2", "Custom button 2", "2", null)),
             usApps()).build());
         // 8. Fire TV Remote 2026: no Rewind/FF/Recents; mic top right; VOL | Play over Live TV | CH; Mute | star | sliders.
-        l.add(nav(b("remote2026", "Fire TV Remote", "2026", true).top(k(116), null, unknown("mic", "Voice (mic)", "Voice", "mic")).ring())
+        l.add(nav(b("remote2026", "Fire TV Remote", "2026", true).homeAccent().top(k(116), null, unknown("mic", "Voice (mic)", "Voice", "mic")).ring())
             .sideRockers(k(164), k(362))
             .row(0.22f, 0.07f, k(113), unknown("star", "Star button", "Star", "star"), unknown("sliders", "Sliders button", "Sliders", "sliders"))
             .apps(app(1, 745, "Prime Video"), app(2, 744, "Netflix"), app(3, 746, "YouTube"), app(4, 747, "Disney+")).build());

@@ -67,7 +67,7 @@ public class RemotePreview {
             boolean inRocker = btn.code == 115 || btn.code == 114 || btn.code == 402 || btn.code == 403;
             Shape s = btn.round ? new Ellipse2D.Float(x - r, y - r, 2 * r, 2 * r)
                 : new RoundRectangle2D.Float(x - btn.hw() * bw, y - btn.hh() * bw, 2 * btn.hw() * bw, 2 * btn.hh() * bw, 2 * btn.hh() * bw, 2 * btn.hh() * bw);
-            int fill = btn.isApp() ? RemoteIcons.brandFill(btn.name, 0xFF2C241C) : btn.code == 172 && pre.id.equals("remote2026") ? 0xFFD9661F : 0xFF2C241C;
+            int fill = btn.isApp() ? RemoteIcons.brandFill(btn.name, 0xFF2C241C) : btn.code == 172 && pre.homeAccent ? 0xFFD9661F : 0xFF2C241C;
             if (!inRing && !inRocker || f) {
                 g.setColor(new Color(f && btn.round ? 0xFF4A321C : fill, true)); g.fill(s);
                 g.setColor(new Color(0xFF4A3D30, true)); g.setStroke(new BasicStroke(1 * dp)); g.draw(s);
