@@ -220,6 +220,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         if (!inContent) return super.dispatchKeyEvent(e);
         // the drawn remote moves its own focus first
         if (f instanceof RemoteView && ((RemoteView) f).canMove(rlDir(dir))) return super.dispatchKeyEvent(e);
+        if (f instanceof TaskMapView && ((TaskMapView) f).canMove(rlDir(dir))) return super.dispatchKeyEvent(e);   // same constants as TileNav
         View n = FocusFinder.getInstance().findNextFocus(content, f, dir);
         if (dir == View.FOCUS_LEFT) {
             if (n == null || !visible(n) || !overlapsVertically(n, f)) { nav[current].requestFocus(); return true; }

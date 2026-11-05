@@ -12,6 +12,20 @@ public final class TaskFeed {
     private long curSeq = -1, total, avail;
     private int cpu;
     private List<TaskSnapshot.App> cur = new ArrayList<>();
+    private volatile Runnable listener;
+
+    /**
+     * True for the bodies (text after "STATUS ") that belong to the snapshot feed: "tasks <totals>", "task ..." and
+     * "tasks_end ...". "tasks stopped", "end ..." and "end_all ..." are ordinary status lines.
+     */
+    public static boolean isFeedLine(String body) {
+        if (body == null) return false;
+        return body.startsWith("task ") || body.startsWith("tasks_end")
+            || (body.startsWith("tasks ") && body.indexOf("seq=") > 0);
+    }
+
+    /** Called (on the onLine thread) after each newly completed snapshot; null clears it. */
+    public void setListener(Runnable r) { listener = r; }
 
     public TaskSnapshot latest() { return latest; }
     public long latestSeq() { return latest == null ? 0 : latest.seq; }
@@ -47,6 +61,8 @@ public final class TaskFeed {
                         List<TaskSnapshot.App> apps = cur;
                         Collections.sort(apps, TaskSnapshot.App.BY_RSS);
                         latest = new TaskSnapshot(seq, total, avail, cpu, apps);
+                        Runnable l = listener;
+                        if (l != null) l.run();
                     }
                     if (seq == curSeq) {
                         curSeq = -1;

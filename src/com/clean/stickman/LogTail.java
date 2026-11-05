@@ -18,6 +18,13 @@ public class LogTail implements Runnable {
     static final java.util.concurrent.ConcurrentHashMap<String, Long> lastStatusAt = new java.util.concurrent.ConcurrentHashMap<>();
     /** remapd lifecycle from its log (epoch ms of the line, 0 = not seen); see core.RemapdLog. */
     static volatile long remapReleasedAt, remapStartedAt;
+    /**
+     * Snapshot assembler for stickd's task feed ("STATUS tasks|task|tasks_end ..."); those lines never enter the status
+     * ring or lastStatus. Its listener runs on this LogTail thread.
+     */
+    static final com.clean.stickman.core.TaskFeed FEED = new com.clean.stickman.core.TaskFeed();
+    /** Epoch ms (logcat time) of the latest "tasks_end" feed line, 0 = none seen; lets the Tasks page detect a stale feed. */
+    static volatile long lastFeedAt;
     static volatile int lastKey;
     static volatile long lastKeyAt;
     volatile boolean stop;
@@ -38,6 +45,12 @@ public class LogTail implements Runnable {
                     int st = l.indexOf("): STATUS ");
                     if (st > 0) {
                         String body = l.substring(st + 3).trim();
+                        String feed = body.length() > 7 ? body.substring(7) : "";   // after "STATUS "
+                        if (com.clean.stickman.core.TaskFeed.isFeedLine(feed)) {
+                            if (feed.startsWith("tasks_end")) lastFeedAt = logTime(l);   // once per sample
+                            FEED.onLine(feed);
+                            continue;
+                        }
                         addStatus(l.length() > 14 ? l.substring(6, 14) : "", body);
                         putStatus(body, logTime(l));
                         continue;
