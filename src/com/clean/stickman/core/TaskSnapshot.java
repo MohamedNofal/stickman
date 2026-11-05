@@ -14,6 +14,13 @@ public final class TaskSnapshot {
     }
 
     public static final class App {
+        /** rssKb descending, ties by pkg. */
+        public static final java.util.Comparator<App> BY_RSS = new java.util.Comparator<App>() {
+            public int compare(App a, App b) {
+                if (a.rssKb != b.rssKb) return a.rssKb > b.rssKb ? -1 : 1;
+                return a.pkg.compareTo(b.pkg);
+            }
+        };
         public final String pkg;
         public final long rssKb;
         public final int cpuPct;

@@ -2,7 +2,6 @@ package com.clean.stickman.core;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +25,8 @@ public final class TaskFeed {
                 case "tasks": {
                     Map<String, String> kv = kv(t, 1);
                     long seq = Long.parseLong(kv.get("seq"));
-                    if (curSeq >= 0 && seq < curSeq) return; // older than the sample in progress: discard
+                    if (seq == 1) latest = null; // seq restarts at 1: a new sampling session
+                    else if (curSeq >= 0 && seq < curSeq) return; // older than the sample in progress: discard
                     curSeq = seq;
                     total = Long.parseLong(kv.get("total"));
                     avail = Long.parseLong(kv.get("avail"));
@@ -45,16 +45,13 @@ public final class TaskFeed {
                     long seq = Long.parseLong(kv(t, 1).get("seq"));
                     if (seq == curSeq && seq > latestSeq()) {
                         List<TaskSnapshot.App> apps = cur;
-                        Collections.sort(apps, new Comparator<TaskSnapshot.App>() {
-                            public int compare(TaskSnapshot.App a, TaskSnapshot.App b) {
-                                if (a.rssKb != b.rssKb) return a.rssKb > b.rssKb ? -1 : 1;
-                                return a.pkg.compareTo(b.pkg);
-                            }
-                        });
+                        Collections.sort(apps, TaskSnapshot.App.BY_RSS);
                         latest = new TaskSnapshot(seq, total, avail, cpu, apps);
                     }
-                    curSeq = -1;
-                    cur = new ArrayList<>();
+                    if (seq == curSeq) {
+                        curSeq = -1;
+                        cur = new ArrayList<>();
+                    }
                     break;
                 }
                 default:

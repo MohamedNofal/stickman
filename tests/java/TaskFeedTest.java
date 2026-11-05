@@ -26,8 +26,7 @@ public class TaskFeedTest {
         f.onLine("task com.z rss=1 cpu=0 state=bg up=5 procs=1 seq=4");
         f.onLine("tasks_end seq=4");
         T.eq(null, f.latest(), "latest stays null");
-        f.onLine("tasks total=10 avail=5 cpu=1 seq=5");
-        f.onLine("task com.a rss=1 cpu=0 state=bg up=5 procs=1 seq=5");
+        f.onLine("task com.a rss=2 cpu=0 state=bg up=5 procs=1 seq=5");
         f.onLine("tasks_end seq=5");
         T.eq(5L, f.latestSeq(), "seq 5");
         f.onLine("tasks total=10 avail=5 cpu=1 seq=3");
@@ -47,5 +46,18 @@ public class TaskFeedTest {
         T.eq(a.pkg, b.pkg, "pkg"); T.eq(a.rssKb, b.rssKb, "rss"); T.eq(a.cpuPct, b.cpuPct, "cpu");
         T.eq(a.state, b.state, "state"); T.eq(a.upSec, b.upSec, "up"); T.eq(a.procs, b.procs, "procs");
         T.eq("task com.x.y rss=1234 cpu=17 state=play up=99 procs=4 seq=7", ProcStats.formatTaskLine(a, 7), "exact");
+    }
+
+    public void testSeqOneStartsNewSession() {
+        TaskFeed f = new TaskFeed();
+        f.onLine("tasks total=10 avail=5 cpu=1 seq=7");
+        f.onLine("task com.a rss=1 cpu=0 state=bg up=5 procs=1 seq=7");
+        f.onLine("tasks_end seq=7");
+        T.eq(7L, f.latestSeq(), "seq 7");
+        f.onLine("tasks total=10 avail=5 cpu=1 seq=1");
+        f.onLine("task com.b rss=1 cpu=0 state=bg up=5 procs=1 seq=1");
+        f.onLine("tasks_end seq=1");
+        T.eq(1L, f.latest().seq, "restarted");
+        T.eq("com.b", f.latest().apps.get(0).pkg, "new data");
     }
 }

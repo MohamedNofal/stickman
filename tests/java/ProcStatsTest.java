@@ -81,4 +81,14 @@ public class ProcStatsTest {
         T.eq("bg", st.get("com.bg"), "bg");
         T.eq("sys", st.get("com.sy"), "sys");
     }
+
+    public void testAggregateCpuNonZero() {
+        List<ProcStats.Proc> ps = new ArrayList<>();
+        ps.add(p(1, "com.x", 10, 70, 100));
+        ps.add(p(2, "com.x", 10, 30, 100));
+        Map<String, Long> prev = new HashMap<>();
+        prev.put("com.x", 50L);
+        List<TaskSnapshot.App> r = ProcStats.aggregate(ps, prev, 200, 4, 10000, 100, null, set(), set(), set("com.x"));
+        T.eq(25, r.get(0).cpuPct, "(100-50)/200");
+    }
 }

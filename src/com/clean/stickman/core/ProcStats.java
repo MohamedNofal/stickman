@@ -2,7 +2,6 @@ package com.clean.stickman.core;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,12 +79,7 @@ public final class ProcStats {
             long up = Math.max(0, (nowTicks - a[3]) / clkTck);
             out.add(new TaskSnapshot.App(pkg, a[0], cpu, state, up, (int) a[2]));
         }
-        Collections.sort(out, new Comparator<TaskSnapshot.App>() {
-            public int compare(TaskSnapshot.App x, TaskSnapshot.App y) {
-                if (x.rssKb != y.rssKb) return x.rssKb > y.rssKb ? -1 : 1;
-                return x.pkg.compareTo(y.pkg);
-            }
-        });
+        Collections.sort(out, TaskSnapshot.App.BY_RSS);
         return out;
     }
 
