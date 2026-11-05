@@ -29,7 +29,7 @@ public final class RemoteLayout {
     /** Hint pill: gap from the body rim, height, side margin to the view edge, pointer size, text size (sp). */
     public static final float HINT_GAP_DP = 14, HINT_H_DP = 28, HINT_MARGIN_DP = 4, HINT_POINTER_DP = 7, HINT_TEXT_SP = 13;
     /** Width the view reserves right of the body for the hint pill. */
-    public static final float HINT_AREA_DP = 150;
+    public static final float HINT_AREA_DP = 120;
 
     /** How far a focus ring reaches outside its button, in body-width units (at MIN_BODY_DP). */
     public static float focusMargin() { return (FOCUS_OFFSET_DP + FOCUS_STROKE_DP / 2) / MIN_BODY_DP; }

@@ -35,11 +35,11 @@ public class StatusPage extends Page {
         info = Theme.text(a, "", 14, Theme.MUTED);
         info.setPadding(Theme.dp(a, 12), 0, 0, 0);
         top.addView(info);
+        top.setPadding(0, 0, 0, Theme.dp(a, 12));
         l.addView(top);
-        space(l);
 
         LinearLayout d = Theme.card(a);
-        d.addView(Theme.heading(a, "Daemons"));
+        d.addView(Theme.heading(a, "Background services"));
         daemons = Theme.text(a, "", 16, Theme.TEXT);
         d.addView(daemons);
         l.addView(d);
@@ -50,27 +50,22 @@ public class StatusPage extends Page {
         storage = stat(row1, "Storage");
         wifi = stat(row2, "Wi-Fi");
         os = stat(row2, "Fire OS");
-        l.addView(row1);
-        l.addView(row2);
+        l.addView(row1, new LinearLayout.LayoutParams(-1, -2));
+        l.addView(row2, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout lv = Theme.card(a);
-        lv.addView(Theme.heading(a, "Live status (stickd)"));
+        lv.addView(Theme.heading(a, "Live activity"));
         live = Theme.text(a, "", 14, Theme.TEXT);
-        live.setTypeface(Typeface.MONOSPACE);
         lv.addView(live);
         l.addView(lv);
         return Theme.scroll(a, l);
     }
 
-    private void space(LinearLayout l) {
-        View s = new View(a);
-        l.addView(s, new LinearLayout.LayoutParams(1, Theme.dp(a, 12)));
-    }
-
     private TextView stat(LinearLayout row, String heading) {
         LinearLayout c = Theme.card(a);
+        // same outer edges as the full-width cards: a gap only between tiles
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -1, 1f);
-        lp.setMargins(0, 0, Theme.dp(a, 12), Theme.dp(a, 12));
+        lp.setMargins(row.getChildCount() == 0 ? 0 : Theme.dp(a, 12), 0, 0, Theme.dp(a, 12));
         c.setLayoutParams(lp);
         c.addView(Theme.heading(a, heading));
         TextView v = Theme.text(a, "–", 18, Theme.TEXT);
@@ -105,7 +100,8 @@ public class StatusPage extends Page {
             List<String> lines = LogTail.statusLines();
             StringBuilder sb = new StringBuilder();
             for (int i = lines.size() - 1; i >= 0; i--) sb.append(lines.get(i)).append('\n');
-            live.setText(sb.length() == 0 ? "No status lines yet." : sb.toString().trim());
+            live.setText(sb.length() == 0 ? "Nothing yet. Boosts, sleep timers and auto-closed apps show up here." : sb.toString().trim());
+            live.setTypeface(sb.length() == 0 ? Typeface.DEFAULT : Typeface.MONOSPACE);
         }
     }
 
@@ -117,8 +113,8 @@ public class StatusPage extends Page {
         if (le.isEmpty()) {
             sb.append("Not checked yet");
         } else {
-            sb.append(line("remapd (buttons)", Store.pid(le, "REMAPD"))).append('\n');
-            sb.append(line("stickd (automation)", Store.pid(le, "STICKD"))).append('\n');
+            sb.append(line("Button remapping", Store.pid(le, "REMAPD"))).append('\n');
+            sb.append(line("Background automation", Store.pid(le, "STICKD"))).append('\n');
             sb.append("Checked ").append(new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(Store.lastEnsureAt(a))));
         }
         if (Bridge.busy) sb.append("\nBridge: working…");
@@ -138,7 +134,7 @@ public class StatusPage extends Page {
         ram.setText(d.memTotalMb == 0 ? "–" : d.memAvailMb + " MB free\nof " + d.memTotalMb + " MB");
         String t = d.cpuTemp();
         temp.setText(t == null ? "–" : t);
-        storage.setText(d.storage == null ? "–" : d.storage);
+        storage.setText(d.storage == null ? "Unavailable" : d.storage.replace(" free of ", " free\nof "));
         StringBuilder w = new StringBuilder();
         if (d.rssi != 0) w.append(DeviceInfo.signal(d.rssi)).append(" (").append(d.rssi).append(" dBm)");
         if (d.ssid != null && !d.ssid.isEmpty()) w.append(w.length() > 0 ? "\n" : "").append(d.ssid);

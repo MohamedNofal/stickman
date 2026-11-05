@@ -6,6 +6,7 @@ import android.widget.TextView;
 
 import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Commands;
+import com.clean.stickman.core.LiveValues;
 import com.clean.stickman.core.StickdConf;
 
 /** Screensaver, sleep / screen-off timeouts, stay-awake-for-media, the sleep timer and screen off. */
@@ -18,9 +19,9 @@ public class SleepPage extends ApplyPage {
     static final long[] OFF_MS = { 5 * 60000L, 10 * 60000L, 15 * 60000L, 30 * 60000L, Integer.MAX_VALUE };
     static final int[] TIMER_MIN = { 0, 15, 30, 60, 90 };
 
-    Button[] saver, sleep, off, timer;
-    Button media;
-    TextView timerInfo;
+    Button[] saver, sleep, off, timer, media;
+    TextView timerInfo, saverNow, sleepNow, offNow;
+    long readAt;
     String timerShown;
 
     @Override public String title() { return "Sleep"; }
@@ -34,7 +35,7 @@ public class SleepPage extends ApplyPage {
             send(Commands.act(Actions.SLEEP_TIMER_SET, Integer.toString(TIMER_MIN[i])), "timer:" + i,
                 i == 0 ? "Turning the sleep timer off…" : "Setting the sleep timer…");
         });
-        timerInfo = Theme.text(a, "", 14, Theme.TEXT);
+        timerInfo = Theme.autoHide(Theme.text(a, "", 14, Theme.TEXT));
         t.addView(timerInfo);
 
         LinearLayout so = card(l, "Screen off", "Blacks out the screen while audio keeps playing. Any button brings it back.");
@@ -43,9 +44,10 @@ public class SleepPage extends ApplyPage {
         });
 
         LinearLayout m = card(l, "Stay awake while media plays", "Stops the stick sleeping or starting the screensaver mid-film.");
-        media = button(m, "", v -> {
+        media = choices(m, new String[] { "On", "Off" }, i -> {
             StickdConf c = StickdConf.parse(Store.stickdText(a));
-            c.stayAwakeMedia = !c.stayAwakeMedia;
+            if (c.stayAwakeMedia == (i == 0)) return;
+            c.stayAwakeMedia = i == 0;
             applyStickdConf(c.serialize(), "conf");
             refresh();
         });
@@ -53,14 +55,17 @@ public class SleepPage extends ApplyPage {
         LinearLayout ss = card(l, "Screensaver", null);
         saver = choices(ss, new String[] { "On", "Off" }, i ->
             send(Commands.screensaver(i == 0), "saver:" + i, "Setting the screensaver…"));
+        saverNow = now(ss);
 
         LinearLayout st = card(l, "Sleep after", "Fire OS 8 may override this");
         sleep = choices(st, SLEEP_LABELS, i ->
             send(Commands.sleepTimeout(SLEEP_MS[i]), "sleep:" + i, "Setting sleep time…"));
+        sleepNow = now(st);
 
         LinearLayout ot = card(l, "Screen off after", "Fire OS 8 may override this");
         off = choices(ot, OFF_LABELS, i ->
             send(Commands.screenOffTimeout(OFF_MS[i]), "off:" + i, "Setting screen-off time…"));
+        offNow = now(ot);
 
         refresh();
         return Theme.scroll(a, l);
@@ -68,24 +73,63 @@ public class SleepPage extends ApplyPage {
 
     void refresh() {
         boolean on = StickdConf.parse(Store.stickdText(a)).stayAwakeMedia;
-        media.setText("Stay awake while media plays:  " + (on ? "On" : "Off"));
-        media.setSelected(on);
-        select(saver, pref("saver", -1));
-        select(sleep, pref("sleep", -1));
-        select(off, pref("off", -1));
+        select(media, on ? 0 : 1);
+        stored(saver, saverNow, "saver");
+        stored(sleep, sleepNow, "sleep");
+        stored(off, offNow, "off");
     }
 
-    @Override public void onShow() { if (a != null) refresh(); }
+    /** Fallback until the live read answers: the last choice made here, else "unknown". */
+    void stored(Button[] bs, TextView now, String key) {
+        int i = pref(key, -1);
+        select(bs, i);
+        if (i < 0 && now.length() == 0) now.setText("Current: unknown");
+    }
+
+    TextView now(LinearLayout card) {
+        TextView t = Theme.autoHide(Theme.text(a, "", 14, Theme.MUTED));
+        card.addView(t);
+        return t;
+    }
+
+    /** Live values (read-only, once per page show); the stored choices stay the fallback. */
+    void readLive() {
+        if (Bridge.otherVpnActive(a) || Bridge.busy && readAt != 0) return;
+        readAt = System.currentTimeMillis();
+        mine.put(LiveValues.SLEEP_READ, "live");
+        Bridge.run(a, LiveValues.SLEEP_READ, false);
+    }
+
+    void showLive(String out) {
+        String sv = LiveValues.value(out, "SAVER"), sl = LiveValues.value(out, "SLEEP"), of = LiveValues.value(out, "OFF");
+        live(saver, saverNow, "saver", LiveValues.saver(sv), sv == null ? "unknown" : sv);
+        live(sleep, sleepNow, "sleep", LiveValues.indexOfMs(SLEEP_MS, sl), LiveValues.describeMs(sl));
+        live(off, offNow, "off", LiveValues.indexOfMs(OFF_MS, of), LiveValues.describeMs(of));
+    }
+
+    /** Select the chip matching the live value; when none matches say what it is instead. */
+    void live(Button[] bs, TextView now, String key, int i, String desc) {
+        if (i >= 0) { putPref(key, i); select(bs, i); now.setText(""); return; }
+        select(bs, -1);
+        now.setText("Current: " + desc);
+    }
+
+    @Override public void onShow() {
+        if (a == null) return;
+        refresh();
+        readLive();
+    }
 
     @Override public void onTick() {
         if (a == null) return;
         String s = LogTail.status("sleep_timer");
-        String show = s == null ? "" : "off".equals(s.trim()) ? "Sleep timer is off." : "Sleep timer: " + s.trim() + " min.";
+        String show = s == null ? "No sleep timer running." : "off".equals(s.trim()) ? "Sleep timer is off." : "Sleep timer: " + s.trim() + " min.";
         if (!show.equals(timerShown)) {
             timerShown = show;
             timerInfo.setText(show);
-            if (s != null) {
+            {
                 int sel = 0;
+                if (s == null) s = "off";
                 for (int i = 0; i < TIMER_MIN.length; i++) if (s.trim().equals(Integer.toString(TIMER_MIN[i]))) sel = i;
                 select(timer, sel);
             }
@@ -93,6 +137,7 @@ public class SleepPage extends ApplyPage {
     }
 
     @Override String describe(String kind, String out) {
+        if (kind.equals("live")) { showLive(out); return null; }
         if (kind.equals("conf")) return Store.pid(out, "STICKD") != null ? "Saved ✓" : "Saved, but stickd isn't running.";
         if (kind.equals("screenoff")) return "Screen off sent. Press any button to bring it back.";
         int c = kind.indexOf(':');
@@ -102,9 +147,9 @@ public class SleepPage extends ApplyPage {
             case "timer":
                 select(timer, i);
                 return i == 0 ? "Sleep timer off." : "Sleep timer set to " + TIMER_MIN[i] + " min.";
-            case "saver": putPref("saver", i); select(saver, i); return "Screensaver " + (i == 0 ? "on." : "off.");
-            case "sleep": putPref("sleep", i); select(sleep, i); return "Sleep after: " + SLEEP_LABELS[i] + ".";
-            case "off": putPref("off", i); select(off, i); return "Screen off after: " + OFF_LABELS[i] + ".";
+            case "saver": putPref("saver", i); select(saver, i); saverNow.setText(""); return "Screensaver " + (i == 0 ? "on." : "off.");
+            case "sleep": putPref("sleep", i); select(sleep, i); sleepNow.setText(""); return "Sleep after: " + SLEEP_LABELS[i] + ".";
+            case "off": putPref("off", i); select(off, i); offNow.setText(""); return "Screen off after: " + OFF_LABELS[i] + ".";
             default: return out;
         }
     }

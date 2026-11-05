@@ -15,11 +15,11 @@ public class ShortcutsPage extends ApplyPage {
 
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
-        l.addView(Theme.text(a, "Jump straight to Amazon's settings screens, including hidden ones.", 14, Theme.MUTED));
+        LinearLayout grid = card(l, "Amazon settings screens", "Jump straight to Amazon's settings screens, including hidden ones.");
         int n = Catalog.SHORTCUTS.length + 1;
         LinearLayout row = null;
         for (int i = 0; i < n; i++) {
-            if (i % COLS == 0) { row = Theme.row(a); l.addView(row); }
+            if (i % COLS == 0) { row = Theme.row(a); grid.addView(row, new LinearLayout.LayoutParams(-1, -2)); }
             final boolean off = i == n - 1;
             final String label = off ? "Screen off" : Catalog.SHORTCUTS[i][0];
             final String target = off ? null : Catalog.SHORTCUTS[i][1];
@@ -27,7 +27,7 @@ public class ShortcutsPage extends ApplyPage {
             b.setGravity(android.view.Gravity.CENTER);
             b.setMinHeight(Theme.dp(a, 64));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-            lp.setMargins(0, Theme.dp(a, 6), Theme.dp(a, 10), Theme.dp(a, 6));
+            lp.setMargins(i % COLS == 0 ? 0 : Theme.dp(a, 5), Theme.dp(a, 5), i % COLS == COLS - 1 ? 0 : Theme.dp(a, 5), Theme.dp(a, 5));
             b.setOnClickListener(v -> {
                 if (!stickdOn()) return;
                 if (off) send(Commands.act(Actions.SCREEN_OFF, null), "Screen off", "Turning the screen off…");

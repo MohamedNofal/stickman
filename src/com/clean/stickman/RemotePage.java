@@ -30,13 +30,14 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     /** Linux code of Back: cancels listening instead of being "heard". */
     static final int BACK = 158;
     static final String CANCELLED = "Listening cancelled.";
+    static final String IDLE = "Press Listen, then press any button on your remote to jump straight to it.";
 
     MainActivity a;
     RemoteView remote;
     RemapModel m = new RemapModel();
     String profile = RemapModel.DEFAULT;
     TextView profName, profInfo, btnName, btnLayers, listenInfo, modelInfo;
-    Button prev, next, remove, listen, model;
+    Button prev, next, add, remove, listen, model;
     String presetId = RemotePresets.DEFAULT;
     /** Slot being taught when listening was started from an unlearned button, else null. */
     String learnSlot;
@@ -58,43 +59,13 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         remote = new RemoteView(a);
         remote.setListener(this);
         remote.setInfo(this);
-        root.addView(remote, new LinearLayout.LayoutParams(0, -1, 1.25f));
+        root.addView(remote, new LinearLayout.LayoutParams(0, -1, 1f));
 
         LinearLayout side = Theme.column(a);
         side.addView(Theme.title(a, "Remote"));
-        TextView intro = Theme.text(a, "Move around the remote with the D-pad and press OK to change what a button does. "
-            + "Orange dots mark buttons you've changed.", 14, Theme.MUTED);
+        TextView intro = Theme.text(a, "Pick a button with the D-pad and press OK to change it. Orange dots mark changed buttons.", 14, Theme.MUTED);
         intro.setPadding(0, 0, 0, Theme.dp(a, 12));
         side.addView(intro);
-
-        LinearLayout pc = Theme.card(a);
-        pc.addView(Theme.heading(a, "Profile"));
-        LinearLayout pr = Theme.row(a);
-        prev = Theme.button(a, "◀");
-        prev.setOnClickListener(v -> stepProfile(-1));
-        pr.addView(prev);
-        profName = Theme.text(a, "", 18, Theme.TEXT);
-        profName.setTypeface(Typeface.DEFAULT_BOLD);
-        profName.setSingleLine(true);
-        profName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        profName.setGravity(android.view.Gravity.CENTER);
-        pr.addView(profName, new LinearLayout.LayoutParams(0, -2, 1f));
-        next = Theme.button(a, "▶");
-        next.setOnClickListener(v -> stepProfile(1));
-        ((LinearLayout.LayoutParams) next.getLayoutParams()).setMargins(Theme.dp(a, 8), Theme.dp(a, 4), 0, Theme.dp(a, 4));
-        pr.addView(next);
-        pc.addView(pr);
-        profInfo = Theme.text(a, "", 13, Theme.MUTED);
-        pc.addView(profInfo);
-        LinearLayout pr2 = Theme.row(a);
-        Button add = Theme.button(a, "Add app profile");
-        add.setOnClickListener(v -> addProfile());
-        pr2.addView(add);
-        remove = Theme.button(a, "Remove profile");
-        remove.setOnClickListener(v -> removeProfile());
-        pr2.addView(remove);
-        pc.addView(pr2);
-        side.addView(pc);
 
         LinearLayout bc = Theme.card(a);
         bc.addView(Theme.heading(a, "Selected button"));
@@ -109,11 +80,46 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         LinearLayout lc = Theme.card(a);
         lc.addView(Theme.heading(a, "Listen"));
         listen = Theme.button(a, "Listen for a button");
+        listen.setId(View.generateViewId());
         listen.setOnClickListener(v -> { if (!listening) startListening(null); });
         lc.addView(listen);
-        listenInfo = Theme.text(a, "Press Listen, then press any button on your remote to jump straight to it.", 13, Theme.MUTED);
+        listenInfo = Theme.text(a, IDLE, 13, Theme.MUTED);
         lc.addView(listenInfo);
         side.addView(lc);
+
+        LinearLayout pc = Theme.card(a);
+        pc.addView(Theme.heading(a, "Profile"));
+        LinearLayout pr = Theme.row(a);
+        prev = Theme.button(a, "◀");
+        prev.setId(View.generateViewId());
+        prev.setGravity(android.view.Gravity.CENTER);
+        prev.setOnClickListener(v -> stepProfile(-1));
+        pr.addView(prev);
+        profName = Theme.text(a, "", 18, Theme.TEXT);
+        profName.setTypeface(Typeface.DEFAULT_BOLD);
+        profName.setSingleLine(true);
+        profName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        profName.setGravity(android.view.Gravity.CENTER);
+        pr.addView(profName, new LinearLayout.LayoutParams(0, -2, 1f));
+        next = Theme.button(a, "▶");
+        next.setId(View.generateViewId());
+        next.setGravity(android.view.Gravity.CENTER);
+        next.setOnClickListener(v -> stepProfile(1));
+        ((LinearLayout.LayoutParams) next.getLayoutParams()).setMargins(Theme.dp(a, 8), Theme.dp(a, 4), 0, Theme.dp(a, 4));
+        pr.addView(next);
+        pc.addView(pr);
+        profInfo = Theme.text(a, "", 13, Theme.MUTED);
+        pc.addView(profInfo);
+        LinearLayout pr2 = Theme.row(a);
+        add = Theme.button(a, "Add app profile");
+        add.setId(View.generateViewId());
+        add.setOnClickListener(v -> addProfile());
+        pr2.addView(add);
+        remove = Theme.button(a, "Remove profile");
+        remove.setOnClickListener(v -> removeProfile());
+        pr2.addView(remove);
+        pc.addView(pr2);
+        side.addView(pc);
 
         LinearLayout mc = Theme.card(a);
         mc.addView(Theme.heading(a, "Remote model"));
@@ -124,7 +130,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         mc.addView(modelInfo);
         side.addView(mc);
 
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, -1, 1f);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, -1, 1.1f);
         sp.setMargins(Theme.dp(a, 16), 0, 0, 0);
         root.addView(Theme.scroll(a, side), sp);
 
@@ -161,12 +167,11 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
             names[i] = ps.get(i).title();
             if (ps.get(i).id.equals(presetId)) cur = i;
         }
-        a.dialog().setTitle("Which remote do you have?").setSingleChoiceItems(names, cur, (d, w) -> {
-            d.dismiss();
+        new ThemedDialog(a).title("Which remote do you have?").items(names, cur, w -> {
             Store.setRemoteModel(a, ps.get(w).id);
             loadRemote();
             refresh();
-        }).setNegativeButton("Cancel", null).show();
+        }).cancel("Cancel").show();
     }
 
     void refresh() {
@@ -176,8 +181,13 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         profInfo.setText((def ? "Every app (unless it has its own profile)" : "Only while this app is open · " + profile)
             + "\nProfile " + (ps.indexOf(profile) + 1) + " of " + ps.size());
         boolean many = ps.size() > 1;
+        // with one profile the arrows are shown dimmed (disabled, so focus never lands on a dead control)
         prev.setEnabled(many);
         next.setEnabled(many);
+        prev.setFocusable(many);
+        next.setFocusable(many);
+        remote.setNextFocusRightId(listen.getId());
+        add.setNextFocusUpId(many ? prev.getId() : listen.getId());
         remove.setVisibility(def ? View.GONE : View.VISIBLE);
         onFocusButton(remote.focused());
         remote.invalidate();
@@ -211,17 +221,15 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     void removeProfile() {
         if (RemapModel.DEFAULT.equals(profile) || !ready()) return;
         final String p = profile;
-        a.dialog().setTitle("Remove profile?")
-            .setMessage("Remove the " + ButtonEditor.appLabel(a, p) + " profile? That app goes back to the Default buttons.")
-            .setPositiveButton("Remove", (d, w) -> {
+        ThemedDialog.confirm(a, "Remove profile?",
+            "Remove the " + ButtonEditor.appLabel(a, p) + " profile? That app goes back to the Default buttons.", "Remove", () -> {
                 m = Store.remap(a);
                 m.removeProfile(p);
                 Store.saveRemap(a, m);
                 profile = RemapModel.DEFAULT;
                 refresh();
                 if (Store.enabled(a)) a.run(null, Ensure.MARKER);
-            })
-            .setNegativeButton("Cancel", null).show();
+            });
     }
 
     /** Profile whose rules apply to code in the selected profile (app profiles fall back to Default per key). */
@@ -233,12 +241,9 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     @Override public boolean hasRules(RemoteLayout.Btn b) { return b.code != 0 && m.hasRules(profile, b.code); }
 
+    /** The pill names the button; what it does is in the Selected button card (no duplicate). */
     @Override public String hint(RemoteLayout.Btn b) {
-        if (b.code == 0) return "Not learned yet";
-        int code = b.code;
-        String p = effective(code);
-        String tap = m.get(p, code, Rule.Layer.TAP);
-        return tap == null ? "Original" : ButtonEditor.describe(a, tap);
+        return b.code == 0 ? b.name + " · not learned" : b.name;
     }
 
     // ---- RemoteView.Listener ----
@@ -273,11 +278,11 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     /** Unlearned button picked: listen for it and assign whatever key arrives. */
     void teach(RemoteLayout.Btn b) {
         final String slot = b.slot;
-        a.dialog().setTitle("Teach “" + b.name + "”")
-            .setMessage("Stickman doesn't know which key this button sends yet. Choose Listen, then press "
+        new ThemedDialog(a).title("Teach “" + b.name + "”")
+            .message("Stickman doesn't know which key this button sends yet. Choose Listen, then press "
                 + b.name + " on your remote.")
-            .setPositiveButton("Listen", (d, w) -> { if (!listening) startListening(slot); })
-            .setNegativeButton("Cancel", null).show();
+            .button("Listen", () -> { if (!listening) startListening(slot); })
+            .cancel("Cancel").show();
     }
 
     /** Store code as slot's key on this remote model and show it. */
@@ -305,9 +310,9 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         final List<Integer> open = RemotePresets.unlearned(bs);
         String[] names = new String[open.size()];
         for (int i = 0; i < names.length; i++) names[i] = bs[open.get(i)].name;
-        a.dialog().setTitle("Heard " + Keys.name(code) + ". Assign to:")
-            .setItems(names, (d, w) -> assign(bs[open.get(w)].slot, code))
-            .setNegativeButton("Cancel", null).show();
+        new ThemedDialog(a).title("Heard " + Keys.name(code) + ". Assign to:")
+            .items(names, w -> assign(bs[open.get(w)].slot, code))
+            .cancel("Cancel").show();
     }
 
     // ---- listen mode ----
@@ -337,10 +342,10 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listening = true;
         listenFrom = System.currentTimeMillis();
         listenBaseAt = LogTail.lastKeyAt;
-        listen.setText("Listening…");
+        listen.setText("Listening… " + LISTEN_TIMEOUT_MS / 1000 + " s");
         listen.setSelected(true);
-        listenInfo.setText("Press any button — Back to cancel. (Gives up after " + LISTEN_TIMEOUT_MS / 1000 + " s; "
-            + "buttons that leave this screen, like Home or the app buttons, still do their job.)");
+        listenInfo.setText("Press any button on your remote now. Back cancels. "
+            + "(Buttons that leave this screen, like Home or the app buttons, still do their job.)");
         listenInfo.setTextColor(Theme.TEXT);
         remote.setListening(true);
         h.post(this::poll);
@@ -380,6 +385,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         }
         if (at > listenBaseAt) listenBaseAt = at;   // grace-period or unknown key: keep listening
         if (now - listenFrom > LISTEN_TIMEOUT_MS) { stopListening("Didn't hear a button. Try again?"); return; }
+        String c = "Listening… " + Math.max(1, (LISTEN_TIMEOUT_MS - (now - listenFrom) + 999) / 1000) + " s";
+        if (!c.contentEquals(listen.getText())) listen.setText(c);
         h.postDelayed(this::poll, 60);
     }
 
@@ -391,7 +398,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listen.setText("Listen for a button");
         listen.setSelected(false);
         remote.setListening(false);
-        listenInfo.setText(msg != null ? msg : "Press Listen, then press any button on your remote to jump straight to it.");
+        listenInfo.setText(msg != null ? msg : IDLE);
         listenInfo.setTextColor(Theme.MUTED);
     }
 

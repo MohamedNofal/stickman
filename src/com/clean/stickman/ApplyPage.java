@@ -24,7 +24,7 @@ public abstract class ApplyPage extends Page {
         a = act;
         LinearLayout l = Theme.column(a);
         l.addView(Theme.title(a, title()));
-        result = Theme.text(a, "", 15, Theme.ACCENT);
+        result = Theme.autoHide(Theme.text(a, "", 15, Theme.ACCENT));
         result.setPadding(0, 0, 0, Theme.dp(a, 8));
         l.addView(result);
         return l;
@@ -100,6 +100,7 @@ public abstract class ApplyPage extends Page {
     /** A row of choice buttons; returns them (index-aligned with labels). */
     Button[] choices(LinearLayout parent, String[] labels, Choice cb) {
         LinearLayout r = Theme.row(a);
+        r.setTag(Theme.CHIPS);
         Button[] bs = new Button[labels.length];
         for (int i = 0; i < labels.length; i++) {
             final int idx = i;

@@ -1,6 +1,5 @@
 package com.clean.stickman;
 
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -52,7 +51,7 @@ public class ButtonEditor {
     final boolean inherited;
     boolean dirty;
     TextView note, title;
-    AlertDialog dlg;
+    ThemedDialog dlg;
 
     ButtonEditor(MainActivity a, RemapModel m, String profile, RemoteLayout.Btn btn, String presetId, Runnable onSaved) {
         this.a = a;
@@ -143,11 +142,11 @@ public class ButtonEditor {
         if (apps.isEmpty()) { message(a, "No apps found", "Couldn't list the installed apps."); return; }
         String[] names = new String[apps.size()];
         for (int i = 0; i < names.length; i++) names[i] = apps.get(i)[0];
-        a.dialog().setTitle(title).setItems(names, (d, w) -> cb.got(apps.get(w))).setNegativeButton("Cancel", null).show();
+        new ThemedDialog(a).title(title).items(names, w -> cb.got(apps.get(w))).cancel("Cancel").show();
     }
 
     static void message(MainActivity a, String title, String msg) {
-        a.dialog().setTitle(title).setMessage(msg).setPositiveButton("OK", null).show();
+        ThemedDialog.message(a, title, msg);
     }
 
     // ---- the dialog ----
@@ -181,8 +180,6 @@ public class ButtonEditor {
 
     void show() {
         LinearLayout col = Theme.column(a);
-        int p = Theme.dp(a, 24);
-        col.setPadding(p, Theme.dp(a, 20), p, Theme.dp(a, 8));
 
         title = Theme.text(a, btn.name, 26, Theme.TEXT);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -227,13 +224,24 @@ public class ButtonEditor {
         }
         refreshRows();
 
-        AlertDialog d = dlg = a.dialog().setView(Theme.scroll(a, col))
-            .setPositiveButton("Save", (x, w) -> save(false))
-            .setNeutralButton(def ? "Reset to original" : "Use Default here", (x, w) -> save(true))
-            .setNegativeButton("Cancel", null)
-            .create();
-        d.show();
-        if (rows[0] != null) rows[0].requestFocus();
+        // Save first and the default when moving down into the buttons; Reset asks before it acts
+        final String resetLabel = def ? "Reset to original" : "Use Default here";
+        dlg = new ThemedDialog(a).wide().view(col);
+        dlg.button("Save", () -> save(false));
+        dlg.buttonKeep(resetLabel, v -> confirmReset(def));
+        dlg.cancel("Cancel").focusButton(0);
+        if (rows[0] != null) dlg.focus(rows[0]);
+        dlg.show();
+    }
+
+    void confirmReset(boolean def) {
+        ThemedDialog.confirm(a, def ? "Reset " + btn.name + "?" : "Use Default for " + btn.name + "?",
+            def ? "Put every layer of " + btn.name + " back to Original in the Default profile?"
+                : "Drop this app's own settings for " + btn.name + " so the Default profile applies again?",
+            def ? "Reset" : "Use Default", () -> {
+                if (dlg != null) dlg.dismiss();
+                save(true);
+            });
     }
 
     LinearLayout.LayoutParams extraLp() {
@@ -251,33 +259,26 @@ public class ButtonEditor {
 
     /** New name for an app button on this remote model (validated: one line, at most 24 characters). */
     void rename() {
-        final android.widget.EditText in = new android.widget.EditText(a);
-        in.setSingleLine(true);
+        final android.widget.EditText in = Theme.edit(a);
         in.setText(btn.name);
         in.setSelection(in.getText().length());
         in.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(RemotePresets.MAX_LABEL) });
-        in.setTextColor(Theme.TEXT);
         LinearLayout box = Theme.column(a);
-        int p = Theme.dp(a, 20);
-        box.setPadding(p, Theme.dp(a, 8), p, 0);
         box.addView(in);
         RemoteLayout.Btn[] orig = RemotePresets.get(presetId).buttons;
         final String dflt = orig[Math.max(0, RemotePresets.slotIndex(orig, btn.slot))].name;
         final TextView err = Theme.text(a, "", 13, Theme.ACCENT);
         err.setVisibility(View.GONE);
         box.addView(err);
-        final AlertDialog d = a.dialog().setTitle("Rename button").setView(box)
-            .setPositiveButton("Save", null)   // replaced below so invalid input keeps the dialog open
-            .setNeutralButton("Default (" + dflt + ")", (x, w) -> renamed(null, dflt))
-            .setNegativeButton("Cancel", null).create();
-        d.show();
-        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        final ThemedDialog d = new ThemedDialog(a).title("Rename button").view(box);
+        d.buttonKeep("Save", v -> {
             String s = in.getText().toString();
             String why = RemotePresets.invalidLabel(s);
             if (why != null) { err.setText(why); err.setVisibility(View.VISIBLE); in.requestFocus(); return; }
             renamed(s.trim(), s.trim());
             d.dismiss();
         });
+        d.button("Default (" + dflt + ")", () -> renamed(null, dflt)).cancel("Cancel").focus(in).show();
     }
 
     /** Store the new label (null = default) and show name everywhere in this editor right away. */
@@ -291,12 +292,12 @@ public class ButtonEditor {
 
     /** Drop the learned code; its rules stay in effect unless the owner also removes them. */
     void forget() {
-        a.dialog().setTitle("Forget learned key?")
-            .setMessage(btn.name + " goes back to “not learned yet”; you can teach it again with Listen.\n\n"
+        new ThemedDialog(a).title("Forget learned key?")
+            .message(btn.name + " goes back to “not learned yet”; you can teach it again with Listen.\n\n"
                 + "Rules you set for key " + code + " stay in effect (in every profile) unless you also remove them.")
-            .setPositiveButton("Forget", (d, w) -> forgotten(false))
-            .setNeutralButton("Also remove its rules", (d, w) -> forgotten(true))
-            .setNegativeButton("Cancel", null).show();
+            .button("Forget", () -> forgotten(false))
+            .button("Also remove its rules", () -> forgotten(true))
+            .cancel("Cancel").focusButton(2).show();
     }
 
     void forgotten(boolean removeRules) {
@@ -321,7 +322,7 @@ public class ButtonEditor {
     void choose(final Rule.Layer l) {
         String orig = l == Rule.Layer.DOUBLE ? "Off (no double press)" : "Original";
         String[] opts = { orig, "Do nothing", "Open an app…", "Act as another button…", "A Stickman action…" };
-        a.dialog().setTitle(layerName(l) + " · " + btn.name).setItems(opts, (d, w) -> {
+        new ThemedDialog(a).title(layerName(l) + " · " + btn.name).items(opts, w -> {
             switch (w) {
                 case 0: set(l, null); break;
                 case 1: set(l, "none"); break;
@@ -329,7 +330,7 @@ public class ButtonEditor {
                 case 3: chooseKey(l); break;
                 default: chooseStickman(l);
             }
-        }).setNegativeButton("Cancel", null).show();
+        }).cancel("Cancel").show();
     }
 
     void chooseKey(final Rule.Layer l) {
@@ -337,8 +338,8 @@ public class ButtonEditor {
         for (int k : Keys.ALL) if (k != code) codes.add(k);
         String[] names = new String[codes.size()];
         for (int i = 0; i < names.length; i++) names[i] = Keys.name(codes.get(i));
-        a.dialog().setTitle("Act as which button?").setItems(names, (d, w) -> set(l, "key " + codes.get(w)))
-            .setNegativeButton("Cancel", null).show();
+        new ThemedDialog(a).title("Act as which button?").items(names, w -> set(l, "key " + codes.get(w)))
+            .cancel("Cancel").show();
     }
 
     /** Built from core/Actions: every argument-free, non-internal id, plus the open_screen submenu. */
@@ -350,17 +351,17 @@ public class ButtonEditor {
             a.getPackageManager().getPackageInfo(Store.WOLF_PKG, 0);
             labels.add("Go to Wolf home"); acts.add("start " + Store.WOLF);
         } catch (Exception ignored) {}
-        a.dialog().setTitle("Stickman action").setItems(labels.toArray(new String[0]), (d, w) -> {
+        new ThemedDialog(a).title("Stickman action").items(labels.toArray(new String[0]), w -> {
             String act = acts.get(w);
             if (act.equals("@screen")) {
                 String[] n = new String[Catalog.SHORTCUTS.length];
                 for (int i = 0; i < n.length; i++) n[i] = Catalog.SHORTCUTS[i][0];
-                a.dialog().setTitle("Open which screen?").setItems(n, (d2, w2) ->
-                    set(l, "act " + Actions.OPEN_SCREEN + " " + Catalog.SHORTCUTS[w2][1])).setNegativeButton("Cancel", null).show();
+                new ThemedDialog(a).title("Open which screen?").items(n, w2 ->
+                    set(l, "act " + Actions.OPEN_SCREEN + " " + Catalog.SHORTCUTS[w2][1])).cancel("Cancel").show();
             } else {
                 set(l, act);
             }
-        }).setNegativeButton("Cancel", null).show();
+        }).cancel("Cancel").show();
     }
 
     /** reset: default profile -> every layer Original; app profile -> drop its rules so Default applies. */

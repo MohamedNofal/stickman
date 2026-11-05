@@ -30,4 +30,11 @@ public class DeviceInfoTest {
         T.eq(0L, d.memTotalMb, "no mem");
         T.eq(null, d.fireOs, "no os");
     }
+
+    public void testStorageOnFireOsMountPoint() {
+        // Fire OS 8 reports /data through the obb bind mount
+        DeviceInfo d = DeviceInfo.parse("Filesystem      Size  Used Avail Use% Mounted on\n"
+            + "/dev/block/dm-6 4.9G  2.2G  2.5G  48% /storage/emulated/0/Android/obb\n");
+        T.eq("2.5G free of 4.9G (48% used)", d.storage, "storage via obb mount");
+    }
 }

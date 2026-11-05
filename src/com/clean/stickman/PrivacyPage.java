@@ -44,6 +44,8 @@ public class PrivacyPage extends ApplyPage {
         String[] names = new String[Catalog.DNS_PRESETS.length];
         for (int i = 0; i < names.length; i++) names[i] = Catalog.DNS_PRESETS[i][0];
         LinearLayout r1 = Theme.row(a), r2 = Theme.row(a);
+        r1.setTag(Theme.CHIPS);
+        r2.setTag(Theme.CHIPS);
         presets = new Button[names.length];
         for (int i = 0; i < names.length; i++) {
             final int idx = i;
@@ -70,18 +72,17 @@ public class PrivacyPage extends ApplyPage {
         String[] pr = Catalog.DNS_PRESETS[i];
         if (pr[1] == null) { apply(null, pr[0]); return; }
         if (!"nextdns".equals(pr[1])) { apply(pr[1], pr[0]); return; }
-        final EditText id = new EditText(a);
-        id.setSingleLine(true);
+        final EditText id = Theme.edit(a);
         id.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         id.setHint("e.g. abc123");
-        a.dialog().setTitle("Your NextDNS ID").setMessage("The ID from your NextDNS setup page (letters and numbers).")
-            .setView(id)
-            .setPositiveButton("Use it", (dl, w) -> {
+        new ThemedDialog(a).title("Your NextDNS ID").message("The ID from your NextDNS setup page (letters and numbers).")
+            .view(id)
+            .button("Use it", () -> {
                 String host = Catalog.nextDns(id.getText().toString().trim());
                 if (host == null) { say("That isn't a valid NextDNS ID: nothing changed."); return; }
                 apply(host, "NextDNS");
             })
-            .setNegativeButton("Cancel", null).show();
+            .cancel("Cancel").focus(id).show();
     }
 
     void apply(String host, String label) {

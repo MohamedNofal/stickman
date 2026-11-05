@@ -8,6 +8,7 @@ import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
+import com.clean.stickman.core.LiveValues;
 import com.clean.stickman.core.StickdConf;
 
 import java.util.ArrayList;
@@ -23,9 +24,10 @@ public class SpeedPage extends ApplyPage {
     static final long BOOST_TIMEOUT_MS = 20000;
     static final Pattern BOOST = Pattern.compile("freed_mb=(\\d+)\\s+killed=(\\d+)");
 
-    Button onLeave;
-    Button[] interval, anim;
-    TextView boostInfo, lists;
+    Button[] onLeave, interval, anim;
+    TextView boostInfo, lists, animNow;
+    /** When the live animation scale was last read (0 = not yet). */
+    long readAt;
     /** When Boost was pressed (0 = not waiting for a STATUS boost line). */
     long boostAt;
 
@@ -37,15 +39,26 @@ public class SpeedPage extends ApplyPage {
         LinearLayout b = card(l, "Boost", "Closes background apps and trims memory. The app you're using, home, "
             + "playing media and your never-close apps are left alone.");
         button(b, "Boost now", v -> boost());
-        boostInfo = Theme.text(a, "", 15, Theme.TEXT);
+        boostInfo = Theme.autoHide(Theme.text(a, "", 15, Theme.TEXT));
         b.addView(boostInfo);
 
         LinearLayout k = card(l, "Auto-close apps", null);
-        onLeave = button(k, "", v -> { StickdConf c = conf(); c.onLeave = !c.onLeave; save(c); });
+        k.addView(Theme.text(a, "Close apps when I leave them", 14, Theme.MUTED));
+        onLeave = choices(k, new String[] { "On", "Off" }, i -> {
+            StickdConf c = conf();
+            if (c.onLeave == (i == 0)) return;
+            c.onLeave = i == 0;
+            save(c);
+        });
         k.addView(Theme.text(a, "Also every…", 14, Theme.MUTED));
         String[] il = new String[INTERVALS.length];
         for (int i = 0; i < il.length; i++) il[i] = INTERVALS[i] == 0 ? "Off" : INTERVALS[i] + " min";
-        interval = choices(k, il, i -> { StickdConf c = conf(); c.intervalMin = INTERVALS[i]; save(c); });
+        interval = choices(k, il, i -> {
+            StickdConf c = conf();
+            if (c.intervalMin == INTERVALS[i]) return;
+            c.intervalMin = INTERVALS[i];
+            save(c);
+        });
         LinearLayout r = Theme.row(a);
         button(r, "Never close…", v -> pickList(true));
         button(r, "Always force-stop…", v -> pickList(false));
@@ -62,6 +75,8 @@ public class SpeedPage extends ApplyPage {
         LinearLayout an = card(l, "Animation speed", "Faster animations make menus feel snappier.");
         anim = choices(an, new String[] { "1×", "0.5×", "Off" }, i ->
             send(Commands.animation(ANIM[i]), "anim:" + i, "Setting animations…"));
+        animNow = Theme.autoHide(Theme.text(a, "", 14, Theme.MUTED));
+        an.addView(animNow);
 
         refresh();
         return Theme.scroll(a, l);
@@ -76,13 +91,28 @@ public class SpeedPage extends ApplyPage {
 
     void refresh() {
         StickdConf c = conf();
-        onLeave.setText("Close apps when I leave them:  " + (c.onLeave ? "On" : "Off"));
-        onLeave.setSelected(c.onLeave);
+        select(onLeave, c.onLeave ? 0 : 1);
         int sel = 0;
         for (int i = 0; i < INTERVALS.length; i++) if (INTERVALS[i] == c.intervalMin) sel = i;
         select(interval, sel);
         lists.setText("Never close: " + names(c.whitelist) + "\nAlways force-stop: " + names(c.blacklist));
         select(anim, pref("anim", -1));
+        if (pref("anim", -1) < 0 && animNow.length() == 0) animNow.setText("Current: unknown");
+    }
+
+    /** Live animation scale (read-only, once per page show); the stored choice stays the fallback. */
+    void readLive() {
+        if (Bridge.otherVpnActive(a) || Bridge.busy && readAt != 0) return;
+        readAt = System.currentTimeMillis();
+        mine.put(LiveValues.ANIM_READ, "live");
+        Bridge.run(a, LiveValues.ANIM_READ, false);
+    }
+
+    void showLive(String out) {
+        String v = LiveValues.value(out, "ANIM");
+        int i = LiveValues.indexOfScale(ANIM, v);
+        if (i >= 0) { putPref("anim", i); select(anim, i); animNow.setText(""); }
+        else if (pref("anim", -1) < 0) animNow.setText("Current: " + (v == null ? "unknown" : v + "×"));
     }
 
     String names(Set<String> pkgs) {
@@ -109,10 +139,10 @@ public class SpeedPage extends ApplyPage {
         if (apps.isEmpty()) { say("Couldn't list the installed apps."); return; }
         String[] names = new String[apps.size()];
         for (int i = 0; i < names.length; i++) names[i] = apps.get(i)[0];
-        a.dialog().setTitle("Keep which app asleep?").setItems(names, (d, w) -> {
+        new ThemedDialog(a).title("Keep which app asleep?").items(names, w -> {
             String[] app = apps.get(w);
             send(Commands.keepAsleep(app[1], true), "asleep:" + app[0], "Putting " + app[0] + " to sleep…");
-        }).setNegativeButton("Cancel", null).show();
+        }).cancel("Cancel").show();
     }
 
     /** Multi-choice picker for the whitelist (any app) or the force-stop blacklist (protected apps excluded). */
@@ -124,16 +154,16 @@ public class SpeedPage extends ApplyPage {
         String[] names = new String[apps.size()];
         final boolean[] on = new boolean[apps.size()];
         for (int i = 0; i < names.length; i++) { names[i] = apps.get(i)[0]; on[i] = set.contains(apps.get(i)[1]); }
-        a.dialog().setTitle(white ? "Never close these apps" : "Force-stop these apps (not just close)")
-            .setMultiChoiceItems(names, on, (d, w, checked) -> on[w] = checked)
-            .setPositiveButton("Save", (d, w) -> {
+        new ThemedDialog(a).title(white ? "Never close these apps" : "Force-stop these apps (not just close)")
+            .multi(names, on)
+            .button("Save", () -> {
                 set.clear();
                 for (int i = 0; i < on.length; i++) if (on[i]) set.add(apps.get(i)[1]);
                 if (!white) set.removeIf(Catalog::isProtected);
                 if (white) c.blacklist.removeAll(set); else c.whitelist.removeAll(set);
                 save(c);
             })
-            .setNegativeButton("Cancel", null).show();
+            .cancel("Cancel").show();
     }
 
     void boost() {
@@ -143,7 +173,11 @@ public class SpeedPage extends ApplyPage {
         send(Commands.act(Actions.BOOST, null), "boost", "Boosting…");
     }
 
-    @Override public void onShow() { if (a != null) refresh(); }
+    @Override public void onShow() {
+        if (a == null) return;
+        refresh();
+        readLive();
+    }
 
     @Override public void onTick() {
         if (a == null || boostAt == 0) return;
@@ -161,12 +195,14 @@ public class SpeedPage extends ApplyPage {
     }
 
     @Override String describe(String kind, String out) {
+        if (kind.equals("live")) { showLive(out); return null; }
         if (kind.equals("boost")) return null;   // the STATUS boost line reports the outcome
         if (kind.equals("conf")) return Store.pid(out, "STICKD") != null ? "Saved ✓" : "Saved, but stickd isn't running.";
         if (kind.startsWith("anim:")) {
             int i = Integer.parseInt(kind.substring(5));
             putPref("anim", i);
             select(anim, i);
+            animNow.setText("");
             return "Animations set to " + anim[i].getText() + ".";
         }
         if (kind.startsWith("asleep:")) return kind.substring(7) + " is kept asleep.";
@@ -183,9 +219,9 @@ public class SpeedPage extends ApplyPage {
         result.setText("");
         String[] names = new String[pkgs.size()];
         for (int i = 0; i < names.length; i++) names[i] = ButtonEditor.appLabel(a, pkgs.get(i));
-        a.dialog().setTitle("Kept asleep (choose one to wake it)").setItems(names, (d, w) -> {
+        new ThemedDialog(a).title("Kept asleep (choose one to wake it)").items(names, w -> {
             String n = names[w];
             send(Commands.keepAsleep(pkgs.get(w), false), "awake:" + n, "Letting " + n + " run normally…");
-        }).setNegativeButton("Close", null).show();
+        }).cancel("Close").show();
     }
 }

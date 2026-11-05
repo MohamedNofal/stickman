@@ -14,7 +14,7 @@ public final class DeviceInfo {
 
     private static final Pattern MEM = Pattern.compile("^(MemTotal|MemAvailable):\\s+(\\d+)\\s*kB");
     private static final Pattern TEMP = Pattern.compile("mValue=(-?[0-9.]+)(?:.*?mType=(-?\\d+))?", Pattern.CASE_INSENSITIVE);
-    private static final Pattern DF = Pattern.compile("^\\S+\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\d+%)\\s+/data\\s*$");
+    private static final Pattern DF = Pattern.compile("^\\S+\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\d+%)\\s+/\\S*\\s*$");
     private static final Pattern RSSI = Pattern.compile("RSSI:\\s*(-?\\d+)");
     private static final Pattern SSID = Pattern.compile("SSID:\\s*\"([^\"]*)\"");
     private static final Pattern INET = Pattern.compile("^\\s*inet\\s+([0-9.]+)");

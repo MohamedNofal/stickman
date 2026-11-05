@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <application android:label="Stickman"
         android:icon="@mipmap/ic_launcher" android:banner="@drawable/banner" android:allowBackup="false"
-        android:extractNativeLibs="true" android:theme="@android:style/Theme.DeviceDefault">
+        android:extractNativeLibs="true" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true"
             android:icon="@mipmap/ic_launcher" android:banner="@drawable/banner">
             <intent-filter>

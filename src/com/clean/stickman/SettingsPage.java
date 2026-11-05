@@ -9,6 +9,7 @@ import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EnsureScript;
 import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.RemapModel;
+import com.clean.stickman.core.ResultText;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -51,6 +52,7 @@ public class SettingsPage extends Page {
         c2.addView(Theme.heading(a, "Remote timing"));
         c2.addView(Theme.text(a, "Double-press window (keys with a double-press layer wait this long for a second press)", 14, Theme.MUTED));
         LinearLayout r1 = Theme.row(a);
+        r1.setTag(Theme.CHIPS);
         for (int i = 0; i < DOUBLE_MS.length; i++) {
             final int v = DOUBLE_MS[i];
             doubleBtns[i] = Theme.button(a, v + " ms");
@@ -60,6 +62,7 @@ public class SettingsPage extends Page {
         c2.addView(r1);
         c2.addView(Theme.text(a, "Hold time", 14, Theme.MUTED));
         LinearLayout r2 = Theme.row(a);
+        r2.setTag(Theme.CHIPS);
         for (int i = 0; i < HOLD_MS.length; i++) {
             final int v = HOLD_MS[i];
             holdBtns[i] = Theme.button(a, v + " ms");
@@ -79,7 +82,7 @@ public class SettingsPage extends Page {
         proxy.setOnClickListener(v -> send(Commands.clearDeadProxy(), "proxy", "Checking proxy…"));
         r3.addView(proxy);
         c3.addView(r3);
-        result = Theme.text(a, "", 15, Theme.TEXT);
+        result = Theme.autoHide(Theme.text(a, "", 15, Theme.TEXT));
         c3.addView(result);
         l.addView(c3);
 
@@ -88,15 +91,14 @@ public class SettingsPage extends Page {
         c4.addView(Theme.text(a, "Puts back every system change Stickman made: DNS, animations, sleep and screensaver values, "
             + "standby buckets and disabled apps. Your button remaps stay.", 14, Theme.MUTED));
         Button restore = Theme.button(a, "Restore defaults…");
-        restore.setOnClickListener(v -> a.dialog().setTitle("Restore defaults?")
-            .setMessage("Put back every system setting Stickman changed?")
-            .setPositiveButton("Restore", (d, w) -> send(Originals.restoreScript(), "restore", "Restoring…"))
-            .setNegativeButton("Cancel", null).show());
+        restore.setOnClickListener(v -> ThemedDialog.confirm(a, "Restore defaults?",
+            "Put back every system setting Stickman changed?", "Restore",
+            () -> send(Originals.restoreScript(), "restore", "Restoring…")));
         c4.addView(restore);
         l.addView(c4);
 
         LinearLayout c5 = Theme.card(a);
-        c5.addView(Theme.heading(a, "Last bridge result"));
+        c5.addView(Theme.heading(a, "Last change"));
         last = Theme.text(a, "", 14, Theme.TEXT);
         c5.addView(last);
         l.addView(c5);
@@ -109,7 +111,7 @@ public class SettingsPage extends Page {
         boolean on = Store.enabled(a);
         master.setText(on ? "Turn Stickman OFF" : "Turn Stickman ON");
         masterInfo.setText(on
-            ? "ON: remapd owns the remote and stickd runs automation. OFF releases the remote instantly and stops both."
+            ? "ON: Stickman remaps your remote's buttons and runs its background automation. OFF gives the remote back instantly and stops both."
             : "OFF: the remote works normally and nothing runs in the background.");
         RemapModel m = Store.hasRemap(a) ? Store.remap(a) : null;
         int dbl = m == null ? 250 : m.doubleMs, hold = m == null ? 600 : m.holdMs;
@@ -183,8 +185,8 @@ public class SettingsPage extends Page {
 
     @Override public void onTick() {
         if (a == null) return;
-        String s = Bridge.busy ? "working…" : Bridge.lastResult.isEmpty() ? "(nothing run yet)"
-            : Bridge.lastResult + "\n" + new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(Bridge.lastResultAt));
+        String s = Bridge.busy ? "Working…" : Bridge.lastResult.isEmpty() ? ResultText.human("")
+            : ResultText.human(Bridge.lastResult) + "  ·  " + new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date(Bridge.lastResultAt));
         if (!s.equals(lastShown)) { lastShown = s; last.setText(s); }
     }
 

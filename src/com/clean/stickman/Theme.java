@@ -21,10 +21,14 @@ public final class Theme {
     public static final int ACCENT = 0xFFFF9A3C;
     public static final int TEXT = 0xFFF3EDE6;
     public static final int MUTED = 0xFFA39A90;
+    /** Text of a disabled control. */
+    public static final int DIM = 0xFF5E554C;
+    /** Tag of a row of choice chips: entering it vertically focuses its selected chip (MainActivity). */
+    public static final String CHIPS = "chips";
 
     public static int dp(Context c, float v) { return Math.round(v * c.getResources().getDisplayMetrics().density); }
 
-    private static GradientDrawable rect(Context c, int fill, int stroke, float strokeDp) {
+    static GradientDrawable rect(Context c, int fill, int stroke, float strokeDp) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(fill);
         g.setCornerRadius(dp(c, 8));
@@ -64,8 +68,11 @@ public final class Theme {
         sl.addState(new int[] { android.R.attr.state_focused }, rect(c, 0xFF2C241C, ACCENT, 3));
         sl.addState(new int[] { android.R.attr.state_pressed }, rect(c, 0xFF2C241C, ACCENT, 3));
         sl.addState(new int[] { android.R.attr.state_selected }, rect(c, sel, WOOD, 1));
+        sl.addState(new int[] { -android.R.attr.state_enabled }, rect(c, 0xFF1A1612, 0xFF2A231C, 1));
         sl.addState(new int[] {}, rect(c, PANEL, 0xFF3A3028, 1));
         b.setBackground(sl);
+        b.setTextColor(new android.content.res.ColorStateList(
+            new int[][] { new int[] { -android.R.attr.state_enabled }, new int[] {} }, new int[] { DIM, TEXT }));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.setMargins(0, dp(c, 4), dp(c, 8), dp(c, 4));
         b.setLayoutParams(lp);
@@ -107,7 +114,35 @@ public final class Theme {
     public static ScrollView scroll(Context c, View child) {
         ScrollView s = new ScrollView(c);
         s.setFillViewport(true);
+        s.setFocusable(false);   // never hold focus itself (it would be an invisible focus)
         s.addView(child);
         return s;
+    }
+
+    /** Hides t while its text is empty, so empty status lines leave no gap. */
+    public static TextView autoHide(final TextView t) {
+        t.setVisibility(t.length() == 0 ? View.GONE : View.VISIBLE);
+        t.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            public void afterTextChanged(android.text.Editable s) { t.setVisibility(s.length() == 0 ? View.GONE : View.VISIBLE); }
+        });
+        return t;
+    }
+
+    /** Single-line text field: dark fill, WOOD outline, ACCENT when focused. */
+    public static android.widget.EditText edit(Context c) {
+        android.widget.EditText e = new android.widget.EditText(c);
+        e.setSingleLine(true);
+        e.setTextColor(TEXT);
+        e.setHintTextColor(MUTED);
+        e.setTextSize(18);
+        int p = dp(c, 12);
+        StateListDrawable sl = new StateListDrawable();
+        sl.addState(new int[] { android.R.attr.state_focused }, rect(c, 0xFF2C241C, ACCENT, 3));
+        sl.addState(new int[] {}, rect(c, BG, WOOD, 1));
+        e.setBackground(sl);
+        e.setPadding(p, p, p, p);
+        return e;
     }
 }

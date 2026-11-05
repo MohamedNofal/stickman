@@ -1,23 +1,30 @@
 package com.clean.stickman;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.net.VpnService;
 import android.os.Bundle;
 import android.os.Handler;
+import android.graphics.Rect;
 import android.view.FocusFinder;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewParent;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
+import com.clean.stickman.core.FocusPick;
 import com.clean.stickman.core.Keys;
+import com.clean.stickman.core.RemoteLayout;
+
+import java.util.ArrayList;
 
 /** App shell: left sidebar of sections + a content area that swaps Page views. Fully D-pad driven. */
 public class MainActivity extends Activity implements Bridge.Listener {
@@ -29,6 +36,9 @@ public class MainActivity extends Activity implements Bridge.Listener {
     final Button[] nav = new Button[SECTIONS.length];
     final Handler h = new Handler();
     LinearLayout sidebar;
+    ScrollView sideScroll;
+    /** A Back press in the content moved focus to the sidebar: swallow its release too (don't exit). */
+    boolean backToSidebar;
     FrameLayout content;
     TextView statusLine;
     int current = -1;
@@ -62,28 +72,35 @@ public class MainActivity extends Activity implements Bridge.Listener {
         root.setBackgroundColor(Theme.BG);
         root.setGravity(0);
 
-        sidebar = Theme.column(this);
-        sidebar.setBackgroundColor(Theme.PANEL);
+        LinearLayout side = Theme.column(this);
+        side.setBackgroundColor(Theme.PANEL);
         int p = Theme.dp(this, 20);
-        sidebar.setPadding(p, Theme.dp(this, 24), Theme.dp(this, 12), p);
+        side.setPadding(p, Theme.dp(this, 20), Theme.dp(this, 12), Theme.dp(this, 12));
         TextView brand = Theme.text(this, "Stickman", 26, Theme.ACCENT);
         brand.setTypeface(Typeface.DEFAULT_BOLD);
-        brand.setPadding(Theme.dp(this, 4), 0, 0, Theme.dp(this, 16));
-        sidebar.addView(brand);
+        brand.setPadding(Theme.dp(this, 4), 0, 0, Theme.dp(this, 10));
+        side.addView(brand);
+        // the items scroll (the focused one is always brought into view), so all 8 are reachable at any size
+        sidebar = Theme.column(this);
         for (int i = 0; i < SECTIONS.length; i++) {
             final int idx = i;
             Button bt = Theme.button(this, SECTIONS[i]);
-            bt.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-            ((LinearLayout.LayoutParams) bt.getLayoutParams()).setMargins(0, Theme.dp(this, 3), 0, Theme.dp(this, 3));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.setMargins(0, Theme.dp(this, 3), 0, Theme.dp(this, 3));
+            bt.setLayoutParams(lp);
             bt.setOnClickListener(v -> select(idx));
             nav[i] = bt;
             sidebar.addView(bt);
         }
-        View spacer = new View(this);
-        sidebar.addView(spacer, new LinearLayout.LayoutParams(-1, 0, 1f));
+        sideScroll = new ScrollView(this);
+        sideScroll.setVerticalScrollBarEnabled(false);
+        sideScroll.setFocusable(false);
+        sideScroll.addView(sidebar);
+        side.addView(sideScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
         statusLine = Theme.text(this, "", 13, Theme.MUTED);
-        sidebar.addView(statusLine);
-        root.addView(sidebar, new LinearLayout.LayoutParams(Theme.dp(this, 220), -1));
+        statusLine.setPadding(Theme.dp(this, 4), Theme.dp(this, 6), 0, 0);
+        side.addView(statusLine);
+        root.addView(side, new LinearLayout.LayoutParams(Theme.dp(this, 220), -1));
 
         content = new FrameLayout(this);
         int cp = Theme.dp(this, 32);
@@ -159,36 +176,169 @@ public class MainActivity extends Activity implements Bridge.Listener {
         return false;
     }
 
-    /** Right from the sidebar enters the page; Left at the page's left edge returns to the sidebar. */
+    /**
+     * Focus rules (D-pad):
+     * - Right from the sidebar enters the page on its first VISIBLE control.
+     * - Left at the page's left edge returns to the ACTIVE page's sidebar item.
+     * - Up/Down never leave their region: the sidebar and the page each keep focus at their ends.
+     * - Entering a row of choice chips vertically lands on its selected chip.
+     * - Back in the page returns to the sidebar; Back on the sidebar leaves the app.
+     */
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
         if (current >= 0 && pages[current].onKey(e)) return true;
-        if (e.getAction() == KeyEvent.ACTION_DOWN && current >= 0) {
-            View f = getCurrentFocus();
-            int k = e.getKeyCode();
-            // the drawn remote moves its own focus first; only its left edge falls through to the sidebar rule
-            if (f instanceof RemoteView && k == KeyEvent.KEYCODE_DPAD_LEFT
-                && ((RemoteView) f).canMove(com.clean.stickman.core.RemoteLayout.LEFT)) return super.dispatchKeyEvent(e);
-            if (f != null && k == KeyEvent.KEYCODE_DPAD_RIGHT && isIn(f, sidebar)) {
-                if (f != nav[current]) select(indexOf(f));
-                if (content.requestFocus(View.FOCUS_RIGHT)) return true;
-                return true;   // nothing focusable on this page: stay put
-            }
-            if (f != null && k == KeyEvent.KEYCODE_DPAD_LEFT && isIn(f, content)) {
-                View next = FocusFinder.getInstance().findNextFocus(content, f, View.FOCUS_LEFT);
-                if (next == null) { nav[current].requestFocus(); return true; }
-            }
+        int k = e.getKeyCode();
+        if (k == KeyEvent.KEYCODE_BACK && e.getAction() == KeyEvent.ACTION_UP && backToSidebar) {
+            backToSidebar = false;
+            return true;
         }
-        return super.dispatchKeyEvent(e);
+        if (e.getAction() != KeyEvent.ACTION_DOWN || current < 0) return super.dispatchKeyEvent(e);
+        View f = getCurrentFocus();
+        if (f == null) return super.dispatchKeyEvent(e);
+        boolean inSide = isIn(f, sidebar), inContent = isIn(f, content);
+        if (k == KeyEvent.KEYCODE_BACK && inContent) {
+            if (e.getRepeatCount() == 0) nav[current].requestFocus();
+            backToSidebar = true;
+            return true;
+        }
+        int dir = k == KeyEvent.KEYCODE_DPAD_UP ? View.FOCUS_UP : k == KeyEvent.KEYCODE_DPAD_DOWN ? View.FOCUS_DOWN
+            : k == KeyEvent.KEYCODE_DPAD_LEFT ? View.FOCUS_LEFT : k == KeyEvent.KEYCODE_DPAD_RIGHT ? View.FOCUS_RIGHT : 0;
+        if (dir == 0) return super.dispatchKeyEvent(e);
+        if (inSide) {
+            if (dir == View.FOCUS_RIGHT) {
+                if (f != nav[current]) select(indexOf(f));
+                enterPage();
+                return true;
+            }
+            if (dir == View.FOCUS_LEFT) return true;
+            View n = FocusFinder.getInstance().findNextFocus(sidebar, f, dir);
+            if (n == null) return true;   // top/bottom of the sidebar: stay
+            return super.dispatchKeyEvent(e);
+        }
+        if (!inContent) return super.dispatchKeyEvent(e);
+        // the drawn remote moves its own focus first
+        if (f instanceof RemoteView && ((RemoteView) f).canMove(rlDir(dir))) return super.dispatchKeyEvent(e);
+        View n = FocusFinder.getInstance().findNextFocus(content, f, dir);
+        if (dir == View.FOCUS_LEFT) {
+            if (n == null || !visible(n) || !overlapsVertically(n, f)) { nav[current].requestFocus(); return true; }
+            return super.dispatchKeyEvent(e);
+        }
+        if (dir == View.FOCUS_RIGHT) {
+            if (n == null) return true;
+            return super.dispatchKeyEvent(e);
+        }
+        // up / down
+        if (n == null) {
+            reveal(f, dir);   // show trailing text, but never leave the page
+            return true;
+        }
+        View chip = chipTarget(f, n);
+        View t = chip != null ? chip : n;
+        t.requestFocus(dir);   // its ScrollView scrolls it into view
+        return true;
+    }
+
+    /** At the page's top/bottom control: scroll towards the remaining text while f stays fully visible. */
+    void reveal(View f, int dir) {
+        ScrollView sv = scrollOf(f);
+        if (sv == null) return;
+        Rect r = new Rect(0, 0, f.getWidth(), f.getHeight());
+        sv.offsetDescendantRectToMyCoords(f, r);
+        int top = sv.getScrollY(), bottom = top + sv.getHeight() - sv.getPaddingBottom();
+        int max = sv.getChildAt(0).getHeight() - sv.getHeight();
+        int delta = dir == View.FOCUS_DOWN ? Math.min(max - top, r.top - top) : -Math.min(top, bottom - r.bottom);
+        if (delta != 0) sv.smoothScrollBy(0, delta);
+    }
+
+    static int rlDir(int dir) {
+        switch (dir) {
+            case View.FOCUS_UP: return RemoteLayout.UP;
+            case View.FOCUS_DOWN: return RemoteLayout.DOWN;
+            case View.FOCUS_LEFT: return RemoteLayout.LEFT;
+            default: return RemoteLayout.RIGHT;
+        }
+    }
+
+    ScrollView scrollOf(View v) {
+        for (ViewParent p = v.getParent(); p instanceof View && p != content; p = p.getParent())
+            if (p instanceof ScrollView) return (ScrollView) p;
+        return null;
+    }
+
+    /** Moving vertically into a chip row from outside it: its selected chip (or its first), else null. */
+    static View chipTarget(View from, View n) {
+        ViewParent row = n.getParent();
+        if (!(row instanceof ViewGroup) || !Theme.CHIPS.equals(((View) row).getTag()) || from.getParent() == row) return null;
+        ViewGroup g = (ViewGroup) row;
+        View first = null;
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View c = g.getChildAt(i);
+            if (!c.isFocusable() || !c.isEnabled() || c.getVisibility() != View.VISIBLE) continue;
+            if (c.isSelected()) return c == n ? null : c;
+            if (first == null) first = c;
+        }
+        return first == n ? null : first;
+    }
+
+    static boolean visible(View v) {
+        Rect r = new Rect();
+        return v.isShown() && v.getGlobalVisibleRect(r) && r.height() >= v.getHeight() * 0.9f && r.width() >= v.getWidth() * 0.9f;
+    }
+
+    static boolean overlapsVertically(View a, View b) {
+        int[] la = new int[2], lb = new int[2];
+        a.getLocationOnScreen(la);
+        b.getLocationOnScreen(lb);
+        return la[1] < lb[1] + b.getHeight() && lb[1] < la[1] + a.getHeight();
+    }
+
+    /** True if the D-pad focus is on the current page (not the sidebar). */
+    boolean focusInPage() {
+        View f = getCurrentFocus();
+        return f != null && isIn(f, content);
+    }
+
+    /** A page rebuilt its views: if that dropped the focus out of the page, put it back on a visible control. */
+    void keepFocusInPage(boolean had) {
+        if (!had) return;
+        content.post(() -> { if (!focusInPage() && current >= 0) enterPage(); });
+    }
+
+    /** Focus the page's first visible control, once it has been laid out. */
+    void enterPage() {
+        final View pv = views[current];
+        if (pv.getWidth() > 0 && !pv.isLayoutRequested()) { focusFirstVisible(); return; }
+        pv.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {
+                pv.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                focusFirstVisible();
+            }
+        });
+    }
+
+    void focusFirstVisible() {
+        ArrayList<View> fs = new ArrayList<>();
+        content.addFocusables(fs, View.FOCUS_FORWARD);
+        ArrayList<View> ok = new ArrayList<>();
+        for (View v : fs) if (v.isShown() && v.isEnabled() && v.getWidth() > 0) ok.add(v);
+        if (ok.isEmpty()) return;   // nothing focusable on this page: stay on the sidebar
+        Rect cv = new Rect();
+        content.getGlobalVisibleRect(cv);
+        int[][] rects = new int[ok.size()][];
+        int[] loc = new int[2];
+        for (int i = 0; i < rects.length; i++) {
+            View v = ok.get(i);
+            v.getLocationOnScreen(loc);
+            rects[i] = new int[] { loc[0], loc[1], loc[0] + v.getWidth(), loc[1] + v.getHeight() };
+        }
+        View v = ok.get(FocusPick.first(rects, new int[] { cv.left, cv.top, cv.right, cv.bottom }));
+        v.requestFocus();
+        v.requestRectangleOnScreen(new Rect(0, 0, v.getWidth(), v.getHeight()), true);
     }
 
     int indexOf(View v) {
         for (int i = 0; i < nav.length; i++) if (nav[i] == v) return i;
         return current;
-    }
-
-    AlertDialog.Builder dialog() {
-        return new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert);
     }
 
     /**
@@ -202,9 +352,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
             for (String c : cmds) if (c != null) Bridge.run(this, c, false);
         };
         if (Bridge.otherVpnActive(this)) {
-            dialog().setTitle("VPN connected").setMessage(VPN_WARNING)
-                .setPositiveButton("Continue", (d, w) -> go.run())
-                .setNegativeButton("Cancel", null).show();
+            ThemedDialog.confirm(this, "VPN connected", VPN_WARNING, "Continue", go);
         } else {
             go.run();
         }

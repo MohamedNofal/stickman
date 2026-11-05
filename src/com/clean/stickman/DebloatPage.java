@@ -19,7 +19,7 @@ public class DebloatPage extends ApplyPage {
         + "Everything you disable here can be turned back on below or with Restore all.";
 
     LinearLayout recBox, advBox, oursBox;
-    Button advToggle;
+    Button advToggle, restoreAll;
     boolean advShown;
     Debloat model;
     long readAt;
@@ -40,17 +40,14 @@ public class DebloatPage extends ApplyPage {
         LinearLayout ours = card(l, "Disabled by Stickman", null);
         oursBox = Theme.column(a);
         ours.addView(oursBox);
-        button(ours, "Restore all…", v -> a.dialog().setTitle("Restore all?")
-            .setMessage("Turn every app Stickman disabled back on? Other settings stay as they are.")
-            .setPositiveButton("Restore", (d, w) -> send(Debloat.restoreAllScript() + "; " + Debloat.READ_CMD, "restore", "Restoring apps…"))
-            .setNegativeButton("Cancel", null).show());
+        restoreAll = button(ours, "Restore all…", v -> ThemedDialog.confirm(a, "Restore all?",
+            "Turn every app Stickman disabled back on? Other settings stay as they are.", "Restore",
+            () -> send(Debloat.restoreAllScript() + "; " + Debloat.READ_CMD, "restore", "Restoring apps…")));
 
         LinearLayout ad = card(l, "Advanced", "All other Amazon apps. For people who know what they're switching off.");
         advToggle = button(ad, "Show advanced list…", v -> {
             if (advShown) { advShown = false; render(); return; }
-            a.dialog().setTitle("Careful").setMessage(ADVANCED_WARNING)
-                .setPositiveButton("Show them", (d, w) -> { advShown = true; render(); })
-                .setNegativeButton("Cancel", null).show();
+            ThemedDialog.confirm(a, "Careful", ADVANCED_WARNING, "Show them", () -> { advShown = true; render(); });
         });
         advBox = Theme.column(a);
         ad.addView(advBox);
@@ -69,11 +66,20 @@ public class DebloatPage extends ApplyPage {
     }
 
     void render() {
+        boolean had = a.focusInPage();
+        renderRows();
+        a.keepFocusInPage(had);   // removing the focused row must not throw focus to the sidebar
+    }
+
+    void renderRows() {
         recBox.removeAllViews();
         oursBox.removeAllViews();
         advBox.removeAllViews();
         advToggle.setText(advShown ? "Hide advanced list" : "Show advanced list…");
+        // nothing to restore: no focusable, active-looking button
+        restoreAll.setVisibility(model != null && !model.disabledByUs.isEmpty() ? android.view.View.VISIBLE : android.view.View.GONE);
         if (model == null) {
+            oursBox.addView(Theme.text(a, "Not read yet.", 14, Theme.MUTED));
             recBox.addView(Theme.text(a, "Press Refresh list to read the apps.", 14, Theme.MUTED));
             return;
         }
@@ -103,11 +109,22 @@ public class DebloatPage extends ApplyPage {
         if (advShown) {
             List<String> adv = model.advanced();
             if (adv.isEmpty()) advBox.addView(Theme.text(a, "No other Amazon apps.", 14, Theme.MUTED));
-            for (final String pkg : adv) {
-                Button b = Theme.button(a, pkg);
-                b.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-                b.setOnClickListener(v -> confirmDisable(pkg, pkg));
-                advBox.addView(b);
+            else advBox.addView(Theme.text(a, adv.size() + " apps, A–Z. Disable asks first; you can turn any of "
+                + "them back on above.", 14, Theme.MUTED));
+            java.util.List<String[]> rows = new java.util.ArrayList<>();
+            for (String pkg : adv) rows.add(new String[] { ButtonEditor.appLabel(a, pkg), pkg });
+            java.util.Collections.sort(rows, (x, y) -> x[0].compareToIgnoreCase(y[0]));
+            for (String[] r : rows) {
+                final String pkg = r[1], label = r[0];
+                LinearLayout row = Theme.row(a);
+                LinearLayout txt = Theme.column(a);
+                TextView name = Theme.text(a, label, 16, Theme.TEXT);
+                name.setTypeface(Typeface.DEFAULT_BOLD);
+                txt.addView(name);
+                if (!label.equals(pkg)) txt.addView(Theme.text(a, pkg, 13, Theme.MUTED));
+                row.addView(txt, new LinearLayout.LayoutParams(0, -2, 1f));
+                button(row, "Disable", v -> confirmDisable(pkg, label));
+                advBox.addView(row);
             }
         }
     }
@@ -122,10 +139,9 @@ public class DebloatPage extends ApplyPage {
     void confirmDisable(final String pkg, String label) {
         final String cmd = cmdAndRead(Commands.debloat(pkg, true));
         if (cmd == null) { say(label + " is protected and can't be disabled."); return; }
-        a.dialog().setTitle("Disable " + label + "?")
-            .setMessage(pkg + "\n\nYou can turn it back on from \"Disabled by Stickman\" or with Restore all.")
-            .setPositiveButton("Disable", (d, w) -> send(cmd, "disabled:" + label, "Disabling " + label + "…"))
-            .setNegativeButton("Cancel", null).show();
+        ThemedDialog.confirm(a, "Disable " + label + "?",
+            pkg + "\n\nYou can turn it back on from \"Disabled by Stickman\" or with Restore all.", "Disable",
+            () -> send(cmd, "disabled:" + label, "Disabling " + label + "…"));
     }
 
     @Override String describe(String kind, String out) {
