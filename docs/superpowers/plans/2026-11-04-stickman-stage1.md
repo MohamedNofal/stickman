@@ -641,3 +641,94 @@ int  rmp_parse_line(const char *line, rmp_rule *out);    /* 1 = valid (fills out
 | C | 5, 6, 7 | 3 and 5 (6 and 7 extend `Stickd`, so run 5 first, then 6 and 7 in parallel) |
 | D | 9, then 10 and 11 in parallel | 9 needs 2, 3, 5 and 8; 10 and 11 need 9 |
 | E | 13 | everything |
+
+---
+
+## Amendment 2026-11-05: owner feedback after first deploy
+
+The owner tested Stickman on the TV and asked for four things:
+- Claude does all remaining testing itself, with screenshots.
+- The ORIGINAL funny Tung Tung Tung Sahur image replaces the drawn icon.
+- Swap Apps and Amazon Music on the drawn remote. The owner's bottom grid is row 1 Prime Video, Netflix; row 2 Apps, Amazon Music.
+- Remote presets researched online, so the drawing can match every Fire TV remote model.
+
+Research: `docs/device/fire-tv-remotes.md`. Reference photos are in the controller workspace and are not committed.
+
+### Task 14: On-device input test harness
+
+**Files:**
+- Create: `native/fakeremote.c`, a static armv7 tool.
+- Modify: `native/remapd.c`. An optional `argv[2]` names the input device to grab; the default stays `"Amazon Fire TV Remote"`.
+- Modify: `build.sh`. Build `native/fakeremote` too. It is NOT packaged in the APK; it's dev-only.
+- Create: `tools/devtest.sh`, which runs on the build machine and drives the stick over adb.
+
+**Interfaces:**
+- **fakeremote** creates a uinput device named `Stickman Test Remote` (bus BT, vendor 0x0171, product 0x0427). It enables key bits for every code in `Keys.ALL` plus 1..767 non-BTN keys.
+  - It reads commands from stdin, one per line:
+    - `down <code>`, `up <code>`, `tap <code> [hold_ms]` (default 80), `sleep <ms>`, `quit`.
+  - Each event is printed as `SENT <code> <value> <CLOCK_MONOTONIC ms>`.
+- **remapd test mode:** `remapd <conf> "Stickman Test Remote"` grabs that device instead of the real remote. The single-instance check still applies, so the production remapd must be stopped first.
+- **`tools/devtest.sh <scenario-file>`:**
+  1. Pushes the binaries.
+  2. Stops the production remapd (`kill` via the pid file, so the real remote works natively meanwhile).
+  3. Starts the test remapd on the fake device.
+  4. Runs `getevent -lt` on the `remapd/virtual` node (find it by name/phys) in the background.
+  5. Feeds the scenario to fakeremote.
+  6. Collects SENT lines, the virtual-node events and `logcat -s RemapD Stickd`.
+  7. Restores the production remapd by running the ensure script's remapd start, or `cd /data/local/tmp/stickman && setsid nohup ./remapd /data/local/tmp/stickman/remap.conf`.
+  8. Prints a summary: per input tap, which output keys and actions happened, and the latency in ms between SENT and the virtual output.
+
+- [ ] **Step 1:** Write the host C test `native/test_fakeremote_parse.c` for the stdin command parser (`fr_parse_line`). Valid lines parse; garbage is rejected.
+- [ ] **Step 2:** Implement, then `./build.sh` and `tests/run.sh`.
+- [ ] **Step 3:** On the device, run scenarios, then confirm production remapd is running again afterwards and the real remote is grabbed:
+  - **(a)** Tap D-pad Down: the virtual output is DOWN within 30 ms.
+  - **(b)** Double Rewind: `act boost` reaches the spool, then `STATUS boost`.
+  - **(c)** Single Rewind: virtual Rewind arrives after the 250 ms window.
+  - **(d)** Hold Home for 800 ms: original Home is passed through at 600 ms.
+- [ ] **Step 4:** Commit: `"dev: fakeremote + remapd device-name test mode + devtest.sh"`.
+
+### Task 15: Original Tung Tung Tung Sahur icon and banner
+
+**Files:**
+- Add: `art/source/sahur-original.png`. It is the public-domain Wikimedia Commons file `File:Full_image_of_Tung_Tung_Tung_Sahur.png` (AI-generated, "Public domain", credited creator @noxaasht), copied from the controller workspace `research/sahur/wiki_full.png`.
+- Add: `art/SOURCE.md` (source URL, licence and credit).
+- Modify: `art/make_icons.py`.
+
+**Requirements:**
+- **Launcher icon:** a rounded-square crop centred on the face and upper torso (the face is what makes it funny). It must be recognisable at 48 px, with the background kept but darkened or blurred slightly so the face pops.
+- **Banner (320×180 xhdpi plus a 640 preview):** the full figure with the bat on the left, the busy background darkened, and bold **"Stickman"** on the right, in the existing style.
+- Outputs keep the same resource names and sizes.
+- Add a README credit line.
+
+- [ ] **Step 1:** Implement and run `python3 art/make_icons.py`. View `art/icon-512.png`, the ×4 48 px, and `art/banner-640.png`.
+- [ ] **Step 2:** `./build.sh`, then commit: `"icon: original Tung Tung Tung Sahur (public domain, credited)"`.
+
+### Task 16: Remote presets (every Fire TV remote) + owner's app-button order
+
+**Files:**
+- Create: `src/com/clean/stickman/core/RemotePresets.java`.
+- Modify: `core/RemoteLayout.java` (preset-driven), `RemoteView.java`, `RemotePage.java`, `Store.java`, `core/Keys.java`.
+- Test: `tests/java/RemotePresetsTest.java`.
+
+**Interfaces:**
+- `RemotePresets.ALL` is a list of `Preset { String id; String name; String years; Btn[] buttons; }`. Use one preset per model in `docs/device/fire-tv-remotes.md` that has a usable layout: Lite gen1, Lite gen2, Voice Remote gen2 (2018), gen3 (2021), 2024 Release, Enhanced, Pro, 2026 Fire TV Remote. Skip the low-confidence 1st-gen family unless trivially representable.
+- `RemoteLayout.forPreset(id)` returns `Btn[]`. The existing geometry becomes the `enhanced` preset, **with the app grid fixed to row 1 Prime Video (745), Netflix (744); row 2 Apps (746), Amazon Music (747)**.
+- **Buttons with unknown keycodes** (Pro custom 1/2 and headphone; 2026 star, sliders and mic) are drawn with `code = 0` until learned.
+  - In listen mode, pressing a physical button whose code isn't on the drawing offers "Assign to: <unlearned buttons>".
+  - Learned codes persist in `Store` per preset (`learned.<presetId>.<slotId>=code`).
+- **App-button labels are editable per preset:** "Rename button" in the editor, stored in `Store`. Defaults per preset come from the research (UK Enhanced: Prime Video, Netflix, Apps, Amazon Music).
+- **Remote page:** add a "Remote model" chooser (preset name + years), defaulting to `enhanced`, persisted in `Store`.
+- `Keys.ALL` stays the union of known codes. remapd needs no change, since it accepts any code 1..767.
+- **Tests for every preset:**
+  - no overlap, including the focus-ring margin;
+  - every button reachable from OK;
+  - unique non-zero codes;
+  - the `enhanced` preset puts 746 left of 747 on the same row, and 745 left of 744.
+
+- [ ] **Step 1:** Write the tests first (RED).
+- [ ] **Step 2:** Implement (GREEN).
+- [ ] **Step 3:** Render previews of every preset with `tools/RemotePreview.java` and compare each against its photo in the controller workspace (listed in the brief).
+- [ ] **Step 4:** `./build.sh`, then commit: `"remote presets for every Fire TV remote + owner's app-button order"`.
+
+### Task 17: UI fixes from the on-device self-test
+(Defined from the self-test catalogue, `docs/device/ui-selftest.md`, once it lands.)
