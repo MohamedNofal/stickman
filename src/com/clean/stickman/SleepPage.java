@@ -19,8 +19,8 @@ public class SleepPage extends ApplyPage {
     static final long[] OFF_MS = { 5 * 60000L, 10 * 60000L, 15 * 60000L, 30 * 60000L, Integer.MAX_VALUE };
     static final int[] TIMER_MIN = { 0, 15, 30, 60, 90 };
 
-    Button[] saver, sleep, off, timer, media;
-    TextView timerInfo, saverNow, sleepNow, offNow;
+    Button[] saver, sleep, off, timer, media, cec;
+    TextView timerInfo, saverNow, sleepNow, offNow, cecNow;
     long readAt;
     String timerShown;
 
@@ -67,6 +67,12 @@ public class SleepPage extends ApplyPage {
             send(Commands.screenOffTimeout(OFF_MS[i]), "off:" + i, "Setting screen-off time…"));
         offNow = now(ot);
 
+        LinearLayout hc = card(l, "TV control (HDMI-CEC)", "Lets the stick turn your TV on and switch it to this input, "
+            + "and lets the TV remote control the stick. Turn it off if the TV keeps waking up or switching inputs by itself.");
+        cec = choices(hc, new String[] { "On", "Off" }, i ->
+            send(com.clean.stickman.core.Starve.hdmiCec(i == 0), "cec:" + i, "Setting TV control…"));
+        cecNow = now(hc);
+
         refresh();
         return Theme.scroll(a, l);
     }
@@ -77,6 +83,7 @@ public class SleepPage extends ApplyPage {
         stored(saver, saverNow, "saver");
         stored(sleep, sleepNow, "sleep");
         stored(off, offNow, "off");
+        stored(cec, cecNow, "cec");
     }
 
     /** Fallback until the live read answers: the last choice made here, else "unknown". */
@@ -96,8 +103,9 @@ public class SleepPage extends ApplyPage {
     void readLive() {
         if (Bridge.otherVpnActive(a) || Bridge.busy && readAt != 0) return;
         readAt = System.currentTimeMillis();
-        mine.put(LiveValues.SLEEP_READ, "live");
-        Bridge.run(a, LiveValues.SLEEP_READ, false);
+        String cmd = LiveValues.SLEEP_READ + "; " + com.clean.stickman.core.Starve.HDMI_READ;
+        mine.put(cmd, "live");
+        Bridge.run(a, cmd, false);
     }
 
     void showLive(String out) {
@@ -105,6 +113,8 @@ public class SleepPage extends ApplyPage {
         live(saver, saverNow, "saver", LiveValues.saver(sv), sv == null ? "unknown" : sv);
         live(sleep, sleepNow, "sleep", LiveValues.indexOfMs(SLEEP_MS, sl), LiveValues.describeMs(sl));
         live(off, offNow, "off", LiveValues.indexOfMs(OFF_MS, of), LiveValues.describeMs(of));
+        Boolean c = com.clean.stickman.core.Starve.parseCec(out);
+        if (c != null) live(cec, cecNow, "cec", c ? 0 : 1, "");
     }
 
     /** Select the chip matching the live value; when none matches say what it is instead. */
@@ -149,6 +159,8 @@ public class SleepPage extends ApplyPage {
                 return i == 0 ? "Sleep timer off." : "Sleep timer set to " + TIMER_MIN[i] + " min.";
             case "saver": putPref("saver", i); select(saver, i); saverNow.setText(""); return "Screensaver " + (i == 0 ? "on." : "off.");
             case "sleep": putPref("sleep", i); select(sleep, i); sleepNow.setText(""); return "Sleep after: " + SLEEP_LABELS[i] + ".";
+            case "cec": putPref("cec", i); select(cec, i); cecNow.setText("");
+                return "TV control (HDMI-CEC) " + (i == 0 ? "on." : "off.");
             case "off": putPref("off", i); select(off, i); offNow.setText(""); return "Screen off after: " + OFF_LABELS[i] + ".";
             default: return out;
         }

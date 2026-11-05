@@ -53,17 +53,9 @@ public final class Commands {
             + Originals.setting("global", "com.amazon.tv.settings.featured_item_video_enabled", off);
     }
 
-    /** null for invalid names, and (when putting to sleep) for protected packages such as Net Filter or Stickman. */
+    /** Keep asleep (on) / wake (off): see {@link Starve}. null for invalid names and, when on, protected packages. */
     public static String keepAsleep(String pkg, boolean on) {
-        if (!Originals.validPkg(pkg) || (on && Catalog.isProtected(pkg))) return null;
-        if (on) {
-            return Originals.bucket(pkg, "rare") + "; " + Originals.appop(pkg, "RUN_ANY_IN_BACKGROUND", "ignore");
-        }
-        String f = Originals.FILE;
-        return "b=$(grep '^bucket " + pkg + " ' " + f + " 2>/dev/null | head -n 1 | cut -d' ' -f3); "
-            + "case \"$b\" in ''|null) b=active;; esac; am set-standby-bucket " + pkg + " $b; "
-            + "cmd appops set " + pkg + " RUN_ANY_IN_BACKGROUND default; "
-            + "if [ -f " + f + " ]; then grep -v -e '^bucket " + pkg + " ' -e '^appop " + pkg + " ' " + f + " > " + f + ".tmp; mv " + f + ".tmp " + f + "; fi";
+        return on ? Starve.apply(pkg, false) : Starve.wake(pkg);
     }
 
     /** null for invalid names, and when disabling a protected pkg (enabling is always allowed). */

@@ -10,9 +10,11 @@ import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
 import com.clean.stickman.core.LiveValues;
 import com.clean.stickman.core.StickdConf;
+import com.clean.stickman.core.Starve;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -66,10 +68,13 @@ public class SpeedPage extends ApplyPage {
         lists = Theme.text(a, "", 14, Theme.MUTED);
         k.addView(lists);
 
-        LinearLayout s = card(l, "Keep asleep", "Chosen apps can't run in the background until you open them.");
+        LinearLayout s = card(l, "Keep asleep / Starve", "Asleep: the app can't start in the background until you open it. "
+            + "Starve: it also can't keep the CPU awake or run a background service to avoid being closed, "
+            + "and it's closed now if it's in the background.");
         LinearLayout sr = Theme.row(a);
         button(sr, "Add an app…", v -> pickAsleep());
-        button(sr, "Kept-asleep apps…", v -> send(Debloat.recorded("bucket"), "list", "Reading…"));
+        button(sr, "Amazon services…", v -> send("pm list packages -e com.amazon", "svc", "Reading Amazon services…"));
+        button(sr, "Asleep & starved…", v -> send(Starve.LIST_CMD, "list", "Reading…"));
         s.addView(sr);
 
         LinearLayout an = card(l, "Animation speed", "Faster animations make menus feel snappier.");
@@ -134,18 +139,41 @@ public class SpeedPage extends ApplyPage {
         return out;
     }
 
-    /** Keep-asleep picker: protected packages (Net Filter's proxy, home, Stickman, ...) are never offered. */
-    void pickAsleep() {
-        final List<String[]> apps = apps(true);
+    /** Keep-asleep / Starve picker: protected packages (Net Filter's proxy, home, Stickman, updates, ...) are never offered. */
+    void pickAsleep() { pickFrom(apps(true), "Keep which app asleep or starve it?"); }
+
+    void pickFrom(final List<String[]> apps, String title) {
         if (apps.isEmpty()) { say("Couldn't list the installed apps."); return; }
         String[] names = new String[apps.size()];
         for (int i = 0; i < names.length; i++) names[i] = apps.get(i)[0];
-        new ThemedDialog(a).title("Keep which app asleep?").items(names, w -> {
-            final String[] app = apps.get(w);
-            ThemedDialog.confirm(a, "Keep " + app[0] + " asleep?", app[0] + " won't run in the background until you "
-                + "open it. You can wake it again from Kept-asleep apps.", "Keep asleep",
-                () -> send(Commands.keepAsleep(app[1], true), "asleep:" + app[0], "Putting " + app[0] + " to sleep…"));
-        }).cancel("Cancel").show();
+        new ThemedDialog(a).title(title).items(names, w -> chooseLevel(apps.get(w))).cancel("Cancel").show();
+    }
+
+    void chooseLevel(final String[] app) {
+        new ThemedDialog(a).title(app[0])
+            .message("Keep asleep: " + app[0] + " can't start in the background until you open it.\n\n"
+                + "Starve: it also can't keep the CPU awake or run a background service to avoid being closed, and it's "
+                + "closed now if it's in the background. Notifications, downloads or Alexa features in it may stop working.\n\n"
+                + "Core Amazon services that Fire OS keeps alive ignore this. Undo it from Asleep & starved.")
+            .button("Starve", () -> send(Starve.apply(app[1], true), "starved:" + app[0], "Starving " + app[0] + "…"))
+            .button("Keep asleep", () -> send(Starve.apply(app[1], false), "asleep:" + app[0], "Putting " + app[0] + " to sleep…"))
+            .cancel("Cancel").focusButton(2).show();
+    }
+
+    /** Enabled Amazon packages minus protected ones, labelled by app name (falls back to the package). */
+    void pickService(String out) {
+        List<String[]> apps = new ArrayList<>();
+        for (String line : out.split("\n")) {
+            String p = line.trim();
+            if (!p.startsWith("package:")) continue;
+            p = p.substring(8);
+            if (!ButtonEditor.validPkg(p) || Catalog.isProtected(p)) continue;
+            String n = ButtonEditor.appLabel(a, p);
+            apps.add(new String[] { n.equals(p) ? p : n + "  (" + p + ")", p });
+        }
+        java.util.Collections.sort(apps, (x, y) -> x[0].compareToIgnoreCase(y[0]));
+        result.setText("");
+        pickFrom(apps, "Which Amazon service?");
     }
 
     /** Multi-choice picker for the whitelist (any app) or the force-stop blacklist (protected apps excluded). */
@@ -214,25 +242,29 @@ public class SpeedPage extends ApplyPage {
             animNow.setText("");
             return "Animations set to " + anim[i].getText() + ".";
         }
+        if (kind.equals("svc")) { pickService(out); return null; }
         if (kind.startsWith("asleep:")) return kind.substring(7) + " is kept asleep.";
+        if (kind.startsWith("starved:")) return kind.substring(8) + " is starved: it can't run in the background until you open it.";
         if (kind.startsWith("awake:")) return kind.substring(6) + " runs normally again.";
         if (kind.equals("list")) { showAsleep(out); return null; }
         return out;
     }
 
-    /** List of kept-asleep apps (from the originals journal); choosing one lets it run normally again. */
+    /** Asleep & starved apps (from the originals journal); choosing one lets it run normally again. */
     void showAsleep(String out) {
-        final List<String> pkgs = new ArrayList<>();
-        for (String p : out.split("\n")) if (ButtonEditor.validPkg(p.trim())) pkgs.add(p.trim());
-        if (pkgs.isEmpty()) { say("No apps are kept asleep."); return; }
+        Map<String, Boolean> m = Starve.parseList(out);
+        if (m.isEmpty()) { say("No apps are kept asleep or starved."); return; }
         result.setText("");
-        String[] names = new String[pkgs.size()];
+        final List<String> pkgs = new ArrayList<>(m.keySet());
+        final String[] names = new String[pkgs.size()];
         for (int i = 0; i < names.length; i++) names[i] = ButtonEditor.appLabel(a, pkgs.get(i));
-        new ThemedDialog(a).title("Kept asleep (choose one to wake it)").items(names, w -> {
+        String[] rows = new String[names.length];
+        for (int i = 0; i < rows.length; i++) rows[i] = names[i] + (m.get(pkgs.get(i)) ? "  · starved" : "  · asleep");
+        new ThemedDialog(a).title("Asleep & starved (choose one to wake it)").items(rows, w -> {
             final String n = names[w];
             final String pkg = pkgs.get(w);
             ThemedDialog.confirm(a, "Wake " + n + "?", n + " will be allowed to run in the background again.", "Wake it",
-                () -> send(Commands.keepAsleep(pkg, false), "awake:" + n, "Letting " + n + " run normally…"));
+                () -> send(Starve.wake(pkg), "awake:" + n, "Letting " + n + " run normally…"));
         }).cancel("Close").show();
     }
 }

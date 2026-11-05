@@ -44,6 +44,9 @@ public class DebloatPage extends ApplyPage {
         restoreAll = button(ours, "Restore all…", v -> ThemedDialog.confirm(a, "Restore all?",
             "Turn every app Stickman disabled back on? Other settings stay as they are.", "Restore",
             () -> send(Debloat.restoreAllScript() + "; " + Debloat.READ_CMD, "restore", "Restoring apps…")));
+        LinearLayout ck = card(l, "Check after an update", "Fire OS updates can quietly switch disabled apps back on and "
+            + "undo Keep asleep / Starve. This finds anything that came back and offers to switch it off again.");
+        button(ck, "Check now", v -> send(com.clean.stickman.core.Starve.checkScript(), "check", "Checking…"));
 
         LinearLayout ad = card(l, "Advanced", "All other Amazon apps. For people who know what they're switching off.");
         advToggle = button(ad, "Show advanced list…", v -> {
@@ -183,12 +186,37 @@ public class DebloatPage extends ApplyPage {
             "Disable all", () -> send(cmd, "disabledall", "Disabling " + rec.size() + " apps…"));
     }
 
+    /** Shows the check result; when something came back on, offers to switch it off again. */
+    String checked(String out) {
+        int n = com.clean.stickman.core.Starve.checkedCount(out);
+        if (n < 0) return "Check failed: " + firstLine(out);
+        if (n == 0) return "Nothing to check yet: Stickman hasn't switched anything off.";
+        final java.util.List<String[]> dr = com.clean.stickman.core.Starve.parseDrift(out);
+        if (dr.isEmpty()) return "All " + n + " are still off ✓";
+        final String fix = com.clean.stickman.core.Starve.fixScript(dr);
+        StringBuilder sb = new StringBuilder();
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        for (String[] d : dr) if (seen.add(d[1])) {
+            String what = "pkg".equals(d[0]) ? "turned back on" : "can run in the background again";
+            sb.append("• ").append(ButtonEditor.appLabel(a, d[1])).append(": ").append(what).append('\n');
+        }
+        if (fix == null) return dr.size() + " item(s) came back, but they're protected now, so they were left alone.";
+        ThemedDialog.confirm(a, dr.size() + " came back on", sb.toString().trim() + "\n\nSwitch them off again?", "Switch off",
+            () -> send(fix + "; " + Debloat.READ_CMD, "fixed", "Switching them off again…"));
+        return dr.size() + " of " + n + " came back on.";
+    }
+
     @Override String describe(String kind, String out) {
+        if (kind.equals("check")) return checked(out);
         if (out.contains(Debloat.SEP)) { model = Debloat.parse(out); render(); }
         if (kind.equals("read")) { result.setText(""); return null; }
         if (kind.equals("restore")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("RESTORED (\\d+)").matcher(out);
             return m.find() ? "Turned " + m.group(1) + " app(s) back on." : "Restored.";
+        }
+        if (kind.equals("fixed")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("FIXED (\\d+)").matcher(out);
+            return m.find() ? "Switched " + m.group(1) + " back off." : "Done.";
         }
         if (kind.equals("disabledall")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("DISABLED_ALL (\\d+)").matcher(out);
