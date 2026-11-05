@@ -10,8 +10,9 @@
  * Unmapped keys pass straight through with no added delay.
  * Safety: if remapd dies the kernel releases the grab; holding BACK for 10 s exits remapd.
  *
- * Usage: remapd [conf] [device-name]  (device-name defaults to "Amazon Fire TV Remote"; tools/devtest.sh
- * passes "Stickman Test Remote" to drive remapd from native/fakeremote instead of the real remote).
+ * Usage: remapd [conf] [device-name] [pid-file]  (device-name defaults to "Amazon Fire TV Remote"; tools/devtest.sh
+ * passes "Stickman Test Remote" to drive remapd from native/fakeremote instead of the real remote, and its own
+ * pid file so a test remapd is never mistaken for the production one).
  *
  * Config: /data/local/tmp/stickman/remap.conf (v2: "set", "profile <name>", "<code> <layer> <action>",
  * v1 "<code> <action>" = tap). Active profile: /data/local/tmp/stickman/profile (missing -> default).
@@ -39,6 +40,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "layers.h"
+#include "amcheck.h"
 
 #define REMOTE_NAME "Amazon Fire TV Remote"   /* default device to grab; also the clone's name */
 #define VIRT_PHYS "remapd/virtual"
@@ -65,6 +67,7 @@ static char active_prof[128] = "default";
 
 static const char *conf_path;
 static const char *grab_name = REMOTE_NAME;   /* argv[2]: test mode, e.g. "Stickman Test Remote" */
+static const char *pid_path = PID_PATH;       /* argv[3]: test mode pid file */
 static long long conf_key = -2, prof_key = -2;   /* mtime ns + size; -1 = missing, -2 = never read */
 static lyr_state *L;
 static lyr_out outs[NOUT];
@@ -224,6 +227,25 @@ static void run_sh(const char *cmd) {
     }
 }
 
+/* start rules: run am start in a child; if am reports an error (e.g. the target app was uninstalled), emit the
+ * original key so the button is not dead. The child inherits the uinput fd (CLOEXEC only acts on exec). */
+static void run_start(const char *cmd, int code) {
+    pid_t p = fork();
+    if (p != 0) return;
+    signal(SIGCHLD, SIG_DFL);
+    setsid();
+    char full[460]; snprintf(full, sizeof full, "%s 2>&1", cmd);
+    FILE *f = popen(full, "r");
+    if (!f) _exit(127);
+    char out[1024]; size_t n = 0, r;
+    while (n < sizeof out - 1 && (r = fread(out + n, 1, sizeof out - 1 - n, f)) > 0) n += r;
+    out[n] = 0;
+    { char drain[256]; while (fread(drain, 1, sizeof drain, f) > 0) {} }
+    pclose(f);
+    if (am_start_failed(out)) { tap(code); alog("key %d start failed -> original", code); }
+    _exit(0);
+}
+
 /* act rules: spool protocol shared with stickd/Commands.act — write act/<name>.tmp, rename to act/<name>.act,
  * <name> = <epoch-ms>-<pid>-<seq> (13-digit ms so numeric and lexical order agree). act.fifo is impossible:
  * SELinux on Fire OS 8 denies shell fifo_file create. */
@@ -258,7 +280,7 @@ static void do_action(int code, int layer) {
     char cmd[400];
     if (!strncmp(a, "start ", 6)) {
         snprintf(cmd, sizeof cmd, "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10200000 -n '%s'", arg);
-        run_sh(cmd); alog("key %d %s -> start %s", code, ln, arg);
+        run_start(cmd, code); alog("key %d %s -> start %s", code, ln, arg);
     } else if (!strncmp(a, "sh ", 3)) { run_sh(arg); alog("key %d %s -> sh", code, ln); }
     else if (!strncmp(a, "key ", 4)) {
         int k = atoi(arg);
@@ -362,7 +384,7 @@ static void device_lost(const char *why) {
 
 /* pid in PID_PATH if it names a live process whose comm is exactly "remapd" (and isn't us), else 0 */
 static int other_instance(void) {
-    FILE *f = fopen(PID_PATH, "r");
+    FILE *f = fopen(pid_path, "r");
     if (!f) return 0;
     int pid = 0;
     if (fscanf(f, "%d", &pid) != 1) pid = 0;
@@ -381,12 +403,13 @@ static int other_instance(void) {
 int main(int argc, char **argv) {
     conf_path = argc > 1 ? argv[1] : DEF_CONF;
     if (argc > 2 && argv[2][0]) grab_name = argv[2];
+    if (argc > 3 && argv[3][0]) pid_path = argv[3];
     int other = other_instance();   /* before grabbing anything: only one process may own the remote */
     if (other) { alog("remapd already running pid %d", other); return 0; }
     signal(SIGCHLD, SIG_IGN); signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
     L = lyr_new(250, 600);
     if (!L) return 1;
-    FILE *pf = fopen(PID_PATH, "w");
+    FILE *pf = fopen(pid_path, "w");
     if (pf) { fprintf(pf, "%d\n", getpid()); fclose(pf); }
     alog("remapd starting pid %d device \"%s\"", getpid(), grab_name);
 
@@ -418,6 +441,8 @@ int main(int argc, char **argv) {
         struct pollfd p = { .fd = rfd, .events = POLLIN };
         int r = poll(&p, 1, timeout);
         if (r > 0) {
+            /* stickd may have switched the profile while we waited: use it for the key that woke us */
+            load_conf();
             if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) { device_lost("remote gone"); continue; }
             struct input_event evs[64];
             ssize_t n = read(rfd, evs, sizeof evs);
@@ -430,7 +455,7 @@ int main(int argc, char **argv) {
             alog("BACK held 10s -> exiting, remote released");
             release_all();
             if (rfd >= 0) ioctl(rfd, EVIOCGRAB, 0);
-            unlink(PID_PATH);
+            unlink(pid_path);
             return 0;
         }
     }

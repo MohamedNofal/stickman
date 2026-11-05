@@ -39,4 +39,13 @@ public final class Spool {
         int nl = content.indexOf('\n');
         return (nl < 0 ? content : content.substring(0, nl)).trim();
     }
+
+    /**
+     * Stale actions (queued while stickd was down) are dropped at stickd start, except safety checks: a
+     * dns_check must still judge a private-DNS change, or a broken resolver would stay with no revert.
+     */
+    public static boolean keepWhenStale(String line) {
+        String l = line == null ? "" : line.trim();
+        return l.equals(Actions.DNS_CHECK) || l.startsWith(Actions.DNS_CHECK + " ");
+    }
 }

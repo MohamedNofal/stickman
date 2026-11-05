@@ -45,7 +45,8 @@ public class BridgeWorker implements Runnable {
                 Log.i(TAG, "shell result: " + result);
                 if (orig.equals(Ensure.MARKER)) {
                     Store.setLastEnsure(svc, result);
-                    if (result.matches("(?s).*REMAPD \\d+.*")) Store.markEnsured(svc);
+                    // both daemons, or BootJob retries later (a missing stickd = no DNS guard / sleep / act)
+                    if (com.clean.stickman.core.EnsureScript.bothRunning(result)) Store.markEnsured(svc);
                 }
                 Bridge.notifyResult(orig, result, true);
             }

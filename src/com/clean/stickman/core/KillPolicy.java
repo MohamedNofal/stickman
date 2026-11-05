@@ -17,15 +17,22 @@ public final class KillPolicy {
         "com.wolf.firelauncher", "com.amazon.tv.launcher", "com.amazon.firehomestarter",
         "com.clean.stickman", "com.clean.netfilter", "com.android.proxyhandler",
         "com.amazon.vizzini", "com.amazon.tv.notificationcenter", "com.amazon.hedwig", "com.amazon.tv.livetv",
+        "com.amazon.venezia",  // Appstore: has a launcher entry but runs downloads/updates in the background
         "system", "android")));
     private static final String[] NEVER_KILL_PREFIX = {
         "com.amazon.tv.settings", "com.amazon.device.software.ota", "com.android.bluetooth", "com.amazon.tv.ime",
     };
     private static final String[] NEVER_KILL_WORDS = {"inputmethod", ".ime", "remote", "bluetooth", "launcher"};
 
-    /** A process in any of these adj/state classes protects its whole package. */
+    /**
+     * A process in any of these adj/state classes protects its whole package. Besides persistent/system/home/top/
+     * visible this covers the perceptible ones (fore, prcp, prcl, psvc: e.g. audio playing from a foreground
+     * service without a MediaSession), backup (bkup), heavy-weight (hvy) and the foreground-service proc states
+     * (FGS, BFGS), because a blacklisted package gets {@code am force-stop}, which kills all of its processes.
+     */
     private static final Set<String> PROTECTED_CLASS = new HashSet<>(Arrays.asList(
-        "pers", "PER", "sys", "HOME", "home", "TOP", "fg", "vis"));
+        "pers", "PER", "sys", "HOME", "home", "TOP", "fg", "vis",
+        "fore", "prcp", "prcl", "psvc", "bkup", "hvy", "FGS", "BFGS"));
 
     private static final String[] KILL_ADJ = {"cch", "prev", "svcb", "svcl"};
     private static final Set<String> KILL_STATE = new HashSet<>(Arrays.asList("CEM", "CAC", "LAST"));
@@ -44,7 +51,36 @@ public final class KillPolicy {
         return false;
     }
 
-    public static List<String> candidates(List<LruParser.Proc> procs, String fgPkg, Set<String> whitelist, Set<String> mediaProtected) {
+    /**
+     * Shell command listing user-launchable activities (TV and phone launcher entries); parse it with
+     * {@link #parseLaunchable}.
+     */
+    public static final String LAUNCHABLE_CMD =
+        "cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LEANBACK_LAUNCHER; "
+        + "cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER";
+
+    private static final java.util.regex.Pattern COMPONENT =
+        java.util.regex.Pattern.compile("^\\s*([A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+)/[A-Za-z0-9_.$]+\\s*$");
+
+    /** Packages named by the "pkg/activity" lines of {@code query-activities --brief} output. */
+    public static Set<String> parseLaunchable(String out) {
+        Set<String> s = new HashSet<>();
+        if (out == null) return s;
+        for (String l : out.split("\n")) {
+            java.util.regex.Matcher m = COMPONENT.matcher(l);
+            if (m.find()) s.add(m.group(1));
+        }
+        return s;
+    }
+
+    /**
+     * Packages auto-kill / Boost may kill. Only user-launchable apps ({@code launchable}: packages with a
+     * launcher or leanback-launcher activity) are candidates at all, so Amazon/Android service and provider
+     * processes are never churned; a null or empty launchable set fails closed (no candidates).
+     */
+    public static List<String> candidates(List<LruParser.Proc> procs, String fgPkg, Set<String> whitelist,
+                                          Set<String> mediaProtected, Set<String> launchable) {
+        if (launchable == null || launchable.isEmpty()) return new ArrayList<>();
         Set<String> keep = new HashSet<>();
         if (fgPkg != null) keep.add(fgPkg);
         if (whitelist != null) keep.addAll(whitelist);
@@ -55,7 +91,7 @@ public final class KillPolicy {
         }
         Set<String> out = new LinkedHashSet<>();
         for (LruParser.Proc p : procs) {
-            if (keep.contains(p.pkg) || isNeverKill(p.pkg)) continue;
+            if (keep.contains(p.pkg) || isNeverKill(p.pkg) || !launchable.contains(p.pkg)) continue;
             if (killable(p)) out.add(p.pkg);
         }
         return new ArrayList<>(out);

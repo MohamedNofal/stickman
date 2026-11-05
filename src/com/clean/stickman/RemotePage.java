@@ -318,7 +318,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     // ---- listen mode ----
 
     boolean remapperRunning() {
-        return Store.enabled(a) && Store.pid(Store.lastEnsure(a), "REMAPD") != null;
+        return Store.enabled(a) && !LogTail.remoteReleased() && Store.pid(Store.lastEnsure(a), "REMAPD") != null;
     }
 
     /**

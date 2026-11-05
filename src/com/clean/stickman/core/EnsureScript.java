@@ -14,6 +14,17 @@ public final class EnsureScript {
     public static final String PKG = "com.clean.stickman";
     public static final String OLD_DIR = "/data/local/tmp/remap";
     public static final String OLD_PKG = "com.clean.keyshift";
+    /** Marker file in DIR: stickd turned "svc power stayon" on (media stay-awake) and owns giving it back. */
+    public static final String STAYON_MARKER = "stayon.owned";
+
+    /**
+     * Shell: give back a stay-on that stickd owns, and clear any sleep-fade overlay. Needed wherever stickd is
+     * stopped for good (master OFF, Restore defaults, the uninstall watchdog): SIGTERM under app_process does
+     * not run JVM shutdown hooks, so stickd cannot do it itself.
+     */
+    public static final String RELEASE_STAYON_FADE =
+        "[ -f " + DIR + "/" + STAYON_MARKER + " ] && { svc power stayon false; rm -f " + DIR + "/" + STAYON_MARKER + "; }; "
+        + SleepTimer.FADE_END + " >/dev/null 2>&1; ";
 
     /**
      * Shell test: process $VAR is exactly NAME, by /proc comm (remapd: exe basename; stickd: app_process --nice-name)
@@ -93,7 +104,8 @@ public final class EnsureScript {
         s.append("if ! alive remapd; then setsid nohup " + DIR + "/remapd " + DIR + "/remap.conf </dev/null >/dev/null 2>&1 & ");
         s.append("i=0; while [ $i -lt 20 ] && ! alive remapd; do sleep 0.1; i=$((i+1)); done; fi; ");
         s.append("if alive stickd; then [ $CH = 1 ] && { " + Commands.act(Actions.RELOAD, null) + "; }; ");
-        s.append("else CLASSPATH=" + apk + " setsid nohup app_process /system/bin --nice-name=stickd com.clean.stickman.daemon.Stickd " + DIR
+        // stale pid file (e.g. from the previous boot): stickd's own single-instance check must never see it
+        s.append("else rm -f " + DIR + "/stickd.pid; CLASSPATH=" + apk + " setsid nohup app_process /system/bin --nice-name=stickd com.clean.stickman.daemon.Stickd " + DIR
             + " </dev/null >/dev/null 2>&1 & ");
         s.append("i=0; while [ $i -lt 40 ] && ! alive stickd; do sleep 0.1; i=$((i+1)); done; fi; ");
         // 10. report
@@ -101,8 +113,16 @@ public final class EnsureScript {
         return s.toString();
     }
 
-    /** Master off: stop both daemons (remapd exiting releases the remote). Prints STOPPED. */
+    /**
+     * Master off: stop both daemons (remapd exiting releases the remote), then give back an owned stay-on and
+     * clear a fade overlay (stickd's shutdown hook does not run on SIGTERM). Prints STOPPED.
+     */
     public static String stop() {
-        return killPid("remapd") + killPid("stickd") + "echo STOPPED";
+        return killPid("remapd") + killPid("stickd") + RELEASE_STAYON_FADE + "echo STOPPED";
+    }
+
+    /** True when an ensure result reports BOTH daemons alive (only then is the boot marked ensured). */
+    public static boolean bothRunning(String result) {
+        return result != null && result.matches("(?s).*REMAPD \\d+ STICKD \\d+.*");
     }
 }

@@ -24,12 +24,23 @@ public final class Commands {
             + Originals.setting("global", "animator_duration_scale", v);
     }
 
+    /** Printed instead of changing DNS when stickd (which runs the DNS safety check) is not alive. */
+    public static final String DNS_REFUSED = "DNS_REFUSED";
+
+    /**
+     * Turning private DNS off is always allowed. Setting a resolver is allowed only while stickd is alive, since
+     * stickd's dns_check is the safety net that reverts a resolver that breaks the internet; otherwise prints
+     * {@link #DNS_REFUSED} and changes nothing.
+     */
     public static String privateDns(String host) {
         if (host == null) return Originals.setting("global", "private_dns_mode", "off");
         if (!host.matches("[A-Za-z0-9.-]+")) return null;
-        return Originals.setting("global", "private_dns_mode", "hostname") + "; "
+        return "P=$(cat " + Originals.DIR + "/stickd.pid 2>/dev/null); "
+            + "if [ -n \"$P\" ] && " + EnsureScript.isProc("P", "stickd") + "; then "
+            + Originals.setting("global", "private_dns_mode", "hostname") + "; "
             + Originals.setting("global", "private_dns_specifier", host) + "; "
-            + act(Actions.DNS_CHECK, null);
+            + act(Actions.DNS_CHECK, null) + "; "
+            + "else echo " + DNS_REFUSED + " stickd not running; fi";
     }
 
     public static String privacy(boolean limit) {

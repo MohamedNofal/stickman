@@ -16,6 +16,8 @@ public class LogTail implements Runnable {
     static final java.util.concurrent.ConcurrentHashMap<String, String> lastStatus = new java.util.concurrent.ConcurrentHashMap<>();
     /** Same keys -> when that line was logged (epoch ms, from the logcat timestamp; replayed history keeps its time). */
     static final java.util.concurrent.ConcurrentHashMap<String, Long> lastStatusAt = new java.util.concurrent.ConcurrentHashMap<>();
+    /** remapd lifecycle from its log (epoch ms of the line, 0 = not seen); see core.RemapdLog. */
+    static volatile long remapReleasedAt, remapStartedAt;
     static volatile int lastKey;
     static volatile long lastKeyAt;
     volatile boolean stop;
@@ -30,6 +32,9 @@ public class LogTail implements Runnable {
                 String l;
                 long started = System.currentTimeMillis();
                 while (!stop && (l = r.readLine()) != null) {
+                    int rk = com.clean.stickman.core.RemapdLog.kind(l);
+                    if (rk == com.clean.stickman.core.RemapdLog.RELEASED) remapReleasedAt = logTime(l);
+                    else if (rk == com.clean.stickman.core.RemapdLog.STARTED) remapStartedAt = logTime(l);
                     int st = l.indexOf("): STATUS ");
                     if (st > 0) {
                         String body = l.substring(st + 3).trim();
@@ -65,6 +70,9 @@ public class LogTail implements Runnable {
         lastStatus.put(t[1], t.length > 2 ? t[2] : "");
         lastStatusAt.put(t[1], at);
     }
+
+    /** remapd exited because Back was held 10 s, and has not been restarted since. */
+    static boolean remoteReleased() { return com.clean.stickman.core.RemapdLog.released(remapReleasedAt, remapStartedAt); }
 
     /** Rest of the latest "STATUS <kind> ..." line, or null if none seen. */
     static String status(String kind) { return lastStatus.get(kind); }

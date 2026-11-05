@@ -37,7 +37,9 @@ final class AutoKill {
     AutoKill(Stickd d) { this.d = d; }
 
     void install() {
-        d.register(Actions.BOOST, a -> boost());
+        // Off the spool thread: a Boost with many candidates takes tens of seconds and must not delay a following
+        // sleep_timer / screen_off. Runs on the auto-kill thread (kills stay serialised under killLock).
+        d.register(Actions.BOOST, a -> timer.execute(this::boostSafe));
         d.addFgListener((pkg, prev) -> onForeground());
         timer.scheduleWithFixedDelay(this::intervalTick, 1, 1, TimeUnit.MINUTES);
     }
@@ -77,10 +79,14 @@ final class AutoKill {
         }
     }
 
+    private void boostSafe() {
+        try { boost(); } catch (Throwable t) { Sh.log("boost error: " + t); }
+    }
+
     void boost() {
         long before = memAvailableKb();
         List<String> killed = killCandidates();
-        Sh.run("pm trim-caches 999G");
+        Sh.run("pm trim-caches 999G", 30_000);
         try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
         long after = memAvailableKb();
         long freed = (before < 0 || after < 0) ? 0 : Math.max(0, (after - before) / 1024);
@@ -97,7 +103,10 @@ final class AutoKill {
         StickdConf c = d.conf();
         List<LruParser.Proc> procs = LruParser.parse(Sh.run("dumpsys activity lru"));
         String fg = d.foreground();
-        List<String> cands = KillPolicy.candidates(procs, fg, c.whitelist, MediaState.protectedPackages(Sh.run("dumpsys media_session")));
+        java.util.Set<String> launchable = KillPolicy.parseLaunchable(Sh.run(KillPolicy.LAUNCHABLE_CMD));
+        if (launchable.isEmpty()) Sh.log("autokill: no launchable apps listed; nothing killed");
+        List<String> cands = KillPolicy.candidates(procs, fg, c.whitelist,
+            MediaState.protectedPackages(Sh.run("dumpsys media_session")), launchable);
         List<String> killed = new ArrayList<>();
         for (String pkg : cands) {
             if (pkg.equals(d.foreground())) continue;  // user switched to it meanwhile

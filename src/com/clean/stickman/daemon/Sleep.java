@@ -2,6 +2,7 @@ package com.clean.stickman.daemon;
 
 import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.DnsGuard;
+import com.clean.stickman.core.EnsureScript;
 import com.clean.stickman.core.EventParser;
 import com.clean.stickman.core.MediaState;
 import com.clean.stickman.core.SleepSchedule;
@@ -19,8 +20,12 @@ import java.util.concurrent.TimeUnit;
 /** Sleep timer (+ fade overlay broadcasts), media stay-awake and the private-DNS guard. Plain Java (no android.*). */
 final class Sleep {
     static final long STAY_AWAKE_TICK_S = 30;
-    /** Marker: Stickman turned "svc power stayon" on (survives a stickd crash so the next start restores it). */
-    static final String STAYON_MARKER = "stayon.owned";
+    /**
+     * Marker: Stickman turned "svc power stayon" on. It survives stickd dying (SIGTERM under app_process does NOT
+     * run shutdown hooks), so the next stickd start gives stay-on back; EnsureScript.stop(), the restore script
+     * and the uninstall watchdog release it too (EnsureScript.RELEASE_STAYON_FADE).
+     */
+    static final String STAYON_MARKER = EnsureScript.STAYON_MARKER;
 
     private final Stickd d;
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -57,6 +62,7 @@ final class Sleep {
         // A previous stickd may have died while owning stayon: give it back.
         if (d.file(STAYON_MARKER).exists()) stayOn(false);
         timer.scheduleWithFixedDelay(this::stayAwakeTick, STAY_AWAKE_TICK_S, STAY_AWAKE_TICK_S, TimeUnit.SECONDS);
+        // Best effort only: runs on System.exit / normal JVM exit, NOT on the SIGTERM the ensure/stop scripts send.
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (d.file(STAYON_MARKER).exists()) stayOn(false);
         }));

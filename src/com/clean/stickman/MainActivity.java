@@ -397,6 +397,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         else if (Bridge.VPN_BUSY.equals(r)) { s = "Another VPN is on: not applied"; color = Theme.ACCENT; }
         else if (r.startsWith("FAIL")) { s = "Problem: " + r.substring(4).trim(); color = Theme.ACCENT; }
         else if (!Store.enabled(this)) s = "Stickman is OFF";
+        else if (LogTail.remoteReleased()) { s = "Remote released (Back held): reopen Stickman to restart"; color = Theme.ACCENT; }
         else if (Store.pid(Store.lastEnsure(this), "REMAPD") != null) s = "Running ✓";
         else s = r.isEmpty() ? "Starting…" : "Not running";
         if (LogTail.lastKey != 0 && System.currentTimeMillis() - LogTail.lastKeyAt < 4000)

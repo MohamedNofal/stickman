@@ -12,7 +12,10 @@ public final class Sh {
     static final long TIMEOUT_MS = 10_000;
 
     /** Runs {@code /system/bin/sh -c cmd}; returns stdout ("" on error). Killed after 10 s. */
-    public static String run(String cmd) {
+    public static String run(String cmd) { return run(cmd, TIMEOUT_MS); }
+
+    /** Same with an explicit timeout. */
+    public static String run(String cmd, long timeoutMs) {
         Process p = null;
         try {
             p = new ProcessBuilder("/system/bin/sh", "-c", cmd).start();
@@ -20,7 +23,7 @@ public final class Sh {
             Drain out = new Drain(p.getInputStream());
             Drain err = new Drain(p.getErrorStream());
             out.start(); err.start();
-            boolean done = p.waitFor(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            boolean done = p.waitFor(timeoutMs, TimeUnit.MILLISECONDS);
             if (!done) {
                 p.destroy();
             }

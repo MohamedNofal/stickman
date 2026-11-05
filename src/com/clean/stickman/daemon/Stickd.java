@@ -73,7 +73,9 @@ public final class Stickd {
         new File(dir).mkdirs();
         String pid = new File("/proc/self").getCanonicalFile().getName();
         String other = read(file("stickd.pid")).trim();
-        if (!other.isEmpty() && !other.equals(pid) && read(new File("/proc/" + other + "/cmdline")).contains("stickd")) {
+        // Exact match (comm or arg0), like the ensure script: a substring test hits the ensure shell's own forks,
+        // whose cmdline is the whole script, when a stale pid from the previous boot is reused by one of them.
+        if (!other.isEmpty() && !other.equals(pid) && isProc(other, "stickd")) {
             Sh.log("already running pid=" + other + "; exiting");
             return;
         }
@@ -93,12 +95,82 @@ public final class Stickd {
         String seed = EventParser.dumpsysResumed(Sh.run("dumpsys activity activities | grep -m1 mResumedActivity"));
         if (seed != null) onForeground(seed);
 
+        Thread w = new Thread(this::watchApk, "stickd-watchdog");
+        w.setDaemon(true);
+        w.start();
         Thread a = new Thread(this::followForeground, "stickd-fg");
         Thread b = new Thread(this::readSpool, "stickd-act");
         a.start(); b.start();
         String v = read(file("version")).trim();
         Sh.log("STATUS started version=" + (v.matches("\\d+") ? v : Integer.toString(VERSION)));
         a.join(); b.join();
+    }
+
+    /** /proc/PID is exactly NAME: comm equals it, or the first NUL-separated cmdline field does. */
+    static boolean isProc(String pid, String name) {
+        if (pid == null || !pid.matches("\\d+")) return false;
+        return procIs(read(new File("/proc/" + pid + "/comm")), read(new File("/proc/" + pid + "/cmdline")), name);
+    }
+
+    /** Pure part of {@link #isProc}: comm (may end in a newline) or arg0 of a NUL-separated cmdline equals name. */
+    public static boolean procIs(String comm, String cmdline, String name) {
+        if (comm != null && comm.trim().equals(name)) return true;
+        if (cmdline == null) return false;
+        int z = cmdline.indexOf('\0');
+        return (z < 0 ? cmdline : cmdline.substring(0, z)).equals(name);
+    }
+
+    // ---- uninstall watchdog ----
+    static final long WATCHDOG_MS = 60_000;
+    static final long WATCHDOG_RECHECK_MS = 5_000;
+    static final long WATCHDOG_CONFIRM_MS = 25_000;
+
+    /** True when the APK stickd was started from is gone and package manager no longer knows Stickman. */
+    boolean apkGone() {
+        String apk = read(file("apk")).trim();
+        if (!apk.isEmpty() && new File(apk).exists()) return false;
+        String now = pmPath(Sh.run("pm path " + com.clean.stickman.core.EnsureScript.PKG + " 2>/dev/null"));
+        if (now == null) return true;
+        if (!now.equals(apk)) Sh.log("watchdog: Stickman APK replaced (" + now + "); waiting for the app to re-run ensure");
+        return false;
+    }
+
+    /** The path from {@code pm path} output ("package:/data/app/.../base.apk"), or null when there is none. */
+    public static String pmPath(String out) {
+        if (out == null) return null;
+        for (String l : out.split("\n")) {
+            l = l.trim();
+            if (l.startsWith("package:") && l.length() > 8) return l.substring(8).trim();
+        }
+        return null;
+    }
+
+    /** Every 60 s: if Stickman was uninstalled (confirmed again after 5 s and 30 s), stop both daemons for good. */
+    private void watchApk() {
+        while (true) {
+            sleep(WATCHDOG_MS);
+            try {
+                if (!apkGone()) continue;
+                sleep(WATCHDOG_RECHECK_MS);  // pm can be briefly blind during an install
+                if (!apkGone()) continue;
+                sleep(WATCHDOG_CONFIRM_MS);
+                if (!apkGone()) continue;
+                shutdownForUninstall();
+            } catch (Throwable t) {
+                Sh.log("watchdog error: " + t);
+            }
+        }
+    }
+
+    /** Uninstalled: kill remapd (exact name), release stay-on + fade, remove both pid files, exit. */
+    void shutdownForUninstall() {
+        Sh.log("watchdog: Stickman is uninstalled; stopping remapd and stickd");
+        String rp = read(file("remapd.pid")).trim();
+        if (isProc(rp, "remapd")) Sh.run("kill " + rp);
+        file("remapd.pid").delete();
+        Sh.run(com.clean.stickman.core.EnsureScript.RELEASE_STAYON_FADE + "true");
+        file("stickd.pid").delete();
+        System.exit(0);
     }
 
     void loadConfs() {
@@ -191,8 +263,12 @@ public final class Stickd {
             File f = new File(d, n);
             String line = Spool.parse(read(f));
             long mtime = f.lastModified();
-            if (!f.delete() && f.exists()) { Sh.log("spool: cannot delete " + n); continue; }
-            if (dropOlderThan > 0 && mtime < dropOlderThan) { Sh.log("spool: dropped stale " + line); continue; }
+            // Only the reader that deleted the file runs it (two stickds must never both dispatch one action).
+            if (!f.delete()) { if (f.exists()) Sh.log("spool: cannot delete " + n); continue; }
+            if (dropOlderThan > 0 && mtime < dropOlderThan && !Spool.keepWhenStale(line)) {
+                Sh.log("spool: dropped stale " + line);
+                continue;
+            }
             dispatch(line);
         }
     }

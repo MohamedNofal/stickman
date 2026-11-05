@@ -14,6 +14,10 @@
 #   9. prints a per-press summary: output keys, actions, latency SENT -> virtual output
 # Scenario lines "#expect <regex> [<max_ms>]" are checked against the summary's event lines (time = ms after
 # the scenario's first SENT); any miss makes the exit status 1. Raw logs are kept in $DEVTEST_OUT (or a temp dir).
+#
+# WARNING: the test remapd uses the production remap.conf and the production act/ spool, so scenario "act" rules
+# really run on the stick (a Boost really kills apps, sleep_now really sleeps). The test remapd writes its own
+# pid file ($T/remapd.pid), so it is never mistaken for the production remapd if this script dies untrapped.
 set -u
 cd "$(dirname "$0")/.."
 SCEN=${1:?usage: tools/devtest.sh <scenario-file>}
@@ -45,7 +49,7 @@ grab_after() {
 restore() {
     [ $RESTORED = 1 ] && return; RESTORED=1
     log "restoring production remapd"
-    exec 3>&- 2>/dev/null                       # EOF -> fakeremote releases keys, destroys its device, exits
+    exec 3>&-                                   # EOF -> fakeremote releases keys, destroys its device, exits
     [ -n "$GE_BG" ] && kill "$GE_BG" 2>/dev/null
     if [ $STARTED_TEST = 1 ]; then
         # kill only the test remapd (cmdline names the fake device; never touch a production one)
@@ -55,9 +59,10 @@ restore() {
             sleep 0.3
         done
     fi
-    sh_ 'pkill -f "getevent -lt /dev/input/" 2>/dev/null; true'
+    # exact matches only: a pkill -f pattern would also match the sh -c running it
+    sh_ 'for P in $(pidof getevent 2>/dev/null); do [ "$(tr "\000" " " </proc/$P/cmdline 2>/dev/null | cut -d" " -f1-2)" = "getevent -lt" ] && kill $P; done; true'
     sleep 0.5
-    sh_ 'pkill -f '$T'/fakeremote 2>/dev/null; true'
+    sh_ 'pkill -x fakeremote 2>/dev/null; true'
     [ -n "$FR_BG" ] && kill "$FR_BG" 2>/dev/null
     if [ -z "$(remapd_pid)" ]; then
         sh_ "cd $D && setsid nohup $D/remapd $D/remap.conf </dev/null >/dev/null 2>&1 &"
@@ -79,7 +84,7 @@ restore() {
 }
 RC=0
 trap 'restore; exit $RC' EXIT
-trap 'RC=130; exit' INT TERM
+trap 'RC=130; exit' INT TERM HUP
 
 # 0. connect
 su -c 'ip route add 192.168.0.0/24 dev wlan0 scope link src 192.168.0.101' 2>/dev/null
@@ -112,7 +117,7 @@ else log "no production remapd running (will start one at the end)"; fi
 
 # 4. test remapd on the fake device
 STARTED_TEST=1
-sh_ "cd $T && setsid nohup $T/remapd $D/remap.conf '$FAKE' </dev/null >/dev/null 2>&1 &"
+sh_ "cd $T && rm -f $T/remapd.pid && setsid nohup $T/remapd $D/remap.conf '$FAKE' $T/remapd.pid </dev/null >/dev/null 2>&1 &"
 GRAB=
 for i in $(seq 30); do
     sleep 0.2

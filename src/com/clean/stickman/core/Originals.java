@@ -43,9 +43,12 @@ public final class Originals {
             + "cmd appops set " + pkg + " " + op + " " + mode;
     }
 
-    /** Shell script: replay the journal in reverse, then delete it. */
+    /**
+     * Shell script: give back a stay-on owned by stickd (also the documented after-uninstall recovery), then
+     * replay the journal in reverse and delete it.
+     */
     public static String restoreScript() {
-        return restoreScript(FILE);
+        return EnsureScript.RELEASE_STAYON_FADE + restoreScript(FILE);
     }
 
     /** Same, with an explicit journal path (host tests). */

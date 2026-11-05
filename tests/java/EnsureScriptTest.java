@@ -58,6 +58,7 @@ public class EnsureScriptTest {
         T.yes(s.contains("/data/local/tmp/stickman/stickd.pid"), "stickd pid file");
         T.yes(s.contains("kill"), "kills");
         T.yes(s.trim().endsWith("echo STOPPED"), "prints STOPPED");
+        T.yes(s.contains("svc power stayon false") && s.contains("FADE_END"), "releases owned stay-on + fade");
     }
 
     /** Realistic big config: 45 rules over 3 profiles + full stickd.conf must fit our 256K adb payload. */

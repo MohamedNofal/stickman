@@ -42,6 +42,8 @@ public final class Catalog {
         "connectivity", "connection", "network", "wifi", "ffsprovision", "whisperjoin", "whisperlink", "cec", "routing",
         // identity / account / device messaging
         "identity", "account", "auth", "dcp", "dpcclient", "tcomm", "messaging", "sync",
+        // registration / consent / sign-in gates and cloud plumbing the home + sign-in flow depends on
+        "h2client", "fdra", "directivebroker", "consents", "turnstile",
         // rendering / runtimes / display
         "webview", "htmlruntime", "resolution", "calibration",
         // installers, store, app compatibility, intents

@@ -137,6 +137,9 @@ public class PrivacyPage extends ApplyPage {
         String desc = show(out);
         if (kind.equals("read")) { result.setText(""); return null; }
         if (kind.startsWith("dns:")) {
+            if (out != null && out.contains(Commands.DNS_REFUSED))
+                return "Background automation is off, so DNS was not changed (its internet safety check needs it). "
+                    + "Turn Stickman on, then try again.";
             if (desc == null) return "Private DNS: " + kind.substring(4) + " applied.";
             return desc.startsWith("Off") ? "Private DNS is off." : "Private DNS: " + desc + ". Checking the internet still works…";
         }

@@ -134,7 +134,8 @@ public class DebloatTest {
         "com.amazon.whisperjoin.middleware.v2.np", "com.amazon.whisperplay.contracts", "com.amazon.whisperplay.service.install",
         "com.amazon.client.metrics.api", "com.amazon.dummy.settings", "com.amazon.whasettings",
         "com.amazon.device.blepa", "com.amazon.autopairservice", "com.amazon.accessoryconfigservice",
-        "com.amazon.tv.ffsprovisioneeclient", "com.amazon.tv.launcher", "com.amazon.firehomestarter", "com.amazon.tv.settings.v2", "com.amazon.device.software.ota",
+        "com.amazon.tv.ffsprovisioneeclient", "com.amazon.alta.h2clientservice", "com.amazon.platform.fdra",
+        "com.amazon.alexadirectivebrokerservice", "com.amazon.tv.consents", "com.amazon.tv.turnstile", "com.amazon.tv.launcher", "com.amazon.firehomestarter", "com.amazon.tv.settings.v2", "com.amazon.device.software.ota",
     };
     public void testAdvancedOverRealDeviceListExcludesCritical() throws Exception {
         List<String> real = fixture();
