@@ -164,4 +164,17 @@ public class DebloatTest {
         for (String f : fam) T.yes(Catalog.isProtected(f), f);
         for (String[] r : Catalog.DEBLOAT_RECOMMENDED) T.yes(!Catalog.isProtected(r[0]), "recommended stays offered: " + r[0]);
     }
+    public void testDisableAllScript() {
+        java.util.List<String[]> rec = new java.util.ArrayList<>();
+        rec.add(new String[] {"com.amazon.tv.acr", "a", "x"});
+        rec.add(new String[] {"com.amazon.tv.launcher", "b", "x"});   // protected: skipped
+        rec.add(new String[] {"com.amazon.sneakpeek", "c", "x"});
+        String s = Debloat.disableAllScript(rec);
+        T.yes(s.contains("pm disable-user --user 0 com.amazon.tv.acr"), "acr");
+        T.yes(s.contains("pm disable-user --user 0 com.amazon.sneakpeek"), "sneakpeek");
+        T.yes(!s.contains("tv.launcher"), "protected skipped");
+        T.yes(s.contains("pkg com.amazon.tv.acr"), "journaled");
+        T.yes(s.trim().endsWith("echo DISABLED_ALL $n"), "count line");
+        T.yes(Debloat.disableAllScript(new java.util.ArrayList<String[]>()) == null, "empty -> null");
+    }
 }

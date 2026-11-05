@@ -24,10 +24,14 @@ public final class Originals {
         return pkg != null && pkg.matches("[A-Za-z0-9._]+");
     }
 
-    /** null when pkg is not a plain package name. */
+    /**
+     * Disables pkg and journals it ONLY if pm reports "disabled-user" (Fire OS refuses some packages, e.g. csapp:
+     * those must not show up as "disabled by Stickman"). Prints pm's output. null when pkg is not a plain name.
+     */
     public static String disablePkg(String pkg) {
         if (!validPkg(pkg)) return null;
-        return record("^pkg " + pkg + "$", "pkg " + pkg) + "pm disable-user --user 0 " + pkg;
+        return "o=$(pm disable-user --user 0 " + pkg + " 2>&1); echo \"$o\"; "
+            + "if echo \"$o\" | grep -q disabled-user; then " + record("^pkg " + pkg + "$", "pkg " + pkg) + "fi";
     }
 
     public static String bucket(String pkg, String bucket) {

@@ -41,6 +41,23 @@ public final class Debloat {
         return out;
     }
 
+    /**
+     * One script disabling every given recommended package (journaled like single disables), then
+     * "DISABLED_ALL <n>" with how many are now disabled. Protected/invalid entries are skipped. null if none.
+     */
+    public static String disableAllScript(List<String[]> rec) {
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
+        for (String[] r : rec) {
+            String c = Commands.debloat(r[0], true);
+            if (c == null) continue;
+            sb.append("{ ").append(c).append("; } | grep -q disabled-user && n=$((n+1)); ");
+            n++;
+        }
+        if (n == 0) return null;
+        return "n=0; " + sb + "echo DISABLED_ALL $n";
+    }
+
     /** Every other enabled com.amazon.* package, minus protected ones, sorted. */
     public List<String> advanced() {
         Set<String> rec = new LinkedHashSet<>();

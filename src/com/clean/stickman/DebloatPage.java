@@ -19,7 +19,7 @@ public class DebloatPage extends ApplyPage {
         + "Everything you disable here can be turned back on below or with Restore all.";
 
     LinearLayout recBox, advBox, oursBox;
-    Button advToggle, restoreAll;
+    Button advToggle, restoreAll, disableAll;
     boolean advShown;
     Debloat model;
     long readAt;
@@ -34,6 +34,7 @@ public class DebloatPage extends ApplyPage {
 
         LinearLayout rc = card(l, "Recommended", "Safe Amazon extras you can switch off. Home, Settings, updates, "
             + "remotes and Net Filter can never be disabled here.");
+        disableAll = button(rc, "Disable all…", v -> confirmDisableAll());
         recBox = Theme.column(a);
         rc.addView(recBox);
 
@@ -79,6 +80,9 @@ public class DebloatPage extends ApplyPage {
         advToggle.setText(advShown ? "Hide advanced list" : "Show advanced list…");
         // nothing to restore: no focusable, active-looking button
         restoreAll.setVisibility(model != null && !model.disabledByUs.isEmpty() ? android.view.View.VISIBLE : android.view.View.GONE);
+        boolean anyRec = model != null && !model.recommended().isEmpty();
+        disableAll.setVisibility(anyRec ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (anyRec) disableAll.setText("Disable all " + model.recommended().size() + "…");
         if (model == null) {
             oursBox.addView(Theme.text(a, "Not read yet.", 14, Theme.MUTED));
             recBox.addView(Theme.text(a, "Press Refresh list to read the apps.", 14, Theme.MUTED));
@@ -164,12 +168,31 @@ public class DebloatPage extends ApplyPage {
             () -> send(cmd, "disabled:" + label, "Disabling " + label + "…"));
     }
 
+    void confirmDisableAll() {
+        if (model == null) return;
+        List<String[]> rec = model.recommended();
+        String script = Debloat.disableAllScript(rec);
+        if (script == null) return;
+        final String cmd = cmdAndRead(script);
+        StringBuilder keep = new StringBuilder();
+        for (String[] r : rec) if (r[2].contains("keep if")) keep.append(keep.length() == 0 ? "" : ", ").append(r[1]);
+        ThemedDialog.confirm(a, "Disable all " + rec.size() + "?",
+            "Switches off every app in Recommended."
+            + (keep.length() > 0 ? "\n\nIncludes " + keep + ": skip this if you use them." : "")
+            + "\n\nYou can turn any of them back on from \"Disabled by Stickman\" or with Restore all.",
+            "Disable all", () -> send(cmd, "disabledall", "Disabling " + rec.size() + " apps…"));
+    }
+
     @Override String describe(String kind, String out) {
         if (out.contains(Debloat.SEP)) { model = Debloat.parse(out); render(); }
         if (kind.equals("read")) { result.setText(""); return null; }
         if (kind.equals("restore")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("RESTORED (\\d+)").matcher(out);
             return m.find() ? "Turned " + m.group(1) + " app(s) back on." : "Restored.";
+        }
+        if (kind.equals("disabledall")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("DISABLED_ALL (\\d+)").matcher(out);
+            return m.find() ? "Disabled " + m.group(1) + " app(s)." : "Done.";
         }
         if (kind.startsWith("disabled:")) {
             String p = kind.substring(9);

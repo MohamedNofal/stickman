@@ -57,7 +57,7 @@ public final class Catalog {
     /**
      * {pkg, label, why}. All present on the Fire TV 4K Max (tests/fixtures/amazon_pkgs.txt). Curated from the
      * tv-tweak 4k-max-2023 profile (ads/promo/cruft/smarthome tiers) minus dumbtv's never-disable list, minus anything
-     * {@link #isProtected} and minus its "aggressive" tier (Silk, install manager, remote config) which stays in Advanced.
+     * {@link #isProtected}, minus what Fire OS itself refuses (tv.csapp: "Cannot disable a protected package") and minus its "aggressive" tier (Silk, install manager, remote config) which stays in Advanced.
      */
     public static final String[][] DEBLOAT_RECOMMENDED = {
         // ads & tracking
@@ -87,7 +87,6 @@ public final class Catalog {
         {"com.amazon.tmm.tutorial", "Tutorials", "First-run tutorial videos"},
         {"com.amazon.firetv.troubleshooting", "Troubleshooting", "Amazon troubleshooting app"},
         {"com.amazon.tv.support", "Support videos", "Help and how-to videos"},
-        {"com.amazon.tv.csapp", "Customer service", "Help app; rarely used"},
         {"com.amazon.tahoe", "Kids mode", "Amazon Kids profiles (keep if you use them)"},
         {"com.amazon.tv.legal.notices", "Legal notices", "Licence text viewer (~6 MB)"},
         {"com.amazon.ods.kindleconnect", "Kindle connect", "Kindle sync service that runs in the background"},

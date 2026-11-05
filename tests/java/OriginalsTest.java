@@ -33,6 +33,8 @@ public class OriginalsTest {
     public void testPkgAndBucketRecorded() {
         T.yes(Originals.disablePkg("com.x.y").contains("grep -q '^pkg com.x.y$' /data/local/tmp/stickman/originals"), "pkg guard");
         T.yes(Originals.disablePkg("com.x.y").contains("pm disable-user --user 0 com.x.y"), "disable");
+        String d = Originals.disablePkg("com.x.y");
+        T.yes(d.indexOf("grep -q disabled-user; then") < d.indexOf("echo \"pkg com.x.y\""), "journaled only after pm succeeded");
         T.yes(Originals.bucket("com.x.y", "rare").contains("am set-standby-bucket com.x.y rare"), "bucket");
     }
     public void testRejectsBadPackageNames() {
