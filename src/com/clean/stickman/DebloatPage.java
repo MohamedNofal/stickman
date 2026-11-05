@@ -44,6 +44,11 @@ public class DebloatPage extends ApplyPage {
         restoreAll = button(ours, "Restore all…", v -> ThemedDialog.confirm(a, "Restore all?",
             "Turn every app Stickman disabled back on? Other settings stay as they are.", "Restore",
             () -> send(Debloat.restoreAllScript() + "; " + Debloat.READ_CMD, "restore", "Restoring apps…")));
+        button(ours, "Free up space…", v -> ThemedDialog.confirm(a, "Free up space?",
+            "Amazon keeps downloading updates for apps even after they're disabled. This removes those updates from the "
+            + "apps Stickman disabled, back to their small built-in version (they stay disabled).\n\nIf you turn one back "
+            + "on later, the Appstore updates it again.", "Free up space",
+            () -> { freeAt = System.currentTimeMillis(); send(com.clean.stickman.core.Lean.freeSpaceDetached(), "freeing", "Freeing space…"); }));
         LinearLayout ck = card(l, "Check after an update", "Fire OS updates can quietly switch disabled apps back on and "
             + "undo Keep asleep / Starve. This finds anything that came back and offers to switch it off again.");
         button(ck, "Check now", v -> send(com.clean.stickman.core.Starve.checkScript(), "check", "Checking…"));
@@ -186,6 +191,23 @@ public class DebloatPage extends ApplyPage {
             "Disable all", () -> send(cmd, "disabledall", "Disabling " + rec.size() + " apps…"));
     }
 
+    /** When Free up space was started (0 = not waiting for its STATUS freed line). */
+    long freeAt;
+
+    @Override public void onTick() {
+        if (a == null || freeAt == 0) return;
+        String st = LogTail.status("freed");
+        if (st != null && LogTail.statusAt("freed") >= freeAt - 1000) {
+            freeAt = 0;
+            long[] f = com.clean.stickman.core.Lean.parseFreed(st);
+            say(f == null ? "Free up space: " + st : f[1] == 0 ? "Nothing to free: none of the disabled apps have updates stored."
+                : "Freed " + Math.max(0, f[0] / 1024) + " MB from " + f[1] + " app(s).");
+        } else if (System.currentTimeMillis() - freeAt > 5 * 60000) {
+            freeAt = 0;
+            say("Free up space didn't report back within 5 minutes.");
+        }
+    }
+
     /** Shows the check result; when something came back on, offers to switch it off again. */
     String checked(String out) {
         int n = com.clean.stickman.core.Starve.checkedCount(out);
@@ -213,6 +235,10 @@ public class DebloatPage extends ApplyPage {
         if (kind.equals("restore")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("RESTORED (\\d+)").matcher(out);
             return m.find() ? "Turned " + m.group(1) + " app(s) back on." : "Restored.";
+        }
+        if (kind.equals("freeing")) {
+            if (!out.contains("FREEING")) { freeAt = 0; return "Couldn't start: " + firstLine(out); }
+            return "Freeing space… this can take a minute or two.";
         }
         if (kind.equals("fixed")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("FIXED (\\d+)").matcher(out);

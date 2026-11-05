@@ -8,6 +8,7 @@ import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
+import com.clean.stickman.core.Lean;
 import com.clean.stickman.core.LiveValues;
 import com.clean.stickman.core.StickdConf;
 import com.clean.stickman.core.Starve;
@@ -26,8 +27,8 @@ public class SpeedPage extends ApplyPage {
     static final long BOOST_TIMEOUT_MS = 20000;
     static final Pattern BOOST = Pattern.compile("freed_mb=(\\d+)\\s+killed=(\\d+)");
 
-    Button[] onLeave, interval, anim;
-    TextView boostInfo, lists, animNow;
+    Button[] onLeave, interval, anim, lean, doze;
+    TextView boostInfo, lists, animNow, leanNow;
     /** When the live animation scale was last read (0 = not yet). */
     long readAt;
     /** When Boost was pressed (0 = not waiting for a STATUS boost line). */
@@ -43,6 +44,17 @@ public class SpeedPage extends ApplyPage {
         button(b, "Boost now", v -> boost());
         boostInfo = Theme.autoHide(Theme.text(a, "", 15, Theme.TEXT));
         b.addView(boostInfo);
+
+        LinearLayout lm = card(l, "Lean memory", "Lets Android keep fewer idle apps in memory and squeeze the rest, so "
+            + "what you're watching gets the RAM. Balanced keeps up to 8 idle apps, Max keeps 4 and also stops killed "
+            + "background services from restarting straight away. Apps you leave may take a moment longer to reopen.");
+        lean = choices(lm, new String[] { "Off", "Balanced", "Max" }, i ->
+            send(Lean.memory(i), "lean:" + i, "Setting lean memory…"));
+        lm.addView(Theme.text(a, "Deep sleep while the TV is off", 14, Theme.MUTED));
+        doze = choices(lm, new String[] { "On", "Off" }, i ->
+            send(i == 0 ? Lean.dozeOn() : Lean.dozeOff(), "doze:" + i, "Setting deep sleep…"));
+        leanNow = Theme.autoHide(Theme.text(a, "", 14, Theme.MUTED));
+        lm.addView(leanNow);
 
         LinearLayout k = card(l, "Auto-close apps", null);
         k.addView(Theme.text(a, "Close apps when I leave them", 14, Theme.MUTED));
@@ -109,11 +121,22 @@ public class SpeedPage extends ApplyPage {
     void readLive() {
         if (Bridge.otherVpnActive(a) || Bridge.busy && readAt != 0) return;
         readAt = System.currentTimeMillis();
-        mine.put(LiveValues.ANIM_READ, "live");
-        Bridge.run(a, LiveValues.ANIM_READ, false);
+        String cmd = LiveValues.ANIM_READ + "; " + Lean.READ;
+        mine.put(cmd, "live");
+        Bridge.run(a, cmd, false);
+    }
+
+    /** Selects the Lean memory / deep sleep chips from a LEAN line (no chip when the stick has other values). */
+    void showLean(String out) {
+        int[] v = Lean.parse(out);
+        if (v == null) return;
+        select(lean, v[0]);
+        select(doze, v[1] == 1 ? 0 : 1);
+        leanNow.setText(v[0] < 0 ? "Current: custom values set outside Stickman" : "");
     }
 
     void showLive(String out) {
+        showLean(out);
         String v = LiveValues.value(out, "ANIM");
         int i = LiveValues.indexOfScale(ANIM, v);
         // the live value wins over the stored choice: no chip matches -> none selected, say what it is
@@ -241,6 +264,17 @@ public class SpeedPage extends ApplyPage {
             select(anim, i);
             animNow.setText("");
             return "Animations set to " + anim[i].getText() + ".";
+        }
+        if (kind.startsWith("lean:")) {
+            showLean(out);
+            int i = Integer.parseInt(kind.substring(5));
+            return i == 0 ? "Lean memory off: Android's defaults are back."
+                : "Lean memory: " + (i == 1 ? "Balanced" : "Max") + ". Idle apps beyond " + Lean.CAP[i] + " are closed by Android.";
+        }
+        if (kind.startsWith("doze:")) {
+            showLean(out);
+            return kind.endsWith("0") ? "Deep sleep on: background apps rest while the TV is off (Net Filter and Stickman keep working)."
+                : "Deep sleep off.";
         }
         if (kind.equals("svc")) { pickService(out); return null; }
         if (kind.startsWith("asleep:")) return kind.substring(7) + " is kept asleep.";

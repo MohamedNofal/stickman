@@ -78,6 +78,8 @@ public final class EnsureScript {
         // 4. self-grants: logcat for the UI, overlay for the sleep fade
         s.append("pm grant " + PKG + " android.permission.READ_LOGS 2>/dev/null; ");
         s.append("cmd appops set " + PKG + " SYSTEM_ALERT_WINDOW allow 2>/dev/null; ");
+        // 4b. Doze is reset by every reboot: re-apply it when the owner turned it on
+        s.append(Lean.ENSURE_LINE);
         // 5. migration from KeyShift: stop its remapd first (only one process may grab the remote)
         if (migrate) {
             s.append("if [ -e " + OLD_DIR + " ] || pm path " + OLD_PKG + " 2>/dev/null | grep -q '^package:'; then ");

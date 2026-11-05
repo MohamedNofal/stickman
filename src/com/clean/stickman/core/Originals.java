@@ -20,6 +20,26 @@ public final class Originals {
             + "settings put " + ns + " " + key + " " + value;
     }
 
+    /** device_config put, journaling the original as "dc ns key old" (restored with put, or delete when null). */
+    public static String dconfig(String ns, String key, String value) {
+        return record("^dc " + ns + " " + key + " ", "dc " + ns + " " + key + " $(device_config get " + ns + " " + key + ")")
+            + "device_config put " + ns + " " + key + " " + value;
+    }
+
+    /**
+     * Gives back one journaled "setting"/"dc" value (the original, or delete when it was unset) and drops its line.
+     * Does nothing when the key was never changed by Stickman.
+     */
+    public static String giveBack(String kind, String a, String b) {
+        String g = "^" + kind + " " + a + " " + b + " ";
+        String put = kind.equals("dc") ? "device_config put " : "settings put ";
+        String del = kind.equals("dc") ? "device_config delete " : "settings delete ";
+        return "if grep -q '" + g + "' " + FILE + " 2>/dev/null; then "
+            + "v=$(grep '" + g + "' " + FILE + " | head -n 1 | cut -d' ' -f4-); "
+            + "if [ -z \"$v\" ] || [ \"$v\" = null ]; then " + del + a + " " + b + "; else " + put + a + " " + b + " \"$v\"; fi; "
+            + "grep -v '" + g + "' " + FILE + " > " + FILE + ".tmp; mv " + FILE + ".tmp " + FILE + "; fi";
+    }
+
     static boolean validPkg(String pkg) {
         return pkg != null && pkg.matches("[A-Za-z0-9._]+");
     }
@@ -52,7 +72,7 @@ public final class Originals {
      * replay the journal in reverse and delete it.
      */
     public static String restoreScript() {
-        return EnsureScript.RELEASE_STAYON_FADE + restoreScript(FILE);
+        return EnsureScript.RELEASE_STAYON_FADE + Lean.DOZE_OFF + "; " + restoreScript(FILE);
     }
 
     /** Same, with an explicit journal path (host tests). */
@@ -64,6 +84,7 @@ public final class Originals {
             + "pkg) pm enable $a;; "
             + "bucket) [ \"$b\" != null ] && [ -n \"$b\" ] && am set-standby-bucket $a $b;; "
             + "appop) cmd appops set $a $b default;; "
+            + "dc) if [ \"$c\" = null ] || [ -z \"$c\" ]; then device_config delete $a $b; else device_config put $a $b \"$c\"; fi;; "
             + "esac; done; rm -f \"$F\"";
     }
 }
