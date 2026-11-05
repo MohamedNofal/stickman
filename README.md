@@ -8,7 +8,7 @@ Package `com.clean.stickman`. Formerly **KeyShift** (`com.clean.keyshift`, befor
 
 Tested on a Fire TV Stick 4K Max (Fire OS 8 / Android 11, model `AFTMA08C15`).
 
-## Features (stage 1)
+## Features
 
 - **Remote**: a drawn remote you navigate with the D-pad.
   - Presets for every Fire TV remote model, a "Remote model" chooser, and buttons whose keycode is unknown can be learned.
@@ -16,10 +16,19 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8 / Android 11, model `AFTMA08C15`).
   - **Listen mode**: press a physical button and it lights up on the drawing and opens its editor.
   - Each button has **tap, double-tap and hold** layers (hold only on keys that report holds), plus **per-app profiles** that switch automatically with the foreground app.
   - Any layer can open an app, act as another button, do nothing, or run a **Stickman action**: Boost, sleep now, sleep timer (with fade), screen off, screensaver toggle, screenshot, media play/pause/next/previous, kill the current app, or open a hidden Amazon screen.
-- **Speed**: auto-kill background apps when you leave an app and/or on an interval, with whitelist/blacklist and protection for media playback, the home app and the foreground app; one-tap **Boost**; keep chosen apps asleep; animation speed.
-- **Sleep**: screensaver, screen/sleep timeouts, stay awake while media plays, sleep timer with a fade, screen off.
+- **Speed**:
+  - Auto-kill background apps when you leave an app and/or on an interval, with whitelist/blacklist and protection for media playback, the home app and the foreground app; one-tap **Boost**.
+  - **Lean memory** (Balanced / Max): caps how many idle apps Android keeps in memory and turns on memory compaction, live, no reboot. On a 4K Max, capping at 4 freed 67 MB instantly. Max also delays the restart of killed background services (30 s instead of 1 s).
+  - **Deep sleep while the TV is off**: switches on Android's Doze (Amazon ships it disabled) and drops Amazon's log, crash-report and promo-notification services from its exempt list. Re-applied after every boot.
+  - **Keep asleep / Starve** any app or Amazon background service: Asleep blocks background starts; Starve also blocks wake locks, legacy background work and foreground services, and closes it now if it's in the background.
+  - Animation speed.
+- **Sleep**: screensaver, screen/sleep timeouts, stay awake while media plays, sleep timer with a fade, screen off, and an **HDMI-CEC** on/off switch.
 - **Privacy**: Private-DNS ad-blocking presets with an automatic safety revert if connectivity fails, and limit ads and tracking. Works alongside Net Filter.
-- **Debloat**: a recommended list and an advanced list. Critical package families (launcher, Settings, OTA, remote/input services) are hard-blocked. Every change is journaled and can be restored.
+- **Debloat**:
+  - A **Recommended** list of ~37 Amazon extras (ad/telemetry collectors, ambient/promo screens, shopping, leftovers), cross-checked against a dozen open-source Fire TV debloaters, with a one-press **Disable all**; plus an advanced list.
+  - **Free up space**: Amazon keeps downloading updates for apps even after you disable them. This puts disabled apps back to their small built-in version (they stay disabled). On a 4K Max it freed 424 MB.
+  - **Check after an update**: Fire OS updates can quietly switch disabled apps back on; this finds anything that came back and switches it off again.
+  - Critical package families (launcher, Settings, the system updater, remote/input services) are hard-blocked. Only packages Fire OS actually disabled are listed as "Disabled by Stickman". Every change is journaled and can be restored.
 - **Shortcuts**: one-tap tiles into Amazon's hidden settings screens.
 - **Tasks**: a live treemap of running apps sized by RAM (or CPU; Sort by name shows alphabetical rows), each tile in its app's brand colour, with system processes in a strip below. Select a tile for details (RAM, CPU, a RAM trend) and End, **Always kill** (close it every time it goes to the background) or **Protect** (never close it automatically); the two lists are exclusive. Menu opens sort order and End all; Play/Pause freezes the page. Never ends the foreground app, playing media, protected (whitelisted) apps, the launcher, Net Filter, Amazon core services or Stickman itself.
 - **Status**: RAM, temperature, storage, Wi-Fi, Fire OS version, daemon health.
@@ -50,7 +59,7 @@ Everything useful needs the `shell` user, which can read input devices, create v
   - System processes not shown individually are summed into one `_sys_other` aggregate line, which keeps the feed small. stickd also raises the logcat main ring buffer to 1 MB (`logcat -G 1M`, only if it is smaller; it resets at reboot) so the feed isn't evicted between reads.
   - Sampler cost measured on the stick: about 1 % of all CPUs (limit 3 %).
   - Each `tasks_start` / `tasks_stop` is a Bridge round-trip, and a Bridge command drops adb sessions to the stick. With the Tasks page open that happens every 60 s (every 10 s while the feed is stale), so anything driving the stick over adb (e.g. the phone-side redirect script) should expect reconnects then.
-- **Originals journal**: before a feature first changes a system value (DNS, animation, standby buckets, screensaver/sleep, disabled packages), the original is recorded in `/data/local/tmp/stickman/originals` (`core/Originals.java`). "Restore defaults" replays it.
+- **Originals journal**: before a feature first changes a system value (DNS, animation, appops, `device_config`, screensaver/sleep, HDMI-CEC, disabled packages), the original is recorded in `/data/local/tmp/stickman/originals` (`core/Originals.java`). "Restore defaults" replays it.
 - **Boot**: `BootReceiver` (boot completed + package replaced) plus a persisted `BootJob` re-run the idempotent ensure script (`core/EnsureScript.java`) that installs and starts the daemons.
 
 | Area | Where |
@@ -63,7 +72,7 @@ Everything useful needs the `shell` user, which can read input devices, create v
 
 ## Install
 
-You need a computer with `adb` **once**, for setup.
+Download `stickman.apk` from the [latest release](https://github.com/MohamedNofal/stickman/releases/latest). You need a computer with `adb` **once**, for setup.
 
 1. On the Fire TV: **Settings, My Fire TV, Developer options, ADB debugging: ON**.
 2. From the computer:
@@ -101,12 +110,17 @@ ANDROID_JAR=/path/to/android.jar D8_JAR=/path/to/d8.jar ./build.sh   # -> stickm
 
 ## Limitations
 
-- No root: no HDMI-CEC, audio format or resolution control, and Amazon's protected system apps can't be changed.
+- No root: no audio format or resolution control, and Amazon's protected system apps can't be disabled.
+- Tried and **not** effective on Fire OS 8 (so not offered): the cached-apps freezer (kernel lacks the cgroup v2 freezer), re-enabling app standby buckets (Fire OS forces app idle off), disabling components inside protected apps, `pm suspend` (allowed, but background starts still happen).
 - App-shortcut buttons report press and release at the same instant, so they are tap-only (no hold).
 - Pro and 2026 remotes have extra buttons whose keycodes are unknown: they need learning, and may not be visible to remapd if they appear on another input node.
 - Stay awake while media plays is not yet verified on the device.
 - Fire OS 8 may override sleep timeouts.
 - After a reboot the remote reconnects on its first press, which may act normally.
+
+## Licence
+
+MIT, see `LICENSE`.
 
 ## Credits
 
