@@ -10,7 +10,7 @@ import java.util.Map;
 public final class TaskFeed {
     /** Written on the feed (LogTail) thread, read from the UI thread. */
     private volatile TaskSnapshot latest;
-    private long curSeq = -1, total, avail;
+    private long curSeq = -1, curAt, total, avail;
     private int cpu;
     private List<TaskSnapshot.App> cur = new ArrayList<>();
     private volatile Runnable listener;
@@ -29,9 +29,21 @@ public final class TaskFeed {
     public void setListener(Runnable r) { listener = r; }
 
     public TaskSnapshot latest() { return latest; }
-    public long latestSeq() { return latest == null ? 0 : latest.seq; }
+    public long latestSeq() { TaskSnapshot l = latest; return l == null ? 0 : l.seq; }
+    /** When the latest completed snapshot was logged (epoch ms), 0 = none / unknown. Only completed samples count. */
+    public long latestAt() { TaskSnapshot l = latest; return l == null ? 0 : l.atMs; }
 
-    public void onLine(String body) {
+    /** A feed line without a known log time (tests, tools). */
+    public void onLine(String body) { onLine(body, 0); }
+
+    /**
+     * body = text after "STATUS "; atMs = the line's log time (epoch ms, 0 = unknown). Synchronized: during a LogTail
+     * hand-over the old and new tail threads may both deliver lines for a moment.
+     * Sessions: logcat order is time order, so a header whose seq is not above the latest snapshot's (seq 1, or any
+     * lower seq) starts a new sampling session - unless its log time is older than the latest snapshot's, which means
+     * it is replayed history (logcat -T) rather than a restart.
+     */
+    public synchronized void onLine(String body, long atMs) {
         if (body == null) return;
         String[] t = body.trim().split("\\s+");
         if (t.length == 0) return;
@@ -40,9 +52,12 @@ public final class TaskFeed {
                 case "tasks": {
                     Map<String, String> kv = kv(t, 1);
                     long seq = Long.parseLong(kv.get("seq"));
-                    if (seq == 1) latest = null; // seq restarts at 1: a new sampling session
-                    else if (curSeq >= 0 && seq < curSeq) return; // older than the sample in progress: discard
+                    long la = latestAt();
+                    if (atMs > 0 && la > 0 && atMs < la) return;   // replayed history, older than what we show
+                    if (curSeq >= 0 && seq < curSeq && (atMs == 0 || atMs < curAt)) return;   // older than the sample in progress
+                    if (seq <= latestSeq() || seq == 1) latest = null;   // seq went down: a new sampling session
                     curSeq = seq;
+                    curAt = atMs;
                     total = Long.parseLong(kv.get("total"));
                     avail = Long.parseLong(kv.get("avail"));
                     cpu = Integer.parseInt(kv.get("cpu"));
@@ -62,7 +77,7 @@ public final class TaskFeed {
                     if (seq == curSeq && seq > latestSeq()) {
                         List<TaskSnapshot.App> apps = cur;
                         Collections.sort(apps, TaskSnapshot.App.BY_RSS);
-                        latest = new TaskSnapshot(seq, total, avail, cpu, apps);
+                        latest = new TaskSnapshot(seq, total, avail, cpu, apps, atMs);
                         completed = true;
                     }
                     if (seq == curSeq) {

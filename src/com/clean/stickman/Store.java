@@ -95,24 +95,14 @@ public final class Store {
 
     public static void saveStickdText(Context c, String text) { write(c, STICKD, text == null ? "" : text); }
 
-    /**
-     * The stored stickd.conf text with pkg added to list ("whitelist" = protect / never close, "blacklist" = always
-     * kill). The lists are exclusive: adding to one removes pkg from the other. Not saved: pass the result to
-     * ApplyPage.applyStickdConf. Unknown list names leave the text's lists unchanged.
-     */
+    /** The stored stickd.conf text with pkg added to list (StickdConf.addTo: the lists are exclusive); not saved. */
     public static String addToList(Context c, String list, String pkg) {
-        com.clean.stickman.core.StickdConf conf = com.clean.stickman.core.StickdConf.parse(stickdText(c));
-        if ("whitelist".equals(list)) { conf.whitelist.add(pkg); conf.blacklist.remove(pkg); }
-        else if ("blacklist".equals(list)) { conf.blacklist.add(pkg); conf.whitelist.remove(pkg); }
-        return conf.serialize();
+        return com.clean.stickman.core.StickdConf.parse(stickdText(c)).addTo(list, pkg).serialize();
     }
 
-    /** The stored stickd.conf text with pkg removed from list ("whitelist" / "blacklist"); not saved. */
+    /** The stored stickd.conf text with pkg removed from list (StickdConf.removeFrom); not saved. */
     public static String removeFromList(Context c, String list, String pkg) {
-        com.clean.stickman.core.StickdConf conf = com.clean.stickman.core.StickdConf.parse(stickdText(c));
-        if ("whitelist".equals(list)) conf.whitelist.remove(pkg);
-        else if ("blacklist".equals(list)) conf.blacklist.remove(pkg);
-        return conf.serialize();
+        return com.clean.stickman.core.StickdConf.parse(stickdText(c)).removeFrom(list, pkg).serialize();
     }
 
     // ---- remote model (preset), learned key codes and app-button names, per preset ----

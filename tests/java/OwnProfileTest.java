@@ -55,4 +55,14 @@ public class OwnProfileTest {
         T.yes(!OwnProfile.ensure(m), "second is a no-op");
         T.eq("orig", m.get(P, 139, Rule.Layer.TAP), "139");
     }
+
+    /** M7: an existing Stickman profile that lacks one of the codes gets it, the owner's entries stay. */
+    public void testExistingProfileCompletedForMissingCode() {
+        RemapModel m = RemapModel.parse("profile default\n164 double act boost\n139 hold act boost\nprofile " + P + "\n164 hold none\n");
+        T.yes(OwnProfile.ensure(m), "changed");
+        T.eq("none", m.get(P, 164, Rule.Layer.HOLD), "owner's 164 kept");
+        T.eq(null, m.get(P, 164, Rule.Layer.TAP), "164 not touched (owner defined it)");
+        T.eq("orig", m.get(P, 139, Rule.Layer.TAP), "139 added: the owner remapped Menu globally later");
+        T.yes(!OwnProfile.ensure(m), "then a no-op");
+    }
 }

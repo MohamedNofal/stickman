@@ -96,7 +96,8 @@ final class TaskSampler {
     void install(Stickd d) {
         d.register(Actions.TASKS_START, a -> start());
         d.register(Actions.TASKS_STOP, a -> stop());
-        d.register(Actions.END, this::end);
+        // end runs dumpsys media_session + the launchable query (1-2 s on the stick): off the spool thread too
+        d.register(Actions.END, this::endAsync);
         // A few force-stops plus dumpsys calls: off the spool thread so other actions are not delayed.
         d.register(Actions.END_ALL, a -> endAllExec.execute(this::endAllSafe));
     }
@@ -143,7 +144,9 @@ final class TaskSampler {
 
     private void loop(int g) {
         // R7: a bigger main ring so the feed does not evict other STATUS lines as fast. Failures are ignored.
-        if (logBufGrown.compareAndSet(false, true)) src.sh("logcat -G 1M >/dev/null 2>&1; true");
+        // Only ever grows it: a device whose buffer is already >= 1M (or unparsable output) is left alone.
+        if (logBufGrown.compareAndSet(false, true) && mainBufBelow1M(src.sh("logcat -g 2>/dev/null")))
+            src.sh("logcat -G 1M >/dev/null 2>&1; true");
         while (true) {
             long t0 = clock.now();
             int r;
@@ -359,6 +362,20 @@ final class TaskSampler {
         return m.find() ? Long.parseLong(m.group(1)) : 0;
     }
 
+    private static final java.util.regex.Pattern RING =
+        java.util.regex.Pattern.compile("main: ring buffer is (\\d+)\\s*([KMG]?)i?B", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** True if `logcat -g` output shows the main ring below 1 MiB; false when it is >= 1 MiB or can't be parsed. */
+    static boolean mainBufBelow1M(String g) {
+        if (g == null) return false;
+        java.util.regex.Matcher m = RING.matcher(g);
+        if (!m.find()) return false;
+        long n = Long.parseLong(m.group(1));
+        String u = m.group(2).toUpperCase(java.util.Locale.ROOT);
+        long bytes = u.equals("K") ? n << 10 : u.equals("M") ? n << 20 : u.equals("G") ? n << 30 : n;
+        return bytes < (1L << 20);
+    }
+
     static int countCpus(String cpuinfo) {
         int n = 0;
         if (cpuinfo != null) for (String l : cpuinfo.split("\n")) if (l.startsWith("processor")) n++;
@@ -386,6 +403,14 @@ final class TaskSampler {
         src.sh("am force-stop " + pkg);
         invalidateInputs();
         Sh.log("STATUS end " + pkg + " ok");
+    }
+
+    /** end &lt;pkg&gt; on the end/end_all executor, so spooled button actions are not held up behind it. */
+    void endAsync(final String arg) {
+        endAllExec.execute(() -> {
+            try { end(arg); }
+            catch (Throwable t) { Sh.log("end error: " + t); }
+        });
     }
 
     private void endAllSafe() {

@@ -18,8 +18,10 @@ import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EndPolicy;
 import com.clean.stickman.core.KillPolicy;
 import com.clean.stickman.core.OwnProfile;
+import com.clean.stickman.core.RamHist;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.StickdConf;
+import com.clean.stickman.core.TaskKeepalive;
 import com.clean.stickman.core.TaskSnapshot;
 import com.clean.stickman.core.TileNav;
 import com.clean.stickman.core.Treemap;
@@ -43,28 +45,10 @@ import java.util.regex.Pattern;
  */
 public class TasksPage extends ApplyPage {
     static final String TAG = "Stickman";
-    static final long KEEPALIVE_MS = 60000, STALE_MS = 6000, RESULT_TIMEOUT_MS = 20000;
+    static final long STALE_MS = 6000, RESULT_TIMEOUT_MS = 20000;
     static final int STRIP_MAX = 6, STRIP_KEEP = 8;
     static final String[] SORTS = { "Sort by RAM", "Sort by CPU", "Sort by name" };
     static final Pattern KILLED = Pattern.compile("killed=(\\d+)");
-
-    /** Last {@link #SIZE} RSS samples (kB) of one package, oldest first via get(0..n-1). */
-    static final class Hist {
-        static final int SIZE = 30;
-        final long[] v = new long[SIZE];
-        int n, head;   // head = index of the oldest sample
-
-        void add(long kb) {
-            if (n < SIZE) v[(head + n++) % SIZE] = kb;
-            else { v[head] = kb; head = (head + 1) % SIZE; }
-        }
-
-        long get(int i) { return v[(head + i) % SIZE]; }
-
-        long min() { long m = Long.MAX_VALUE; for (int i = 0; i < n; i++) m = Math.min(m, get(i)); return m; }
-
-        long max() { long m = 0; for (int i = 0; i < n; i++) m = Math.max(m, get(i)); return m; }
-    }
 
     TaskMapView map;
     TextView ram, cpu, autoKill, liveText;
@@ -82,7 +66,8 @@ public class TasksPage extends ApplyPage {
     boolean paused, shownOnce, profileChecked;
     TaskSnapshot shown;
     long lastStartAt;
-    final Map<String, Hist> hist = new HashMap<>();
+    /** Per-app RAM trend; cleared on pause, hide and a stale feed so a trend never spans a gap. */
+    final Map<String, RamHist> hist = new HashMap<>();
     final Map<String, String> labels = new HashMap<>();
     final Set<String> labelTried = new HashSet<>();
     Set<String> launchable = new HashSet<>();
@@ -189,11 +174,20 @@ public class TasksPage extends ApplyPage {
         LogTail.FEED.setListener(null);
         if (a != null && !paused) sendTasks(Actions.TASKS_STOP);
         lastStartAt = 0;
+        clearHist();
+    }
+
+    /** Drops every RAM trend (pause, hide, stale feed); an open dialog shows "collecting…" again. */
+    void clearHist() {
+        if (hist.isEmpty()) return;
+        hist.clear();
+        if (dialog != null && dialog.open) dialog.update(app(dialog.pkg), null);
     }
 
     @Override public void onTick() {
         if (a == null) return;
-        if (!paused && SystemClock.elapsedRealtime() - lastStartAt >= KEEPALIVE_MS) startSampling();
+        long since = lastStartAt == 0 ? Long.MAX_VALUE : SystemClock.elapsedRealtime() - lastStartAt;
+        if (TaskKeepalive.shouldStart(paused, since, feedAge())) startSampling();
         updateLive();
         pollEnd();
     }
@@ -224,6 +218,7 @@ public class TasksPage extends ApplyPage {
         if (paused) {
             Log.i(TAG, "tasks paused");
             sendTasks(Actions.TASKS_STOP);
+            clearHist();
         } else {
             Log.i(TAG, "tasks live");
             startSampling();
@@ -293,9 +288,9 @@ public class TasksPage extends ApplyPage {
         boolean newLabels = false;
         for (TaskSnapshot.App x : s.apps) {
             seen.add(x.pkg);
-            Hist hh = hist.get(x.pkg);
-            if (hh == null) { hh = new Hist(); hist.put(x.pkg, hh); }
-            hh.add(x.rssKb);
+            RamHist hh = hist.get(x.pkg);
+            if (hh == null) { hh = new RamHist(); hist.put(x.pkg, hh); }
+            hh.add(s.seq, s.atMs, x.rssKb);
             if (labelTried.add(x.pkg) && !x.pkg.startsWith("_")) {
                 String lb = ButtonEditor.appLabel(a, x.pkg);
                 if (lb != null && !lb.equals(x.pkg) && !lb.trim().isEmpty()) { labels.put(x.pkg, lb); newLabels = true; }
@@ -399,6 +394,12 @@ public class TasksPage extends ApplyPage {
 
     // ---- header ----
 
+    /** Age of the latest completed snapshot (ms), Long.MAX_VALUE if none. */
+    static long feedAge() {
+        long at = LogTail.lastFeedAt;
+        return at == 0 ? Long.MAX_VALUE : System.currentTimeMillis() - at;
+    }
+
     void updateLive() {
         if (a == null) return;
         if (paused) {
@@ -407,10 +408,11 @@ public class TasksPage extends ApplyPage {
             liveText.setTextColor(Theme.ACCENT);
             return;
         }
-        long age = System.currentTimeMillis() - LogTail.lastFeedAt;
-        if (LogTail.FEED.latest() == null || LogTail.lastFeedAt == 0 || age > STALE_MS) {
+        if (LogTail.FEED.latest() == null || feedAge() > STALE_MS) {
+            clearHist();
             dot.set(0, false);
-            liveText.setText(!Store.enabled(a) ? "Stickman is OFF" : "waiting…");
+            liveText.setText(!Store.enabled(a) ? "Stickman is OFF"
+                : Bridge.otherVpnActive(a) ? "VPN active — not sampling" : "waiting…");
             liveText.setTextColor(Theme.MUTED);
             return;
         }
@@ -517,10 +519,10 @@ public class TasksPage extends ApplyPage {
 
     void endApp(String pkg) {
         if (!stickdOn()) return;
+        endAt = 0;   // armed only once the command is really sent (not if the VPN warning is cancelled)
         endPkg = pkg;
         endLabel = label(pkg);
-        endAt = System.currentTimeMillis();
-        send(Commands.act(Actions.END, pkg), "end", "Ending " + endLabel + "…");
+        send(Commands.act(Actions.END, pkg), "end", "Ending " + endLabel + "…", () -> endAt = System.currentTimeMillis());
     }
 
     void setAlwaysKill(final String pkg, boolean on) {
@@ -571,7 +573,7 @@ public class TasksPage extends ApplyPage {
                 TaskSnapshot s = map.snapshot();
                 if (s != null) map.setSnapshot(s, sort);
             } else endAll();
-        });
+        }).onDismiss(() -> Log.i(TAG, "tasks menu closed"));   // Back (or a choice) closed it; devtest expects this
     }
 
     void endAll() {
@@ -583,8 +585,8 @@ public class TasksPage extends ApplyPage {
         if (n == 0) { say("Nothing to close: only protected, playing or in-front apps are running."); return; }
         ThemedDialog.confirm(a, "End all?", "Close " + n + (n == 1 ? " app" : " apps")
             + "? Protected, playing and the app in front stay.", "End all", () -> {
-                endAllAt = System.currentTimeMillis();
-                send(Commands.act(Actions.END_ALL, null), "end_all", "Closing apps…");
+                endAllAt = 0;   // armed only once the command is really sent
+                send(Commands.act(Actions.END_ALL, null), "end_all", "Closing apps…", () -> endAllAt = System.currentTimeMillis());
             });
     }
 

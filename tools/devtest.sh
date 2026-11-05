@@ -102,9 +102,13 @@ sh_ "chmod 755 $T/remapd $T/fakeremote"
 rm -f "$OUT/in"; mkfifo "$OUT/in"
 DETACH=0; grep -q '^#detach' "$SCEN" && DETACH=1   # "#detach": fakeremote runs on the stick (survives adb session drops caused by app Bridge commands)
 if [ $DETACH = 1 ]; then
+    # a run that died untrapped can leave `tail -f cmd | fakeremote` (and its test remapd) behind: they would inject
+    # every key twice. Same exact-match kills as restore(); never touches the production remapd.
+    sh_ 'pkill -x fakeremote 2>/dev/null; for P in $(pidof tail); do grep -q "'$T'/cmd" /proc/$P/cmdline 2>/dev/null && kill $P; done; for P in $(pidof remapd); do grep -q "'"$FAKE"'" /proc/$P/cmdline 2>/dev/null && kill $P; done; true'
+    sleep 0.3
     sh_ "cd $T && : >cmd && rm -f sent.dev && setsid nohup sh -c 'tail -f $T/cmd | $T/fakeremote >$T/sent.dev 2>$T/fr.err' </dev/null >/dev/null 2>&1 &"
     for i in $(seq 50); do sh_ "cat $T/sent.dev" | tr -d '\r' >"$OUT/sent.log"; grep -q READY "$OUT/sent.log" && break; sleep 0.2; done
-    : >"$OUT/fakeremote.err"
+    sh_ "cat $T/fr.err 2>/dev/null" | tr -d '\r' >"$OUT/fakeremote.err"   # the detached fakeremote's stderr is on the stick
 else
     $ADB shell -T "$T/fakeremote" <"$OUT/in" >"$OUT/sent.log" 2>"$OUT/fakeremote.err" &
     FR_BG=$!

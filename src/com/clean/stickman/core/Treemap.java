@@ -175,4 +175,51 @@ public final class Treemap {
         }
         return false;
     }
+
+    /**
+     * Equal-size grid in reading order: rows filled left to right, top to bottom (Sort by name). The column count makes
+     * the cells closest to square; the last row's cells stretch to fill the width, so the grid tiles the area exactly.
+     */
+    public static List<Rect> grid(List<String> keys, double x, double y, double w, double h) {
+        int n = keys.size();
+        List<Rect> out = new ArrayList<>(n);
+        if (n == 0) return out;
+        if (!(w > 0) || !(h > 0)) {
+            for (String k : keys) out.add(new Rect(k, x, y, 0, 0));
+            return out;
+        }
+        int cols = gridCols(n, w, h);
+        int rows = (n + cols - 1) / cols;
+        double ch = h / rows;
+        for (int i = 0; i < n; i++) {
+            int r = i / cols, c = i % cols;
+            int inRow = r == rows - 1 ? n - r * cols : cols;
+            double cw = w / inRow;
+            double rx = x + c * cw, ry = y + r * ch;
+            double rw = c == inRow - 1 ? x + w - rx : cw;   // last cell absorbs rounding
+            double rh = r == rows - 1 ? y + h - ry : ch;
+            out.add(new Rect(keys.get(i), rx, ry, rw, rh));
+        }
+        return out;
+    }
+
+    /** Columns for n equal cells in w x h whose full-row cells are closest to square. */
+    static int gridCols(int n, double w, double h) {
+        int best = 1;
+        double bestScore = Double.MAX_VALUE;
+        for (int c = 1; c <= n; c++) {
+            int r = (n + c - 1) / c;
+            double cw = w / c, ch = h / r;
+            double score = Math.abs(Math.log(cw / ch));
+            if (score < bestScore - 1e-9) { bestScore = score; best = c; }
+        }
+        return best;
+    }
+
+    /** True if the grid's keys differ from prev's, in order (Sort by name relayouts only when the app list changes). */
+    public static boolean gridChanged(List<Rect> prev, List<String> keys) {
+        if (prev == null || prev.size() != keys.size()) return true;
+        for (int i = 0; i < keys.size(); i++) if (!prev.get(i).key.equals(keys.get(i))) return true;
+        return false;
+    }
 }

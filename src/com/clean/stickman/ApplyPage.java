@@ -31,10 +31,17 @@ public abstract class ApplyPage extends Page {
     }
 
     /** Queues cmd (null = refused by the builder: nothing is sent). */
-    void send(String cmd, String kind, String pending) {
+    void send(String cmd, String kind, String pending) { send(cmd, kind, pending, null); }
+
+    /**
+     * As {@link #send(String, String, String)}; onSent runs only when the command is really sent (with another VPN up,
+     * after the user accepted the VPN warning; never if they cancelled it).
+     */
+    void send(String cmd, String kind, String pending, final Runnable onSent) {
         if (cmd == null) { say("Not allowed."); return; }
         mine.put(cmd, kind);
         a.run(() -> {
+            if (onSent != null) onSent.run();
             result.setText(pending);
             pendingSince = System.currentTimeMillis();
             h.removeCallbacks(timeout);

@@ -13,4 +13,5 @@ sleep 1500
 #expect Stickd: STATUS tasks stopped
 #expect Stickman: tasks live
 #expect Stickd: STATUS tasks total=.*seq=1$ 9000
-#expect Stickman: tasks menu
+#expect Stickman: tasks menu$
+#expect Stickman: tasks menu closed

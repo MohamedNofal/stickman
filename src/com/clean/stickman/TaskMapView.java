@@ -45,6 +45,12 @@ public class TaskMapView extends View {
     public static final String SYS_OTHER = "_sys_other";
     public static final String MORE = Treemap.MORE;
     static final double RELAYOUT = 0.05;
+    /**
+     * Sort by CPU: tiles are sized by a 10 s moving average (core.CpuAvg) and re-laid out only past a 10 % share
+     * change; measured on the stick, raw per-sample CPU with 5 % re-laid the map out 27 times a minute.
+     */
+    static final double RELAYOUT_CPU = 0.10;
+    final com.clean.stickman.core.CpuAvg cpuAvg = new com.clean.stickman.core.CpuAvg();
     static final long TWEEN_MS = 400;
     static final int MORE_FILL = 0xFF3A3028, PILL_BG = 0x73000000, BADGE_BG = 0xB3000000;
 
@@ -157,6 +163,7 @@ public class TaskMapView extends View {
         if (sortBy == null) sortBy = Sort.RAM;
         snap = s;
         sort = sortBy;
+        cpuAvg.add(s);   // every snapshot (whatever the sort), so Sort by CPU starts with a full window
         sys.clear();
         apps.clear();
         List<TaskSnapshot.App> user = new ArrayList<>();
@@ -172,7 +179,7 @@ public class TaskMapView extends View {
 
     double weight(TaskSnapshot.App a) {
         switch (sort) {
-            case CPU: return a.cpuPct + 1;   // idle apps still get a (small) tile
+            case CPU: return cpuAvg.avg(a.pkg, a.cpuPct) + 1;   // smoothed; idle apps still get a (small) tile
             case NAME: return 1;
             default: return Math.max(1, a.rssKb);
         }
@@ -192,6 +199,13 @@ public class TaskMapView extends View {
             }
         };
         return TaskSnapshot.App.BY_RSS;
+    }
+
+    /** Re-layouts since the view was made (the "tasks relayout" log line counts the same). */
+    int relayouts;
+
+    boolean needsRelayout(List<String> keys, List<Double> weights) {
+        return Treemap.needsRelayout(rects, keys, weights, sort == Sort.CPU ? RELAYOUT_CPU : RELAYOUT);
     }
 
     /** Collapse + (maybe) re-layout; rebuilds tiles matched by key, tweening from where they are drawn now. */
@@ -223,11 +237,15 @@ public class TaskMapView extends View {
         order = new ArrayList<>(keys);   // full order, hidden ones included, so they keep their place if they grow
 
         float mw = getWidth() - 2 * inset, mh = getHeight() - 2 * inset;
+        boolean grid = sort == Sort.NAME;   // alphabetical rows: equal cells in reading order
         boolean relayout = sortChanged || mw <= 0 || mh <= 0
-            || Treemap.needsRelayout(rects, col.keys, col.weights, RELAYOUT);
+            || (grid ? Treemap.gridChanged(rects, col.keys) : needsRelayout(col.keys, col.weights));
         if (relayout) {
-            List<Treemap.Rect> next = mw > 0 && mh > 0
-                ? Treemap.layout(col.keys, col.weights, inset, inset, mw, mh) : new ArrayList<Treemap.Rect>();
+            relayouts++;
+            android.util.Log.i("Stickman", "tasks relayout sort=" + sort + " n=" + col.keys.size());
+            List<Treemap.Rect> next = mw <= 0 || mh <= 0 ? new ArrayList<Treemap.Rect>()
+                : grid ? Treemap.grid(col.keys, inset, inset, mw, mh)
+                : Treemap.layout(col.keys, col.weights, inset, inset, mw, mh);
             Map<String, Tile> old = new HashMap<>();
             for (Tile t : tiles) old.put(t.key, t);
             ArrayList<Tile> nt = new ArrayList<>(next.size());

@@ -159,4 +159,40 @@ public class TreemapTest {
         T.yes(Treemap.needsRelayout(prev, Arrays.asList("a", "z"), Arrays.asList(0.5, 0.5), 0.05), "key swapped");
         T.yes(Treemap.needsRelayout(null, k, Arrays.asList(0.5, 0.5), 0.05), "no previous layout");
     }
+
+    /** Sort by name: rows fill left to right, then top to bottom (reading order), and tile the area exactly. */
+    public void testGridFillsRows() {
+        List<Treemap.Rect> g = Treemap.grid(keys(7), 0, 0, 1600, 600);
+        T.eq(7, g.size(), "count");
+        double area = 0;
+        for (Treemap.Rect r : g) { inside(r, 0, 0, 1600, 600); area += r.area(); }
+        T.yes(Math.abs(area - 1600 * 600) < 1e-3, "tiles exactly");
+        // reading order: y never goes back up; within a row x increases
+        for (int i = 1; i < g.size(); i++) {
+            Treemap.Rect p = g.get(i - 1), r = g.get(i);
+            T.yes(r.y > p.y + E || (Math.abs(r.y - p.y) < E && r.x > p.x + E), "reading order at " + i + ": " + p + " -> " + r);
+        }
+        T.yes(Math.abs(g.get(0).y - g.get(1).y) < E, "a and b share the first row (rows, not columns)");
+        T.eq("a", g.get(0).key, "first top-left");
+        T.yes(g.get(0).x < E && g.get(0).y < E, "top-left");
+    }
+
+    public void testGridShapes() {
+        T.eq(1, Treemap.grid(keys(1), 0, 0, 100, 100).size(), "one");
+        Treemap.Rect one = Treemap.grid(keys(1), 5, 5, 100, 50).get(0);
+        T.yes(Math.abs(one.w - 100) < E && Math.abs(one.h - 50) < E, "one fills");
+        List<Treemap.Rect> four = Treemap.grid(keys(4), 0, 0, 200, 200);
+        T.yes(Math.abs(four.get(0).w - 100) < E && Math.abs(four.get(0).h - 100) < E, "2x2 on a square");
+        T.yes(Math.abs(four.get(2).y - 100) < E && four.get(2).x < E, "c starts row 2");
+        T.eq(0, Treemap.grid(new ArrayList<String>(), 0, 0, 10, 10).size(), "empty");
+        for (Treemap.Rect r : Treemap.grid(keys(3), 0, 0, 0, 10)) T.yes(r.w == 0 && r.h == 0, "zero area");
+    }
+
+    public void testGridChanged() {
+        List<Treemap.Rect> g = Treemap.grid(Arrays.asList("a", "b", "c"), 0, 0, 300, 100);
+        T.yes(!Treemap.gridChanged(g, Arrays.asList("a", "b", "c")), "same list: no relayout");
+        T.yes(Treemap.gridChanged(g, Arrays.asList("a", "c", "b")), "order changed");
+        T.yes(Treemap.gridChanged(g, Arrays.asList("a", "b")), "app gone");
+        T.yes(Treemap.gridChanged(null, Arrays.asList("a")), "no previous");
+    }
 }

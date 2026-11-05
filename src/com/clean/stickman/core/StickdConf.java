@@ -37,6 +37,27 @@ public final class StickdConf {
         return c;
     }
 
+    /**
+     * Adds pkg to list ("whitelist" = protect / never close, "blacklist" = always kill). The lists are exclusive:
+     * adding to one removes pkg from the other. Unknown list names and empty / non-package names are a no-op.
+     * Returns this.
+     */
+    public StickdConf addTo(String list, String pkg) {
+        if (!isPkg(pkg)) return this;
+        if ("whitelist".equals(list)) { whitelist.add(pkg); blacklist.remove(pkg); }
+        else if ("blacklist".equals(list)) { blacklist.add(pkg); whitelist.remove(pkg); }
+        return this;
+    }
+
+    /** Removes pkg from list ("whitelist" / "blacklist"); unknown list names are a no-op. Returns this. */
+    public StickdConf removeFrom(String list, String pkg) {
+        if ("whitelist".equals(list)) whitelist.remove(pkg);
+        else if ("blacklist".equals(list)) blacklist.remove(pkg);
+        return this;
+    }
+
+    private static boolean isPkg(String p) { return p != null && p.matches("[A-Za-z0-9._]+"); }
+
     private static int intOr0(String v) {
         try { int n = Integer.parseInt(v); return n < 0 ? 0 : n; }
         catch (NumberFormatException e) { return 0; }
@@ -63,7 +84,7 @@ public final class StickdConf {
     private static String join(Set<String> s) {
         StringBuilder b = new StringBuilder();
         for (String p : s) {
-            if (p == null || !p.matches("[A-Za-z0-9._]+")) continue;
+            if (!isPkg(p)) continue;
             if (b.length() > 0) b.append(',');
             b.append(p);
         }

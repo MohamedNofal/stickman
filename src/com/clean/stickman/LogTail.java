@@ -23,7 +23,10 @@ public class LogTail implements Runnable {
      * ring or lastStatus. Its listener runs on this LogTail thread.
      */
     static final com.clean.stickman.core.TaskFeed FEED = new com.clean.stickman.core.TaskFeed();
-    /** Epoch ms (logcat time) of the latest "tasks_end" feed line, 0 = none seen; lets the Tasks page detect a stale feed. */
+    /**
+     * Epoch ms (logcat time) of the latest snapshot FEED accepted and completed, 0 = none; lets the Tasks page detect a
+     * stale feed. Lines FEED discards (an old session, replayed history) never refresh it.
+     */
     static volatile long lastFeedAt;
     static volatile int lastKey;
     static volatile long lastKeyAt;
@@ -47,8 +50,9 @@ public class LogTail implements Runnable {
                         String body = l.substring(st + 3).trim();
                         String feed = body.length() > 7 ? body.substring(7) : "";   // after "STATUS "
                         if (com.clean.stickman.core.TaskFeed.isFeedLine(feed)) {
-                            if (feed.startsWith("tasks_end")) lastFeedAt = logTime(l);   // once per sample
-                            FEED.onLine(feed);
+                            // headers and ends carry the log time (session / replay detection); "task" lines don't need it
+                            FEED.onLine(feed, feed.startsWith("task ") ? 0 : logTime(l));
+                            lastFeedAt = FEED.latestAt();   // only a completed (accepted) snapshot counts as fresh
                             continue;
                         }
                         addStatus(l.length() > 14 ? l.substring(6, 14) : "", body);

@@ -216,4 +216,32 @@ public class TaskSamplerTest {
         endSampler(src).end("org.videolan.vlc");
         yes(src.stops().equals(Collections.singletonList("am force-stop org.videolan.vlc")), "allowed: " + src.stops());
     }
+
+    /** M5: logcat -G 1M only grows the main ring; bigger or unknown buffers are left alone. */
+    public void testLogBufferOnlyGrows() {
+        yes(TaskSampler.mainBufBelow1M("main: ring buffer is 256Kb (237Kb consumed), max entry is 5120b, max payload is 4068b\n"
+            + "system: ring buffer is 256Kb (10Kb consumed)\n"), "256Kb: grow");
+        yes(TaskSampler.mainBufBelow1M("main: ring buffer is 256 KiB (237 KiB consumed, 237 KiB readable), max entry is 5120 B"), "256 KiB (new format)");
+        yes(!TaskSampler.mainBufBelow1M("main: ring buffer is 1Mb (900Kb consumed)"), "1Mb: leave");
+        yes(!TaskSampler.mainBufBelow1M("main: ring buffer is 4 MiB (1 MiB consumed)"), "4 MiB: never shrink");
+        yes(!TaskSampler.mainBufBelow1M("system: ring buffer is 64Kb (1Kb consumed)"), "no main line: leave");
+        yes(!TaskSampler.mainBufBelow1M(""), "empty");
+        yes(!TaskSampler.mainBufBelow1M(null), "null");
+    }
+
+    /** M6: end runs on the end/end_all executor, not on the caller's (spool) thread. */
+    public void testEndRunsOffTheCallerThread() throws Exception {
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        final String[] thread = new String[1];
+        EndSrc src = new EndSrc() {
+            @Override public String sh(String cmd) {
+                if (cmd.startsWith("am force-stop")) { thread[0] = Thread.currentThread().getName(); done.countDown(); }
+                return super.sh(cmd);
+            }
+        };
+        endSampler(src).endAsync("org.videolan.vlc");
+        yes(done.await(5, java.util.concurrent.TimeUnit.SECONDS), "end ran");
+        yes("stickd-endall".equals(thread[0]), "ran on " + thread[0]);
+        yes(!Thread.currentThread().getName().equals(thread[0]), "not the caller thread");
+    }
 }

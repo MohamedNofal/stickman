@@ -10,6 +10,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.clean.stickman.core.RamHist;
 import com.clean.stickman.core.TaskSnapshot;
 import com.clean.stickman.core.Units;
 
@@ -42,7 +43,7 @@ public class TaskDialog {
     final Context c;
     boolean open = true;
 
-    TaskDialog(Context ctx, String label, String pkg, TaskSnapshot.App app, TasksPage.Hist hist, Options o,
+    TaskDialog(Context ctx, String label, String pkg, TaskSnapshot.App app, RamHist hist, Options o,
                final Actions act, Runnable onDismiss) {
         c = ctx;
         this.pkg = pkg;
@@ -125,7 +126,7 @@ public class TaskDialog {
     }
 
     /** New numbers for this dialog's package (app null = gone from the snapshot). */
-    void update(TaskSnapshot.App app, TasksPage.Hist hist) {
+    void update(TaskSnapshot.App app, RamHist hist) {
         if (app == null) {
             sub.setText(pkg + " · not running");
         } else {
@@ -135,15 +136,17 @@ public class TaskDialog {
                 + app.procs + (agg ? (app.procs == 1 ? " package" : " packages") : (app.procs == 1 ? " process" : " processes")));
         }
         spark.set(hist);
-        if (hist == null || hist.n < 2) trend.setText("RAM over the last 60 s: collecting…");
-        else trend.setText("RAM over the last " + (hist.n - 1) * 2 + " s: " + Units.mb(hist.get(0)) + " → " + Units.mb(hist.get(hist.n - 1))
+        if (hist == null || hist.size() < 2) trend.setText("RAM over the last 60 s: collecting…");
+        else trend.setText("RAM over the last " + hist.spanSec() + " s: " + Units.mb(hist.get(0)) + " → " + Units.mb(hist.get(hist.size() - 1))
             + "   (low " + Units.mb(hist.min()) + ", high " + Units.mb(hist.max()) + ")");
     }
 
     /** Tiny RAM trend line; all drawing state preallocated, onDraw does not allocate. */
     static final class Sparkline extends View {
-        final float[] vals = new float[TasksPage.Hist.SIZE];
+        final float[] vals = new float[RamHist.SIZE], ago = new float[RamHist.SIZE];
         int n;
+        /** The trend's x axis: the newest sample at the right edge, this many ms back at the left. */
+        static final float WINDOW_MS = (RamHist.SIZE - 1) * 2000f;
         final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG), area = new Paint(Paint.ANTI_ALIAS_FLAG), base = new Paint();
         final Path lp = new Path(), ap = new Path();
         final float dp;
@@ -162,9 +165,9 @@ public class TaskDialog {
             setFocusable(false);
         }
 
-        void set(TasksPage.Hist h) {
-            n = h == null ? 0 : h.n;
-            for (int i = 0; i < n; i++) vals[i] = h.get(i);
+        void set(RamHist h) {
+            n = h == null ? 0 : h.size();
+            for (int i = 0; i < n; i++) { vals[i] = h.get(i); ago[i] = Math.min(WINDOW_MS, h.agoMs(i)); }
             invalidate();
         }
 
@@ -177,17 +180,16 @@ public class TaskDialog {
             // flat-ish lines stay in the middle instead of amplifying noise: at least a 10 % band
             float span = Math.max(hi - lo, Math.max(hi * 0.1f, 1));
             float mid = (hi + lo) / 2, bottom = mid - span / 2;
-            float step = (w - 2 * pad) / (TasksPage.Hist.SIZE - 1);
-            float x0 = w - pad - (n - 1) * step;   // newest at the right edge
+            float perMs = (w - 2 * pad) / WINDOW_MS;   // placed by real sample time, newest at the right edge
             lp.reset();
             ap.reset();
             for (int i = 0; i < n; i++) {
-                float x = x0 + i * step;
+                float x = w - pad - ago[i] * perMs;
                 float y = pad + (h - 2 * pad) * (1 - (vals[i] - bottom) / span);
                 if (i == 0) { lp.moveTo(x, y); ap.moveTo(x, h); ap.lineTo(x, y); }
                 else { lp.lineTo(x, y); ap.lineTo(x, y); }
             }
-            ap.lineTo(x0 + (n - 1) * step, h);
+            ap.lineTo(w - pad - ago[n - 1] * perMs, h);
             ap.close();
             cv.drawPath(ap, area);
             cv.drawPath(lp, line);

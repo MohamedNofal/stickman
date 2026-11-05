@@ -8,9 +8,16 @@ public final class TaskSnapshot {
     public final int cpuPct;
     /** Sorted by rssKb descending, ties by pkg. */
     public final List<App> apps;
+    /** When the sample was logged (epoch ms of its tasks_end line), 0 = unknown. */
+    public final long atMs;
 
     public TaskSnapshot(long seq, long totalKb, long availKb, int cpuPct, List<App> apps) {
+        this(seq, totalKb, availKb, cpuPct, apps, 0);
+    }
+
+    public TaskSnapshot(long seq, long totalKb, long availKb, int cpuPct, List<App> apps, long atMs) {
         this.seq = seq; this.totalKb = totalKb; this.availKb = availKb; this.cpuPct = cpuPct; this.apps = apps;
+        this.atMs = atMs;
     }
 
     public static final class App {

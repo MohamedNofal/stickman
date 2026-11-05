@@ -29,11 +29,69 @@ public class TaskFeedTest {
         f.onLine("task com.a rss=2 cpu=0 state=bg up=5 procs=1 seq=5");
         f.onLine("tasks_end seq=5");
         T.eq(5L, f.latestSeq(), "seq 5");
+        // no sample in progress and the seq went down: logcat order is time order, so this is a restarted session
         f.onLine("tasks total=10 avail=5 cpu=1 seq=3");
+        T.eq(null, f.latest(), "lower seq = new session: old snapshot dropped");
         f.onLine("task com.q rss=1 cpu=0 state=bg up=5 procs=1 seq=3");
         f.onLine("tasks_end seq=3");
-        T.eq(5L, f.latestSeq(), "older ignored");
-        T.eq("com.a", f.latest().apps.get(0).pkg, "unchanged");
+        T.eq(3L, f.latestSeq(), "new session accepted");
+        T.eq("com.q", f.latest().apps.get(0).pkg, "new data");
+    }
+
+    static void sample(TaskFeed f, long seq, String pkg, long at) {
+        f.onLine("tasks total=10 avail=5 cpu=1 seq=" + seq, at);
+        f.onLine("task " + pkg + " rss=1 cpu=0 state=bg up=5 procs=1 seq=" + seq, 0);
+        f.onLine("tasks_end seq=" + seq, at + 50);
+    }
+
+    /** I1: the new session's seq=1 header was missed; its later samples must still replace the old session. */
+    public void testMissedSeqOneNewSessionFromSeqTwo() {
+        TaskFeed f = new TaskFeed();
+        long t = 1_000_000;
+        for (int i = 1; i <= 300; i++) sample(f, i, "old.app", t + i * 2000L);
+        T.eq(300L, f.latestSeq(), "old session at 300");
+        long t2 = t + 400 * 2000L;
+        sample(f, 2, "new.app", t2);   // seq=1 missed (logcat re-exec / tail hand-over)
+        T.eq(2L, f.latestSeq(), "new session from seq 2");
+        T.eq("new.app", f.latest().apps.get(0).pkg, "new data shown, not the frozen old snapshot");
+        T.eq(t2 + 50, f.latestAt(), "latestAt = the completed sample's end time");
+        sample(f, 3, "new.app", t2 + 2000);
+        T.eq(3L, f.latestSeq(), "continues");
+    }
+
+    /** Replayed history (logcat -T after a resume) older than what is shown must not reset or refresh anything. */
+    public void testReplayedHistoryIgnored() {
+        TaskFeed f = new TaskFeed();
+        long t = 5_000_000;
+        for (int i = 1; i <= 10; i++) sample(f, i, "a.b", t + i * 2000L);
+        long at = f.latestAt();
+        sample(f, 4, "replay.x", t + 4 * 2000L);   // an old line again
+        T.eq(10L, f.latestSeq(), "replay ignored");
+        T.eq(at, f.latestAt(), "freshness unchanged by replay");
+        sample(f, 1, "x.y", t + 30 * 2000L);       // a real restart (newer time)
+        T.eq(1L, f.latestSeq(), "real restart accepted");
+    }
+
+    /** An interrupted sample (its tasks_end never arrived) must not block a newer, lower-seq session forever. */
+    public void testAbandonedSampleDoesNotBlockNewSession() {
+        TaskFeed f = new TaskFeed();
+        long t = 9_000_000;
+        sample(f, 299, "old.app", t);
+        f.onLine("tasks total=10 avail=5 cpu=1 seq=300", t + 2000);   // end never comes
+        sample(f, 2, "new.app", t + 60000);
+        T.eq(2L, f.latestSeq(), "new session despite the half sample");
+    }
+
+    /** latestAt only moves when a snapshot completes, never on a discarded tasks_end. */
+    public void testLatestAtOnlyOnCompletion() {
+        TaskFeed f = new TaskFeed();
+        T.eq(0L, f.latestAt(), "none");
+        f.onLine("tasks_end seq=7", 123456);
+        T.eq(0L, f.latestAt(), "stray end ignored");
+        sample(f, 1, "a.b", 200000);
+        T.eq(200050L, f.latestAt(), "completed");
+        f.onLine("tasks_end seq=1", 300000);   // duplicate end
+        T.eq(200050L, f.latestAt(), "duplicate end does not refresh");
     }
 
     public void testRoundTrip() {

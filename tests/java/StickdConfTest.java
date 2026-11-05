@@ -40,4 +40,36 @@ public class StickdConfTest {
         T.yes(s.contains("autokill.whitelist=ok.pkg\n"), s);
         T.yes(s.contains("autokill.blacklist=\n"), s);
     }
+
+    public void testAddToListsAreExclusive() {
+        StickdConf c = StickdConf.parse("autokill.whitelist=a.b,c.d\nautokill.blacklist=e.f\n");
+        c.addTo("blacklist", "a.b");
+        T.yes(c.blacklist.contains("a.b") && !c.whitelist.contains("a.b"), "whitelist -> blacklist moves it");
+        T.yes(c.whitelist.contains("c.d"), "others kept");
+        c.addTo("whitelist", "e.f");
+        T.yes(c.whitelist.contains("e.f") && !c.blacklist.contains("e.f"), "blacklist -> whitelist moves it");
+        c.addTo("whitelist", "e.f");
+        T.eq(2, c.whitelist.size(), "idempotent");
+        T.eq("autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=c.d,e.f\nautokill.blacklist=a.b\nstayawake.media=0\n",
+            c.serialize(), "serialized");
+    }
+
+    public void testRemoveFrom() {
+        StickdConf c = StickdConf.parse("autokill.whitelist=a.b\nautokill.blacklist=e.f\n");
+        c.removeFrom("blacklist", "e.f");
+        T.yes(c.blacklist.isEmpty(), "removed");
+        c.removeFrom("blacklist", "a.b");
+        T.yes(c.whitelist.contains("a.b"), "removing from the other list leaves this one");
+        c.removeFrom("whitelist", "zz.top");
+        T.eq(1, c.whitelist.size(), "absent pkg: no-op");
+    }
+
+    public void testUnknownListOrBadPkgIsNoop() {
+        String text = "autokill.on_leave=1\nautokill.interval_min=5\nautokill.whitelist=a.b\nautokill.blacklist=e.f\nstayawake.media=0\n";
+        T.eq(text, StickdConf.parse(text).addTo("greylist", "x.y").serialize(), "unknown list add");
+        T.eq(text, StickdConf.parse(text).removeFrom("greylist", "a.b").serialize(), "unknown list remove");
+        T.eq(text, StickdConf.parse(text).addTo(null, "x.y").serialize(), "null list");
+        T.eq(text, StickdConf.parse(text).addTo("whitelist", "e.f;rm").serialize(), "non-package name: no-op (blacklist kept)");
+        T.eq(text, StickdConf.parse(text).addTo("blacklist", null).serialize(), "null pkg");
+    }
 }
