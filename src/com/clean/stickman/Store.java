@@ -95,6 +95,51 @@ public final class Store {
 
     public static void saveStickdText(Context c, String text) { write(c, STICKD, text == null ? "" : text); }
 
+    // ---- remote model (preset), learned key codes and app-button names, per preset ----
+    public static String remoteModel(Context c) {
+        return com.clean.stickman.core.RemotePresets.get(prefs(c).getString("remoteModel", null)).id;
+    }
+
+    public static void setRemoteModel(Context c, String id) { prefs(c).edit().putString("remoteModel", id).apply(); }
+
+    /** slot -> code from learned.<preset>.<slot>. */
+    public static java.util.Map<String, Integer> learned(Context c, String preset) {
+        java.util.Map<String, Integer> out = new java.util.HashMap<>();
+        String pre = "learned." + preset + ".";
+        for (java.util.Map.Entry<String, ?> e : prefs(c).getAll().entrySet())
+            if (e.getKey().startsWith(pre) && e.getValue() instanceof Integer) out.put(e.getKey().substring(pre.length()), (Integer) e.getValue());
+        return out;
+    }
+
+    /** code <= 0 forgets the slot's learned code. */
+    public static void setLearned(Context c, String preset, String slot, int code) {
+        String k = "learned." + preset + "." + slot;
+        if (code <= 0) prefs(c).edit().remove(k).apply();
+        else prefs(c).edit().putInt(k, code).apply();
+    }
+
+    /** slot -> label from label.<preset>.<slot>. */
+    public static java.util.Map<String, String> labels(Context c, String preset) {
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        String pre = "label." + preset + ".";
+        for (java.util.Map.Entry<String, ?> e : prefs(c).getAll().entrySet())
+            if (e.getKey().startsWith(pre) && e.getValue() instanceof String) out.put(e.getKey().substring(pre.length()), (String) e.getValue());
+        return out;
+    }
+
+    /** null label restores the preset's default name. */
+    public static void setLabel(Context c, String preset, String slot, String label) {
+        String k = "label." + preset + "." + slot;
+        if (label == null) prefs(c).edit().remove(k).apply();
+        else prefs(c).edit().putString(k, label).apply();
+    }
+
+    /** The chosen preset's buttons with learned codes and renames applied. */
+    public static com.clean.stickman.core.RemoteLayout.Btn[] remoteButtons(Context c) {
+        String id = remoteModel(c);
+        return com.clean.stickman.core.RemotePresets.resolve(com.clean.stickman.core.RemotePresets.get(id), learned(c, id), labels(c, id));
+    }
+
     // ---- master switch ----
     public static boolean enabled(Context c) { return prefs(c).getBoolean("enabled", true); }
 

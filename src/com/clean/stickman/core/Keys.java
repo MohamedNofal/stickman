@@ -44,6 +44,12 @@ public final class Keys {
         }
     }
 
+    /** True for a code on some preset (Keys.ALL). */
+    public static boolean known(int code) {
+        for (int k : ALL) if (k == code) return true;
+        return false;
+    }
+
     /** App buttons deliver press and release together, so only tap makes sense. */
     public static boolean tapOnly(int code) { return code >= 744 && code <= 747; }
 }

@@ -12,13 +12,15 @@ import android.widget.TextView;
 import com.clean.stickman.core.Keys;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.RemoteLayout;
+import com.clean.stickman.core.RemotePresets;
 import com.clean.stickman.core.Rule;
 
 import java.util.List;
 
 /**
- * The remote screen: a drawing of the owner's remote (D-pad focus, OK edits a button), a profile switcher
- * (Default + per-app profiles) and Listen mode (press a physical button -> it lights up and its editor opens).
+ * The remote screen: a drawing of the chosen remote model (D-pad focus, OK edits a button), a profile switcher
+ * (Default + per-app profiles), Listen mode (press a physical button -> it lights up and its editor opens;
+ * a key not on the drawing can be assigned to a not-yet-learned button) and the Remote model chooser.
  */
 public class RemotePage extends Page implements RemoteView.Listener, RemoteView.Info {
     static final long LISTEN_TIMEOUT_MS = 20000;
@@ -32,8 +34,11 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     RemoteView remote;
     RemapModel m = new RemapModel();
     String profile = RemapModel.DEFAULT;
-    TextView profName, profInfo, btnName, btnLayers, listenInfo;
-    Button prev, next, remove, listen;
+    TextView profName, profInfo, btnName, btnLayers, listenInfo, modelInfo;
+    Button prev, next, remove, listen, model;
+    String presetId = RemotePresets.DEFAULT;
+    /** Slot being taught when listening was started from an unlearned button, else null. */
+    String learnSlot;
     final Handler h = new Handler();
     boolean listening;
     /** Until when a Back release (from the press that cancelled listening) is swallowed. */
@@ -107,6 +112,15 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         lc.addView(listenInfo);
         side.addView(lc);
 
+        LinearLayout mc = Theme.card(a);
+        mc.addView(Theme.heading(a, "Remote model"));
+        model = Theme.button(a, "");
+        model.setOnClickListener(v -> chooseModel());
+        mc.addView(model);
+        modelInfo = Theme.text(a, "", 13, Theme.MUTED);
+        mc.addView(modelInfo);
+        side.addView(mc);
+
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, -1, 1f);
         sp.setMargins(Theme.dp(a, 16), 0, 0, 0);
         root.addView(Theme.scroll(a, side), sp);
@@ -118,9 +132,38 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     // ---- model / profile ----
 
     void reload() {
+        loadRemote();
         m = Store.hasRemap(a) ? Store.remap(a) : new RemapModel();
         if (!m.profiles().contains(profile)) profile = RemapModel.DEFAULT;
         refresh();
+    }
+
+    /** Re-read the remote model, learned codes and button names from Store into the drawing. */
+    void loadRemote() {
+        presetId = Store.remoteModel(a);
+        RemotePresets.Preset p = RemotePresets.get(presetId);
+        RemoteLayout.Btn[] bs = Store.remoteButtons(a);
+        remote.setRemote(p, bs);
+        model.setText(p.title());
+        int open = RemotePresets.unlearned(bs).size();
+        modelInfo.setText(open == 0 ? "The drawing matches this remote. Pick yours if it looks different."
+            : open + " button" + (open == 1 ? "" : "s") + " on this remote send a key Stickman doesn't know yet: select one and press OK to teach it.");
+    }
+
+    void chooseModel() {
+        final List<RemotePresets.Preset> ps = RemotePresets.ALL;
+        String[] names = new String[ps.size()];
+        int cur = 0;
+        for (int i = 0; i < names.length; i++) {
+            names[i] = ps.get(i).title();
+            if (ps.get(i).id.equals(presetId)) cur = i;
+        }
+        a.dialog().setTitle("Which remote do you have?").setSingleChoiceItems(names, cur, (d, w) -> {
+            d.dismiss();
+            Store.setRemoteModel(a, ps.get(w).id);
+            loadRemote();
+            refresh();
+        }).setNegativeButton("Cancel", null).show();
     }
 
     void refresh() {
@@ -133,7 +176,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         prev.setEnabled(many);
         next.setEnabled(many);
         remove.setVisibility(def ? View.GONE : View.VISIBLE);
-        onFocusCode(remote.focused());
+        onFocusButton(remote.focused());
         remote.invalidate();
     }
 
@@ -185,9 +228,11 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     // ---- RemoteView.Info ----
 
-    @Override public boolean hasRules(int code) { return m.hasRules(profile, code); }
+    @Override public boolean hasRules(RemoteLayout.Btn b) { return b.code != 0 && m.hasRules(profile, b.code); }
 
-    @Override public String hint(int code) {
+    @Override public String hint(RemoteLayout.Btn b) {
+        if (b.code == 0) return "Not learned yet";
+        int code = b.code;
         String p = effective(code);
         String tap = m.get(p, code, Rule.Layer.TAP);
         return tap == null ? "Original" : ButtonEditor.describe(a, tap);
@@ -195,11 +240,16 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     // ---- RemoteView.Listener ----
 
-    @Override public void onFocusCode(int code) {
+    @Override public void onFocusButton(RemoteLayout.Btn b) {
         if (btnName == null) return;
+        btnName.setText(b.name);
+        if (b.code == 0) {
+            btnLayers.setText("Stickman doesn't know which key this button sends yet. Press OK, then press it on your remote.");
+            return;
+        }
+        int code = b.code;
         String p = effective(code);
         boolean inherited = !p.equals(profile);
-        btnName.setText(Keys.name(code));
         StringBuilder sb = new StringBuilder();
         String tap = m.get(p, code, Rule.Layer.TAP), dbl = m.get(p, code, Rule.Layer.DOUBLE), hold = m.get(p, code, Rule.Layer.HOLD);
         sb.append("Press:  ").append(tap == null ? "Original" : ButtonEditor.describe(a, tap));
@@ -209,11 +259,43 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         btnLayers.setText(sb);
     }
 
-    @Override public void onPick(int code) {
+    @Override public void onPick(RemoteLayout.Btn b) {
         if (listening) stopListening(null);
+        if (b.code == 0) { teach(b); return; }
         if (!ready()) return;
         m = Store.remap(a);
-        ButtonEditor.open(a, m, profile, code, this::refresh);
+        ButtonEditor.open(a, m, profile, b, presetId, () -> { loadRemote(); refresh(); });
+    }
+
+    /** Unlearned button picked: listen for it and assign whatever key arrives. */
+    void teach(RemoteLayout.Btn b) {
+        final String slot = b.slot;
+        a.dialog().setTitle("Teach “" + b.name + "”")
+            .setMessage("Stickman doesn't know which key this button sends yet. Choose Listen, then press "
+                + b.name + " on your remote.")
+            .setPositiveButton("Listen", (d, w) -> { if (!listening) { learnSlot = slot; startListening(); } })
+            .setNegativeButton("Cancel", null).show();
+    }
+
+    /** Store code as slot's key on this remote model and show it. */
+    void assign(String slot, int code) {
+        Store.setLearned(a, presetId, slot, code);
+        loadRemote();
+        refresh();
+        remote.flash(code);
+        listenInfo.setText("Learned: " + remote.focused().name + " sends key " + code + ". Press OK on it to change what it does.");
+        listenInfo.setTextColor(Theme.MUTED);
+    }
+
+    /** A key that isn't on the drawing arrived while listening: offer the unlearned buttons. */
+    void offerAssign(final int code) {
+        final RemoteLayout.Btn[] bs = remote.buttons();
+        final List<Integer> open = RemotePresets.unlearned(bs);
+        String[] names = new String[open.size()];
+        for (int i = 0; i < names.length; i++) names[i] = bs[open.get(i)].name;
+        a.dialog().setTitle("Heard " + Keys.name(code) + ". Assign to:")
+            .setItems(names, (d, w) -> assign(bs[open.get(w)].slot, code))
+            .setNegativeButton("Cancel", null).show();
     }
 
     // ---- listen mode ----
@@ -254,11 +336,26 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
             stopListening(CANCELLED);   // Back cancels (remapd logs it even when Back is remapped)
             return;
         }
-        if (at > listenBaseAt && at - listenFrom >= LISTEN_GRACE_MS && RemoteLayout.find(k) != null) {
-            stopListening("Heard " + Keys.name(k) + ".");
-            remote.flash(k);
+        boolean heard = at > listenBaseAt && at - listenFrom >= LISTEN_GRACE_MS && k > 0;
+        int idx = heard ? RemoteLayout.indexOf(remote.buttons(), k) : -1;
+        if (heard && idx < 0 && learnSlot != null) {
+            String slot = learnSlot;
+            stopListening(null);
+            assign(slot, k);
+            return;
+        }
+        if (heard && idx < 0 && !RemotePresets.unlearned(remote.buttons()).isEmpty()) {
+            stopListening("Heard " + Keys.name(k) + ", which isn't on this drawing.");
             final int code = k;
-            h.postDelayed(() -> { if (a.hasWindowFocus()) onPick(code); }, 650);
+            h.postDelayed(() -> { if (a.hasWindowFocus()) offerAssign(code); }, 300);
+            return;
+        }
+        if (heard && idx >= 0) {
+            final RemoteLayout.Btn b = remote.buttons()[idx];
+            boolean teaching = learnSlot != null;
+            stopListening(teaching ? "That key is already " + b.name + " on this drawing. Try again?" : "Heard " + b.name + ".");
+            remote.flash(k);
+            if (!teaching) h.postDelayed(() -> { if (a.hasWindowFocus()) onPick(b); }, 650);
             return;
         }
         if (at > listenBaseAt) listenBaseAt = at;   // grace-period or unknown key: keep listening
@@ -268,6 +365,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     void stopListening(String msg) {
         listening = false;
+        learnSlot = null;
         h.removeCallbacksAndMessages(null);
         if (listen == null) return;
         listen.setText("Listen for a button");

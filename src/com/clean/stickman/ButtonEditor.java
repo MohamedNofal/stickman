@@ -15,6 +15,8 @@ import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Keys;
 import com.clean.stickman.core.RemapModel;
+import com.clean.stickman.core.RemoteLayout;
+import com.clean.stickman.core.RemotePresets;
 import com.clean.stickman.core.Rule;
 
 import java.util.ArrayList;
@@ -26,6 +28,7 @@ import java.util.Map;
 /**
  * Dialog editing one button's Tap / Double / Hold layers in one profile. Each row opens an action chooser
  * (Original, Do nothing, an app, another button, a Stickman action). Save writes remap.conf and re-runs ensure.
+ * App buttons can be renamed and learned buttons forgotten (per remote model, in Store).
  */
 public class ButtonEditor {
     public interface Callback<T> { void got(T t); }
@@ -39,27 +42,32 @@ public class ButtonEditor {
     final RemapModel m;
     final String profile;
     final int code;
+    final RemoteLayout.Btn btn;
+    final String presetId;
     final Runnable onSaved;
     final String[] cur = new String[LAYERS.length];
     final Button[] rows = new Button[LAYERS.length];
     /** App profile without its own rules for this key: showing the Default profile's layers. */
     final boolean inherited;
     boolean dirty;
-    TextView note;
+    TextView note, title;
+    AlertDialog dlg;
 
-    ButtonEditor(MainActivity a, RemapModel m, String profile, int code, Runnable onSaved) {
+    ButtonEditor(MainActivity a, RemapModel m, String profile, RemoteLayout.Btn btn, String presetId, Runnable onSaved) {
         this.a = a;
         this.m = m;
         this.profile = profile;
-        this.code = code;
+        this.btn = btn;
+        this.presetId = presetId;
+        this.code = btn.code;
         this.onSaved = onSaved;
         inherited = !RemapModel.DEFAULT.equals(profile) && !m.hasRules(profile, code);
         String src = inherited ? RemapModel.DEFAULT : profile;
         for (Rule.Layer l : LAYERS) cur[l.ordinal()] = m.get(src, code, l);
     }
 
-    public static void open(MainActivity a, RemapModel m, String profile, int code, Runnable onSaved) {
-        new ButtonEditor(a, m, profile, code, onSaved).show();
+    public static void open(MainActivity a, RemapModel m, String profile, RemoteLayout.Btn btn, String presetId, Runnable onSaved) {
+        new ButtonEditor(a, m, profile, btn, presetId, onSaved).show();
     }
 
     // ---- shared helpers (RemotePage uses them too) ----
@@ -155,8 +163,8 @@ public class ButtonEditor {
         if (action == null) {
             switch (l) {
                 case DOUBLE: return "Off";
-                case HOLD: return "Original (hold " + Keys.name(code) + ")";
-                default: return "Original (" + Keys.name(code) + ")";
+                case HOLD: return "Original (hold " + btn.name + ")";
+                default: return "Original (" + btn.name + ")";
             }
         }
         return describe(a, action);
@@ -175,9 +183,9 @@ public class ButtonEditor {
         int p = Theme.dp(a, 24);
         col.setPadding(p, Theme.dp(a, 20), p, Theme.dp(a, 8));
 
-        TextView t = Theme.text(a, Keys.name(code), 26, Theme.TEXT);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        col.addView(t);
+        title = Theme.text(a, btn.name, 26, Theme.TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        col.addView(title);
         boolean def = RemapModel.DEFAULT.equals(profile);
         col.addView(Theme.text(a, def ? "Default profile · every app" : "Only while " + appLabel(a, profile) + " is open", 15, Theme.WOOD));
         note = Theme.text(a, "This app uses the Default settings for this button. Changing anything gives it its own.", 14, Theme.MUTED);
@@ -206,15 +214,81 @@ public class ButtonEditor {
             n.setPadding(0, Theme.dp(a, 6), 0, 0);
             col.addView(n);
         }
+        if (btn.isApp()) {
+            Button rn = Theme.button(a, "Rename button…");
+            rn.setOnClickListener(v -> rename());
+            col.addView(rn, extraLp());
+        }
+        if (learned()) {
+            Button fg = Theme.button(a, "Forget learned key (" + code + ")");
+            fg.setOnClickListener(v -> forget());
+            col.addView(fg, extraLp());
+        }
         refreshRows();
 
-        AlertDialog d = a.dialog().setView(Theme.scroll(a, col))
+        AlertDialog d = dlg = a.dialog().setView(Theme.scroll(a, col))
             .setPositiveButton("Save", (x, w) -> save(false))
             .setNeutralButton(def ? "Reset to original" : "Use Default here", (x, w) -> save(true))
             .setNegativeButton("Cancel", null)
             .create();
         d.show();
         if (rows[0] != null) rows[0].requestFocus();
+    }
+
+    LinearLayout.LayoutParams extraLp() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, Theme.dp(a, 8), 0, 0);
+        return lp;
+    }
+
+    /** True when this button's code was learned in listen mode (the preset itself doesn't know it). */
+    boolean learned() {
+        RemoteLayout.Btn[] orig = RemotePresets.get(presetId).buttons;
+        int i = RemotePresets.slotIndex(orig, btn.slot);
+        return i >= 0 && orig[i].code == 0 && code != 0;
+    }
+
+    /** New name for an app button on this remote model (validated: one line, at most 24 characters). */
+    void rename() {
+        final android.widget.EditText in = new android.widget.EditText(a);
+        in.setSingleLine(true);
+        in.setText(btn.name);
+        in.setSelection(in.getText().length());
+        in.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(RemotePresets.MAX_LABEL) });
+        in.setTextColor(Theme.TEXT);
+        LinearLayout box = Theme.column(a);
+        int p = Theme.dp(a, 20);
+        box.setPadding(p, Theme.dp(a, 8), p, 0);
+        box.addView(in);
+        RemoteLayout.Btn[] orig = RemotePresets.get(presetId).buttons;
+        final String dflt = orig[Math.max(0, RemotePresets.slotIndex(orig, btn.slot))].name;
+        a.dialog().setTitle("Rename button").setView(box)
+            .setPositiveButton("Save", (d, w) -> {
+                String s = in.getText().toString();
+                String why = RemotePresets.invalidLabel(s);
+                if (why != null) { message(a, "Can't use that name", why); return; }
+                Store.setLabel(a, presetId, btn.slot, s.trim());
+                title.setText(s.trim());
+                if (onSaved != null) onSaved.run();
+            })
+            .setNeutralButton("Default (" + dflt + ")", (d, w) -> {
+                Store.setLabel(a, presetId, btn.slot, null);
+                title.setText(dflt);
+                if (onSaved != null) onSaved.run();
+            })
+            .setNegativeButton("Cancel", null).show();
+    }
+
+    /** Drop the learned code (its rules in remap.conf stay; they still apply to that key). */
+    void forget() {
+        a.dialog().setTitle("Forget learned key?")
+            .setMessage(btn.name + " goes back to “not learned yet”. You can teach it again with Listen.")
+            .setPositiveButton("Forget", (d, w) -> {
+                Store.setLearned(a, presetId, btn.slot, 0);
+                if (dlg != null) dlg.dismiss();
+                if (onSaved != null) onSaved.run();
+            })
+            .setNegativeButton("Cancel", null).show();
     }
 
     void set(Rule.Layer l, String action) {
@@ -228,7 +302,7 @@ public class ButtonEditor {
     void choose(final Rule.Layer l) {
         String orig = l == Rule.Layer.DOUBLE ? "Off (no double press)" : "Original";
         String[] opts = { orig, "Do nothing", "Open an app…", "Act as another button…", "A Stickman action…" };
-        a.dialog().setTitle(layerName(l) + " · " + Keys.name(code)).setItems(opts, (d, w) -> {
+        a.dialog().setTitle(layerName(l) + " · " + btn.name).setItems(opts, (d, w) -> {
             switch (w) {
                 case 0: set(l, null); break;
                 case 1: set(l, "none"); break;

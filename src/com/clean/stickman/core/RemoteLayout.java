@@ -1,16 +1,19 @@
 package com.clean.stickman.core;
 
 /**
- * Pure geometry of the Alexa Voice Remote Enhanced, drawn by RemoteView and used for D-pad focus moves.
+ * Pure geometry of a drawn Fire TV remote (one of RemotePresets), used by RemoteView and for D-pad focus moves.
  * cx is a 0..1 fraction of the body width, cy a 0..1 fraction of the body height; r is in body-width units
- * (the body is ASPECT times taller than wide). Round buttons are circles of radius r; the others (app buttons)
- * are pills r wide either side of the centre and PILL_H * r tall either side.
+ * (the body is Btn.aspect times taller than wide). Round buttons are circles of radius r; the others (app
+ * buttons) are pills r wide either side of the centre and PILL_H * r tall either side. Buttons are addressed by
+ * their index in the preset's array: unlearned buttons all have code 0.
  */
 public final class RemoteLayout {
     private RemoteLayout() {}
 
-    /** Body height / body width. */
+    /** Default body height / body width (the Enhanced remote). */
     public static final float ASPECT = 2.55f;
+    /** Tallest preset body; at MIN_BODY_DP wide it still fits a 1080p TV page. */
+    public static final float MAX_ASPECT = 2.6f;
     /** Pill half-height as a fraction of r. */
     public static final float PILL_H = 0.45f;
 
@@ -32,6 +35,20 @@ public final class RemoteLayout {
     public static float focusMargin() { return (FOCUS_OFFSET_DP + FOCUS_STROKE_DP / 2) / MIN_BODY_DP; }
 
     /**
+     * Body rectangle {x, y, w, h} in a w x h view: as tall as the view allows, but never wider than a
+     * MAX_ASPECT body would be (so short remotes keep the same button scale) nor than the space left of the
+     * hint strip.
+     */
+    public static float[] body(float viewW, float viewH, float dp, float aspect) {
+        float pad = BODY_PAD_DP * dp, side = (HINT_GAP_DP + HINT_AREA_DP) * dp;
+        float bw = Math.min((viewH - 2 * pad) / MAX_ASPECT, viewW - pad - side);
+        bw = Math.max(1, bw);
+        float bh = bw * aspect;
+        float bx = Math.max(pad, (viewW - bw - side) / 2f), by = (viewH - bh) / 2f;
+        return new float[] { bx, by, bw, bh };
+    }
+
+    /**
      * Hint pill rectangle {left, top, right, bottom} in view pixels for the focused button: right of the body,
      * level with the button, clamped to the view. Never inside the body, so it never covers a button.
      */
@@ -45,84 +62,64 @@ public final class RemoteLayout {
     }
 
     public static final class Btn {
+        /** Linux key code; 0 = not known yet (learned in listen mode). */
         public final int code;
+        /** Stable id within its preset ("k<code>" for known keys, "app1".."app4", "custom1", ...). */
+        public final String slot;
+        /** Human name (editor titles, side card). */
+        public final String name;
+        /** Text drawn on the button when it has no glyph. */
         public final String label;
+        /** Glyph id for buttons whose icon isn't keyed by code (mic, star, sliders, headphones), else null. */
+        public final String glyph;
         public final float cx, cy, r;
         public final boolean round;
+        /** Body height / width of the preset this button belongs to. */
+        public final float aspect;
 
-        public Btn(int code, String label, float cx, float cy, float r, boolean round) {
+        public Btn(int code, String slot, String name, String label, String glyph, float cx, float cy, float r,
+                   boolean round, float aspect) {
             this.code = code;
+            this.slot = slot;
+            this.name = name;
             this.label = label;
+            this.glyph = glyph;
             this.cx = cx;
             this.cy = cy;
             this.r = r;
             this.round = round;
+            this.aspect = aspect;
         }
+
+        /** Plain button on the default-aspect body (tests). */
+        public Btn(int code, String label, float cx, float cy, float r, boolean round) {
+            this(code, "k" + code, label, label, null, cx, cy, r, round, ASPECT);
+        }
+
+        public Btn withCode(int c) { return new Btn(c, slot, name, label, glyph, cx, cy, r, round, aspect); }
+        public Btn withName(String n) { return new Btn(code, slot, n, n, glyph, cx, cy, r, round, aspect); }
+
+        /** App buttons (pills) carry a brand / user label. */
+        public boolean isApp() { return slot.startsWith("app"); }
 
         /** Half extents in width units. */
         public float hw() { return r; }
         public float hh() { return round ? r : r * PILL_H; }
         /** Centre y in width units. */
-        float y() { return cy * ASPECT; }
+        float y() { return cy * aspect; }
     }
 
-    /** y given in width units (0..ASPECT) to keep the table readable. */
-    private static Btn b(int code, String label, float cx, float y, float r) { return new Btn(code, label, cx, y / ASPECT, r, true); }
-    private static Btn pill(int code, String label, float cx, float y, float r) { return new Btn(code, label, cx, y / ASPECT, r, false); }
-
-    /** Centre of the D-pad ring (fraction of height) and its outer radius (width units). */
-    public static final float RING_Y = 0.60f / ASPECT, RING_R = 0.32f;
-
-    /*
-     * Spacing rule: every pair of neighbours keeps a gap >= 2 * focusMargin() (~0.056 width units), so even
-     * two focus rings drawn at once wouldn't touch (RemoteLayoutTest.testFocusRingsClear).
-     */
-    public static final Btn[] BUTTONS = {
-        // 1. Power | Alexa
-        b(116, "Power", 0.22f, 0.15f, 0.07f),
-        b(217, "Alexa", 0.50f, 0.15f, 0.075f),
-        // 2. D-pad ring around OK
-        b(103, "Up", 0.50f, 0.37f, 0.07f),
-        b(105, "Left", 0.27f, 0.60f, 0.07f),
-        b(96, "OK", 0.50f, 0.60f, 0.095f),
-        b(106, "Right", 0.73f, 0.60f, 0.07f),
-        b(108, "Down", 0.50f, 0.83f, 0.07f),
-        // 3. Back | Home | Menu
-        b(158, "Back", 0.20f, 1.06f, 0.08f),
-        b(172, "Home", 0.50f, 1.06f, 0.08f),
-        b(139, "Menu", 0.80f, 1.06f, 0.08f),
-        // 4. Rewind | Play/Pause | Fast-forward
-        b(168, "Rewind", 0.20f, 1.29f, 0.08f),
-        b(164, "Play/Pause", 0.50f, 1.29f, 0.08f),
-        b(208, "Fast-forward", 0.80f, 1.29f, 0.08f),
-        // 5. Volume rocker | Mute | Channel rocker
-        b(115, "Vol +", 0.18f, 1.51f, 0.075f),
-        b(402, "Ch +", 0.82f, 1.51f, 0.075f),
-        b(113, "Mute", 0.50f, 1.62f, 0.075f),
-        b(114, "Vol −", 0.18f, 1.73f, 0.075f),
-        b(403, "Ch −", 0.82f, 1.73f, 0.075f),
-        // 6. Recents | Live TV | Settings
-        b(748, "Recents", 0.20f, 1.94f, 0.07f),
-        b(362, "Live TV", 0.50f, 1.94f, 0.07f),
-        b(249, "Settings", 0.80f, 1.94f, 0.07f),
-        // 7. App buttons
-        pill(745, "prime video", 0.29f, 2.15f, 0.16f),
-        pill(744, "NETFLIX", 0.71f, 2.15f, 0.16f),
-        pill(747, "amazon music", 0.29f, 2.36f, 0.16f),
-        pill(746, "APPS", 0.71f, 2.36f, 0.16f),
-    };
-
-    /** Volume / channel rocker pills drawn behind the +/− buttons: {cx, top y, bottom y} as fractions. */
-    public static final float[][] ROCKERS = { { 0.18f, 1.51f / ASPECT, 1.73f / ASPECT }, { 0.82f, 1.51f / ASPECT, 1.73f / ASPECT } };
-    public static final String[] ROCKER_LABELS = { "VOL", "CH" };
     /** Rocker half-width in width units. */
     public static final float ROCKER_W = 0.10f;
-    /** Body corner radius as a fraction of the body width. */
-    public static final float CORNER = 0.30f;
 
-    public static Btn find(int code) {
-        for (Btn x : BUTTONS) if (x.code == code) return x;
-        return null;
+    /** Buttons of a preset (RemotePresets.DEFAULT when the id is unknown). */
+    public static Btn[] forPreset(String id) { return RemotePresets.get(id).buttons; }
+
+    /** Index of the button sending code (never matches 0, the unlearned code), or -1. */
+    public static int indexOf(Btn[] bs, int code) {
+        if (code == 0) return -1;
+        for (int i = 0; i < bs.length; i++) if (bs[i].code == code) return i;
+        return -1;
     }
 
     /** True when the two buttons' drawn shapes touch or overlap (all maths in width units). */
@@ -144,17 +141,18 @@ public final class RemoteLayout {
     }
 
     /**
-     * Spatial focus move. dir: 0 up, 1 down, 2 left, 3 right. Candidates have their centre strictly in that
-     * direction and within a cone (off-axis offset at most twice the on-axis distance); the best minimises
-     * distance + 2 * off-axis offset. Returns fromCode when there is none.
+     * Spatial focus move between buttons of bs. dir: 0 up, 1 down, 2 left, 3 right. Candidates have their centre
+     * strictly in that direction and within a cone (off-axis offset at most twice the on-axis distance); the best
+     * minimises distance + 2 * off-axis offset. Returns from when there is none.
      */
-    public static int next(int fromCode, int dir) {
-        Btn f = find(fromCode);
-        if (f == null) return fromCode;
-        Btn best = null;
+    public static int next(Btn[] bs, int from, int dir) {
+        if (from < 0 || from >= bs.length) return from;
+        Btn f = bs[from];
+        int best = from;
         double bestScore = Double.MAX_VALUE;
-        for (Btn c : BUTTONS) {
-            if (c == f) continue;
+        for (int i = 0; i < bs.length; i++) {
+            if (i == from) continue;
+            Btn c = bs[i];
             double dx = c.cx - f.cx, dy = c.y() - f.y();
             double along, off;
             switch (dir) {
@@ -162,12 +160,12 @@ public final class RemoteLayout {
                 case DOWN: along = dy; off = Math.abs(dx); break;
                 case LEFT: along = -dx; off = Math.abs(dy); break;
                 case RIGHT: along = dx; off = Math.abs(dy); break;
-                default: return fromCode;
+                default: return from;
             }
             if (along <= 1e-4 || off > 2 * along) continue;
             double score = Math.hypot(dx, dy) + 2 * off;
-            if (score < bestScore) { bestScore = score; best = c; }
+            if (score < bestScore) { bestScore = score; best = i; }
         }
-        return best == null ? fromCode : best.code;
+        return best;
     }
 }
