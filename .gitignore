@@ -4,3 +4,4 @@ build/
 *.keystore
 native/remapd
 native/fakeremote
+.superpowers/
