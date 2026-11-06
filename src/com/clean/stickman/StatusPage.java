@@ -1,12 +1,13 @@
 package com.clean.stickman;
 
-import android.graphics.Typeface;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.clean.stickman.core.DeviceInfo;
+import com.clean.stickman.core.StatusText;
+import com.clean.stickman.core.Trouble;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -22,13 +23,18 @@ public class StatusPage extends Page {
     /** "Start here" card, shown until a button has been changed. */
     LinearLayout start;
     long refreshedAt, liveShownAt = -1;
+    /** App names for the Live activity lines (looked up once per package). */
+    final StatusText.Label label = pkg -> ButtonEditor.appLabel(a, pkg);
 
     @Override public String title() { return "Status"; }
+
+    @Override public String subtitle() { return "Is Stickman working, and how the stick is doing."; }
 
     @Override public View build(MainActivity act) {
         a = act;
         LinearLayout l = Theme.column(a);
-        l.addView(Theme.title(a, "Status"));
+        l.addView(Theme.title(a, title()));
+        l.addView(Theme.subtitle(a, subtitle()));
 
         LinearLayout top = Theme.row(a);
         Button refresh = Theme.button(a, "Refresh");
@@ -45,7 +51,7 @@ public class StatusPage extends Page {
         start.addView(Theme.text(a, "1.  Remote → Listen, then press the button on your remote you want to change.\n"
             + "2.  Speed → Boost when the stick feels slow; Lean memory keeps it that way.\n"
             + "3.  Debloat → Disable all switches off Amazon's extras. Everything can be undone.\n\n"
-            + "If the remote ever misbehaves, hold Back for 10 seconds: it works normally again.", 15, Theme.TEXT));
+            + "You can close Stickman afterwards: your buttons keep working.", 15, Theme.TEXT));
         l.addView(start);
 
         LinearLayout d = Theme.card(a);
@@ -66,8 +72,18 @@ public class StatusPage extends Page {
         LinearLayout lv = Theme.card(a);
         lv.addView(Theme.heading(a, "Live activity"));
         live = Theme.text(a, "", 14, Theme.TEXT);
+        live.setLineSpacing(Theme.dp(a, 2), 1f);
         lv.addView(live);
         l.addView(lv);
+
+        LinearLayout w = Theme.card(a);
+        w.addView(Theme.heading(a, "Something wrong?"));
+        w.addView(Theme.text(a, "Hold Back for 10 seconds: the remote works normally again until Stickman restarts.\n"
+            + "To switch everything off and put the stick back the way it was: Settings → Undo everything.", 14, Theme.MUTED));
+        Button settings = Theme.button(a, "Open Settings");
+        settings.setOnClickListener(v -> a.goTo("Settings"));
+        w.addView(settings);
+        l.addView(w);
         return Theme.scroll(a, l);
     }
 
@@ -105,41 +121,60 @@ public class StatusPage extends Page {
         // a connect/auth failure produces no per-command callback
         if (!Bridge.busy && Bridge.lastResult.startsWith("FAIL") && Bridge.lastResultAt >= refreshedAt
                 && "Reading…".contentEquals(info.getText()))
-            info.setText("Couldn't read: " + Bridge.lastResult);
+            info.setText("Couldn't read: " + Trouble.shortText(Bridge.lastResult));
         if (LogTail.statusAt != liveShownAt) {
             liveShownAt = LogTail.statusAt;
-            List<String> lines = LogTail.statusLines();
-            StringBuilder sb = new StringBuilder();
-            for (int i = lines.size() - 1; i >= 0; i--) sb.append(lines.get(i)).append('\n');
-            live.setText(sb.length() == 0 ? "Nothing yet. Boosts, sleep timers and auto-closed apps show up here." : sb.toString().trim());
-            live.setTypeface(sb.length() == 0 ? Typeface.DEFAULT : Typeface.MONOSPACE);
+            live.setText(liveText(LogTail.statusLines()));
         }
+    }
+
+    /** Newest first, "HH:mm:ss  what happened" in plain words; housekeeping lines are left out. */
+    String liveText(List<String> lines) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            String l = lines.get(i);
+            int st = l.indexOf("STATUS ");
+            String time = st < 0 ? "" : l.substring(0, st).trim();
+            String text = StatusText.human(st < 0 ? l : l.substring(st), label);
+            if (text == null) continue;
+            if (sb.length() > 0) sb.append('\n');
+            if (!time.isEmpty()) sb.append(time).append("  ");
+            sb.append(text);
+        }
+        return sb.length() == 0 ? "Nothing yet. Boosts, sleep timers and auto-closed apps show up here." : sb.toString();
     }
 
     String daemonText() {
         String r = Bridge.lastResult;
         StringBuilder sb = new StringBuilder();
-        if (!Store.enabled(a)) sb.append("Stickman is OFF (daemons stopped, remote works normally)\n");
         String le = Store.lastEnsure(a);
-        if (le.isEmpty()) {
-            sb.append("Not checked yet");
+        boolean down = false;
+        if (!Store.enabled(a)) {
+            // the last check predates the OFF: its "running" lines would be stale
+            sb.append("Stickman is OFF: the remote works normally and nothing runs in the background.\n"
+                + "Turn it on again in Settings.");
+        } else if (le.isEmpty()) {
+            sb.append("Not checked yet.");
         } else {
-            sb.append(line("Button remapping", Store.pid(le, "REMAPD"))).append('\n');
-            sb.append(line("Background automation", Store.pid(le, "STICKD"))).append('\n');
+            String remap = Store.pid(le, "REMAPD"), stick = Store.pid(le, "STICKD");
+            down = remap == null || stick == null;
+            sb.append(line("Button remapping", remap)).append('\n');
+            sb.append(line("Background automation", stick)).append('\n');
             sb.append("Checked ").append(new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(Store.lastEnsureAt(a))));
         }
-        if (Bridge.busy) sb.append("\nBridge: working…");
-        else if (r.startsWith("FAIL")) sb.append("\nBridge problem: ").append(r);
+        if (Bridge.busy) sb.append("\nTalking to the stick…");
+        else if (r.startsWith("FAIL")) sb.append("\n\n").append(Trouble.advice(r));
+        else if (down && Store.enabled(a)) sb.append("\nPress Refresh to start it again.");
         return sb.toString();
     }
 
     static String line(String name, String pid) {
-        return name + ":  " + (pid == null ? "not running" : "running ✓  (pid " + pid + ")");
+        return name + ":  " + (pid == null ? "not running" : "running ✓");
     }
 
     @Override public void onResult(String cmd, String output, boolean ok) {
         if (a == null || !DeviceInfo.CMD.equals(cmd)) return;
-        if (!ok) { info.setText("Couldn't read: " + output); return; }
+        if (!ok) { info.setText("Couldn't read: " + Trouble.shortText(output)); return; }
         DeviceInfo d = DeviceInfo.parse(output);
         info.setText("Updated " + new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date()));
         ram.setText(d.memTotalMb == 0 ? "–" : d.memAvailMb + " MB free\nof " + d.memTotalMb + " MB");

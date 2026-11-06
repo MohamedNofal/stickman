@@ -4,6 +4,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EnsureScript;
@@ -11,6 +12,7 @@ import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.Ota;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.ResultText;
+import com.clean.stickman.core.Trouble;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -20,7 +22,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/** Master switch, restore defaults, remote timings, fixes (clock, stuck proxy) and the last bridge result. */
+/** Master switch, restore defaults / undo everything, remote timings, fixes (clock, stuck proxy) and the last result. */
 public class SettingsPage extends Page {
     static final int[] DOUBLE_MS = { 200, 250, 300, 400 };
     static final int[] HOLD_MS = { 500, 600, 800 };
@@ -35,10 +37,17 @@ public class SettingsPage extends Page {
 
     @Override public String title() { return "Settings"; }
 
+    @Override public String subtitle() { return "Turn Stickman off, undo what it changed, remote timing, fixes."; }
+
     @Override public View build(MainActivity act) {
         a = act;
         LinearLayout l = Theme.column(a);
-        l.addView(Theme.title(a, "Settings"));
+        l.addView(Theme.title(a, title()));
+        l.addView(Theme.subtitle(a, subtitle()));
+        // one place for every outcome on this page (plus a toast, so it's seen wherever the focus is)
+        result = Theme.autoHide(Theme.text(a, "", 15, Theme.ACCENT));
+        result.setPadding(0, 0, 0, Theme.dp(a, 8));
+        l.addView(result);
 
         LinearLayout c1 = Theme.card(a);
         c1.addView(Theme.heading(a, "Stickman"));
@@ -49,9 +58,30 @@ public class SettingsPage extends Page {
         c1.addView(master);
         l.addView(c1);
 
+        LinearLayout c4 = Theme.card(a);
+        c4.addView(Theme.heading(a, "Undo"));
+        c4.addView(Theme.text(a, "Restore defaults puts back every setting Stickman changed on the stick (DNS, animations, sleep "
+            + "and screensaver, TV control, memory and background limits, Fire OS updates) and turns the apps it disabled or "
+            + "kept asleep back on. Stickman stays on and your button mappings are kept.\n"
+            + "Undo everything does the same and turns Stickman off: the stick is back the way it was.", 14, Theme.MUTED));
+        LinearLayout r4 = Theme.row(a);
+        Button restore = Theme.button(a, "Restore defaults…");
+        restore.setOnClickListener(v -> ThemedDialog.confirm(a, "Restore defaults?",
+            "Put back every setting Stickman changed on the stick and turn the apps it disabled or kept asleep back on?\n\n"
+            + "Stickman stays on and your button mappings are kept.", "Restore", this::restoreDefaults));
+        r4.addView(restore);
+        Button undo = Theme.button(a, "Undo everything…");
+        undo.setOnClickListener(v -> ThemedDialog.confirm(a, "Undo everything?",
+            "Stickman turns off: your remote works normally again, the apps Stickman disabled or kept asleep are turned "
+            + "back on, and the stick's settings go back to Amazon's values (Fire OS updates included).\n\n"
+            + "Your button mappings are kept for when you turn Stickman on again.", "Undo everything", this::undoEverything));
+        r4.addView(undo);
+        c4.addView(r4);
+        l.addView(c4);
+
         LinearLayout c2 = Theme.card(a);
         c2.addView(Theme.heading(a, "Remote timing"));
-        c2.addView(Theme.text(a, "Double-press window (keys with a double-press layer wait this long for a second press)", 14, Theme.MUTED));
+        c2.addView(Theme.text(a, "Double press: how long a button waits for a second press (only buttons with a double-press action).", 14, Theme.MUTED));
         LinearLayout r1 = Theme.row(a);
         r1.setTag(Theme.CHIPS);
         for (int i = 0; i < DOUBLE_MS.length; i++) {
@@ -61,7 +91,7 @@ public class SettingsPage extends Page {
             r1.addView(doubleBtns[i]);
         }
         c2.addView(r1);
-        c2.addView(Theme.text(a, "Hold time", 14, Theme.MUTED));
+        c2.addView(Theme.text(a, "Hold: how long you keep a button pressed before its hold action fires.", 14, Theme.MUTED));
         LinearLayout r2 = Theme.row(a);
         r2.setTag(Theme.CHIPS);
         for (int i = 0; i < HOLD_MS.length; i++) {
@@ -75,31 +105,17 @@ public class SettingsPage extends Page {
 
         LinearLayout c3 = Theme.card(a);
         c3.addView(Theme.heading(a, "Fixes"));
+        c3.addView(Theme.text(a, "Fix clock: when the stick's date or time is wrong (apps may refuse to sign in or play). "
+            + "Clear stuck proxy: when every app says there's no internet after a proxy app such as Net Filter was removed.", 14, Theme.MUTED));
         LinearLayout r3 = Theme.row(a);
         Button clock = Theme.button(a, "Fix clock");
         clock.setOnClickListener(v -> fixClock());
         r3.addView(clock);
         Button proxy = Theme.button(a, "Clear stuck proxy");
-        proxy.setOnClickListener(v -> send(Commands.clearDeadProxy(), "proxy", "Checking proxy…"));
+        proxy.setOnClickListener(v -> send(Commands.clearDeadProxy(), "proxy", "Checking the proxy…"));
         r3.addView(proxy);
         c3.addView(r3);
-        result = Theme.autoHide(Theme.text(a, "", 15, Theme.TEXT));
-        c3.addView(result);
         l.addView(c3);
-
-        LinearLayout c4 = Theme.card(a);
-        c4.addView(Theme.heading(a, "Restore defaults"));
-        c4.addView(Theme.text(a, "Puts back every system change Stickman made: DNS, animations, sleep and screensaver values, "
-            + "standby buckets, the OTA freeze and disabled apps. Your button remaps stay.", 14, Theme.MUTED));
-        Button restore = Theme.button(a, "Restore defaults…");
-        restore.setOnClickListener(v -> ThemedDialog.confirm(a, "Restore defaults?",
-            "Put back every system setting Stickman changed?", "Restore",
-            () -> {
-                Store.setOtaFrozen(a, false);
-                send(Ota.thawScript() + "; " + Originals.restoreScript(), "restore", "Restoring…");
-            }));
-        c4.addView(restore);
-        l.addView(c4);
 
         LinearLayout c5 = Theme.card(a);
         c5.addView(Theme.heading(a, "Last change"));
@@ -115,12 +131,17 @@ public class SettingsPage extends Page {
         boolean on = Store.enabled(a);
         master.setText(on ? "Turn Stickman OFF" : "Turn Stickman ON");
         masterInfo.setText(on
-            ? "ON: Stickman remaps your remote's buttons and runs its background automation. OFF gives the remote back instantly and stops both."
+            ? "ON: your remote buttons are remapped and the background automation runs. OFF gives the remote back instantly and stops both."
             : "OFF: the remote works normally and nothing runs in the background.");
         RemapModel m = Store.hasRemap(a) ? Store.remap(a) : null;
         int dbl = m == null ? 250 : m.doubleMs, hold = m == null ? 600 : m.holdMs;
         for (int i = 0; i < DOUBLE_MS.length; i++) doubleBtns[i].setSelected(DOUBLE_MS[i] == dbl);
         for (int i = 0; i < HOLD_MS.length; i++) holdBtns[i].setSelected(HOLD_MS[i] == hold);
+    }
+
+    void say(String s) {
+        result.setText(s);
+        Toast.makeText(a, s, Toast.LENGTH_SHORT).show();
     }
 
     void send(String cmd, String kind, String pending) {
@@ -132,8 +153,9 @@ public class SettingsPage extends Page {
     void toggleMaster() {
         if (Store.enabled(a)) {
             // OFF stops remapping and automation: ask first (Cancel focused)
-            ThemedDialog.confirm(a, "Turn Stickman off?", "Your remote goes back to normal and background automation "
-                + "stops until you turn Stickman on again.", "Turn off", () -> {
+            ThemedDialog.confirm(a, "Turn Stickman off?", "Your remote goes back to normal and the background automation "
+                + "stops until you turn Stickman on again.\n\nWhat Stickman changed on the stick (disabled apps, DNS, …) "
+                + "stays as it is: Undo everything puts that back too.", "Turn off", () -> {
                 mine.put(EnsureScript.stop(), "stop");
                 a.run(() -> { Store.setEnabled(a, false); refresh(); }, EnsureScript.stop());
             });
@@ -142,9 +164,29 @@ public class SettingsPage extends Page {
         }
     }
 
+    /** Replays the originals journal (and thaws OTA); Stickman stays on. */
+    void restoreDefaults() {
+        Store.setOtaFrozen(a, false);
+        send(Ota.thawScript() + "; " + Originals.restoreScript(), "restore", "Restoring…");
+    }
+
+    /** Master OFF followed by Restore defaults, in one go: exactly the two commands those buttons send. */
+    void undoEverything() {
+        final String stop = EnsureScript.stop();
+        final String restore = Ota.thawScript() + "; " + Originals.restoreScript();
+        mine.put(stop, "undo-stop");
+        mine.put(restore, "undo");
+        a.run(() -> {
+            Store.setOtaFrozen(a, false);
+            Store.setEnabled(a, false);
+            refresh();
+            result.setText("Turning Stickman off and putting the stick back…");
+        }, stop, restore);
+    }
+
     void setTiming(int dbl, int hold) {
         if (!Store.hasRemap(a)) {
-            result.setText("Stickman hasn't connected yet: open it again once it shows Running.");
+            say("Stickman hasn't connected to the stick yet: wait for “Running ✓” in the sidebar, then try again.");
             return;
         }
         RemapModel m = Store.remap(a);
@@ -160,8 +202,8 @@ public class SettingsPage extends Page {
         new Thread(() -> {
             final long t = fetchTime();
             a.runOnUiThread(() -> {
-                if (t <= 0) { result.setText("Couldn't reach time server"); return; }
-                send(Commands.setTime(t), "clock", "Setting clock to "
+                if (t <= 0) { say("Couldn't reach the time server. Is the stick online?"); return; }
+                send(Commands.setTime(t), "clock", "Setting the clock to "
                     + new SimpleDateFormat("d MMM yyyy HH:mm", Locale.UK).format(new Date(t)) + "…");
             });
         }, "fixclock").start();
@@ -202,18 +244,20 @@ public class SettingsPage extends Page {
         if (a == null) return;
         String kind = mine.remove(cmd);
         if (kind == null) return;
-        if (!ok) { result.setText("Failed: " + output); return; }
+        if (!ok) { say(Trouble.shortText(output)); return; }
         switch (kind) {
             case "proxy":
-                if (output.contains("PROXY cleared")) result.setText("Stuck proxy cleared.");
-                else if (output.contains("PROXY kept")) result.setText("The proxy is in use (e.g. Net Filter), so it was left alone.");
-                else if (output.contains("PROXY none")) result.setText("No proxy is set.");
-                else result.setText(output);
+                if (output.contains("PROXY cleared")) say("Stuck proxy cleared.");
+                else if (output.contains("PROXY kept")) say("The proxy is in use (e.g. Net Filter), so it was left alone.");
+                else if (output.contains("PROXY none")) say("No proxy is set.");
+                else say(output);
                 break;
-            case "clock": result.setText("Clock set. " + output); break;
-            case "restore": result.setText("Defaults restored."); break;
-            case "stop": result.setText("Stopped. The remote works normally."); break;
-            default: result.setText(output);
+            case "clock": say("Clock set. " + output); break;
+            case "restore": say("Defaults restored: the stick's settings and apps are back to Amazon's. Stickman is still on."); break;
+            case "stop": say("Stopped. The remote works normally."); break;
+            case "undo-stop": break;   // the "undo" result reports the whole thing
+            case "undo": say("Everything is undone: Stickman is off and the stick is back the way it was."); break;
+            default: say(output);
         }
     }
 }
