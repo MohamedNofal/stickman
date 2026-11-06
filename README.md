@@ -38,7 +38,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
   - **Check after an update**: switches off again anything an update turned back on.
   - **Freeze updates (OTA)**: stops Fire OS system updates until you unfreeze. The updater is protected, so Stickman suspends it instead of disabling it and re-applies the freeze at boot; Appstore app updates are unaffected.
 - **Sleep**: sleep timer with fade, screen off with audio on, stay awake while media plays, HDMI-CEC switch.
-- **Privacy**: ad-blocking private DNS that switches itself off if the internet breaks, and limit ads and tracking.
+- **Privacy**: ad-blocking private DNS that switches itself off if the internet breaks, limit ads and tracking (Amazon's own usage-data switches included), a location switch, and **Quiet telemetry**: the eight Amazon reporting apps Fire OS won't let you disable are kept from running in the background, journaled like everything else.
 - **Shortcuts** to hidden Amazon settings, and a **Status** page that says whether Stickman is working, what to do if it isn't, and what it has been doing, in plain words.
 
 ## Install
