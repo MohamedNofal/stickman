@@ -76,9 +76,9 @@ public class DebloatPage extends ApplyPage {
             + "undo Keep asleep / Starve. This finds anything that came back and offers to switch it off again.");
         button(ck, "Check now", v -> send(com.clean.stickman.core.Starve.checkScript(), "check", "Checking…"));
 
-        LinearLayout oc = card(l, "Fire OS system updates", "A Fire OS update can switch your disabled apps back on and "
-            + "slow the stick down. Freeze stops the stick from downloading or installing system updates until you "
-            + "unfreeze; apps still update from the Appstore.");
+        LinearLayout oc = card(l, "Fire OS system updates", "Freeze stops Fire OS system updates until you unfreeze. "
+            + "Fire OS protects its updater, so Stickman suspends it instead of disabling it and re-applies the freeze "
+            + "at boot. Appstore app updates are unaffected.");
         otaStatus = Theme.text(a, "Checking…", 15, Theme.MUTED);
         oc.addView(otaStatus);
         otaBtn = button(oc, "Freeze updates…", v -> confirmOta());
