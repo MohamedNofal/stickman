@@ -40,7 +40,7 @@ public final class Keys {
             case 744: return "Netflix";
             case 747: return "Amazon Music";
             case 746: return "Apps";
-            default: return "Key " + code;
+            default: return "Button " + code;
         }
     }
 

@@ -212,7 +212,12 @@ public class ButtonEditor {
             n.setPadding(0, Theme.dp(a, 6), 0, 0);
             col.addView(n);
         }
-        if (btn.isApp()) {
+        if (btn.isExtra()) {
+            TextView n = Theme.text(a, "This button isn't on the drawing, but it works like any other. Give it a name you'll recognise.", 13, Theme.MUTED);
+            n.setPadding(0, Theme.dp(a, 6), 0, 0);
+            col.addView(n);
+        }
+        if (btn.isApp() || btn.isExtra()) {
             Button rn = Theme.button(a, "Rename button…");
             rn.setOnClickListener(v -> rename());
             col.addView(rn, extraLp());
@@ -266,7 +271,8 @@ public class ButtonEditor {
         LinearLayout box = Theme.column(a);
         box.addView(in);
         RemoteLayout.Btn[] orig = RemotePresets.get(presetId).buttons;
-        final String dflt = orig[Math.max(0, RemotePresets.slotIndex(orig, btn.slot))].name;
+        int oi = RemotePresets.slotIndex(orig, btn.slot);
+        final String dflt = oi >= 0 ? orig[oi].name : Keys.name(code);
         final TextView err = Theme.text(a, "", 13, Theme.ACCENT);
         err.setVisibility(View.GONE);
         box.addView(err);
@@ -382,6 +388,8 @@ public class ButtonEditor {
                 m.set(profile, code, Rule.Layer.TAP, "orig");
         }
         Store.saveRemap(a, m);
+        android.widget.Toast.makeText(a, reset ? btn.name + " is back to original." : "Saved. Press " + btn.name + " on your remote to try it.",
+            android.widget.Toast.LENGTH_SHORT).show();
         if (onSaved != null) onSaved.run();
         if (Store.enabled(a)) a.run(null, Ensure.MARKER);
     }

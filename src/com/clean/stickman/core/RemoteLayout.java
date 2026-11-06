@@ -97,7 +97,9 @@ public final class RemoteLayout {
         }
 
         /** A key that isn't on the drawing (heard with Listen): editable like any button, never drawn. */
-        public static Btn extra(int code, String name) { return new Btn(code, "x" + code, name, name, null, 0, 0, 0, true, ASPECT); }
+        public static Btn extra(int code, String name) { return new Btn(code, EXTRA_SLOT + code, name, name, null, 0, 0, 0, true, ASPECT); }
+        public static final String EXTRA_SLOT = "extra";
+        public boolean isExtra() { return slot.startsWith(EXTRA_SLOT); }
 
         public Btn withCode(int c) { return new Btn(c, slot, name, label, glyph, cx, cy, r, round, aspect); }
         public Btn withName(String n) { return new Btn(code, slot, n, n, glyph, cx, cy, r, round, aspect); }

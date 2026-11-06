@@ -33,6 +33,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     static final String CANCELLED = "Listening cancelled.";
     static final String IDLE = "Press Listen, then press the button on your remote you want to change: it opens right away, "
         + "even if it isn't on the drawing. While Stickman listens, buttons do nothing else (Home included).";
+    static final String FIRST = "Nothing changed yet. Press Listen, then press the button on your remote you want to change. "
+        + "Any remote works; the drawing is just a picture.";
 
     MainActivity a;
     RemoteView remote;
@@ -167,7 +169,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         remote.setRemote(p, bs);
         model.setText(p.title());
         int open = RemotePresets.unlearned(bs).size();
-        modelInfo.setText(open == 0 ? "The drawing matches this remote. Pick yours if it looks different."
+        modelInfo.setText(open == 0 ? "Only a picture: any remote works. Pick yours if it looks different."
             : open + " button" + (open == 1 ? "" : "s") + " on this remote send a key Stickman doesn't know yet: select one and press OK to teach it.");
     }
 
@@ -201,22 +203,35 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         remote.setNextFocusRightId(listen.getId());
         add.setNextFocusUpId(many ? prev.getId() : listen.getId());
         remove.setVisibility(def ? View.GONE : View.VISIBLE);
+        CharSequence li = listenInfo.getText();
+        if (!listening && (IDLE.contentEquals(li) || FIRST.contentEquals(li))) listenInfo.setText(idle());
         refreshExtras();
         onFocusButton(remote.focused());
         remote.invalidate();
     }
 
+    /** Idle text of the Listen card: a first-time hint until something has been changed. */
+    String idle() { return m.codes().isEmpty() ? FIRST : IDLE; }
+
     /** One button per rule-bearing code that the drawing doesn't show (any profile). */
     void refreshExtras() {
         extrasList.removeAllViews();
         RemoteLayout.Btn[] bs = remote.buttons();
+        java.util.Map<String, String> labels = Store.labels(a, presetId);
         for (final int c : m.codes()) {
             if (RemoteLayout.indexOf(bs, c) >= 0) continue;
-            Button b = Theme.button(a, Keys.name(c) + (Keys.name(c).startsWith("Key ") ? "" : " (key " + c + ")"));
+            String n = extraName(labels, c);
+            Button b = Theme.button(a, n.equals("Button " + c) ? n : n + " (" + c + ")");
             b.setOnClickListener(v -> openExtra(c));
             extrasList.addView(b);
         }
         extrasCard.setVisibility(extrasList.getChildCount() == 0 ? View.GONE : View.VISIBLE);
+    }
+
+    /** The owner's name for an off-drawing key (label.<preset>.extra<code>), else the key's own name. */
+    String extraName(java.util.Map<String, String> labels, int code) {
+        String l = labels.get(RemoteLayout.Btn.EXTRA_SLOT + code);
+        return l != null && RemotePresets.invalidLabel(l) == null ? l.trim() : Keys.name(code);
     }
 
     /** Editor for a key that isn't on the drawing: rules work for any key code remapd can see. */
@@ -224,7 +239,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         if (listening) stopListening(null);
         if (!ready()) return;
         m = Store.remap(a);
-        ButtonEditor.open(a, m, profile, RemoteLayout.Btn.extra(code, Keys.name(code)), presetId, () -> { loadRemote(); refresh(); });
+        String n = extraName(Store.labels(a, presetId), code);
+        ButtonEditor.open(a, m, profile, RemoteLayout.Btn.extra(code, n), presetId, () -> { loadRemote(); refresh(); });
     }
 
     void stepProfile(int d) {
@@ -409,7 +425,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
             return;
         }
         if (at > listenBaseAt) listenBaseAt = at;   // grace-period or unknown key: keep listening
-        if (now - listenFrom > LISTEN_TIMEOUT_MS) { stopListening("Didn't hear a button. Try again?"); return; }
+        if (now - listenFrom > LISTEN_TIMEOUT_MS) { stopListening("No button heard for " + LISTEN_TIMEOUT_MS / 1000 + " s. Press Listen and try again."); return; }
         String c = "Listening… " + Math.max(1, (LISTEN_TIMEOUT_MS - (now - listenFrom) + 999) / 1000) + " s";
         if (!c.contentEquals(listen.getText())) listen.setText(c);
         h.postDelayed(this::poll, 60);
@@ -426,7 +442,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listen.setText("Listen for a button");
         listen.setSelected(false);
         remote.setListening(false);
-        listenInfo.setText(msg != null ? msg : IDLE);
+        listenInfo.setText(msg != null ? msg : idle());
         listenInfo.setTextColor(Theme.MUTED);
     }
 

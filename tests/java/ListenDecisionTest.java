@@ -43,9 +43,12 @@ public class ListenDecisionTest {
         m.set("com.x", 172, com.clean.stickman.core.Rule.Layer.HOLD, "none");
         m.set("com.x", 377, com.clean.stickman.core.Rule.Layer.HOLD, "none");
         T.eq("[172, 377]", m.codes().toString(), "codes over every profile, ascending, once");
-        RemoteLayout.Btn b = RemoteLayout.Btn.extra(377, "Key 377");
+        RemoteLayout.Btn b = RemoteLayout.Btn.extra(377, com.clean.stickman.core.Keys.name(377));
         T.eq(377, b.code, "code");
-        T.eq("x377", b.slot, "slot never collides with k<code>/app/custom slots");
+        T.eq("Button 377", b.name, "unknown keys are plain 'Button n'");
+        T.eq("extra377", b.slot, "slot never collides with k<code>/app/custom slots");
+        T.yes(b.isExtra() && !b.isApp(), "extra, not an app button");
+        for (RemoteLayout.Btn o : RemoteLayout.forPreset("pro")) T.yes(!o.isExtra(), "preset slot " + o.slot);
         T.eq(-1, com.clean.stickman.core.RemotePresets.slotIndex(RemoteLayout.forPreset("enhanced"), b.slot), "not on any drawing");
     }
 }
