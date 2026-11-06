@@ -6,6 +6,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.clean.stickman.core.Trouble;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -19,11 +21,12 @@ public abstract class ApplyPage extends Page {
     /** queued command -> what it was (passed back to describe) */
     final Map<String, String> mine = new HashMap<>();
 
-    /** Title + result line; subclasses add cards to the returned column. */
+    /** Title (+ subtitle, when the page has one) + result line; subclasses add cards to the returned column. */
     LinearLayout start(MainActivity act) {
         a = act;
         LinearLayout l = Theme.column(a);
         l.addView(Theme.title(a, title()));
+        if (subtitle() != null) l.addView(Theme.subtitle(a, subtitle()));
         result = Theme.autoHide(Theme.text(a, "", 15, Theme.ACCENT));
         result.setPadding(0, 0, 0, Theme.dp(a, 8));
         l.addView(result);
@@ -66,7 +69,7 @@ public abstract class ApplyPage extends Page {
             pendingSince = 0;
             mine.clear();
             String r = Bridge.lastResult;
-            say(r.startsWith("FAIL") ? "Problem: " + r.substring(4).trim() : r.isEmpty() ? "No response" : "No response (last: " + r + ")");
+            say(r.startsWith("FAIL") ? Trouble.shortText(r) : "No answer from the stick within 30 s. Check the Status page.");
         }
     };
 
@@ -97,7 +100,8 @@ public abstract class ApplyPage extends Page {
         String kind = mine.remove(cmd);
         if (kind == null) return;
         if (mine.isEmpty()) pendingSince = 0;
-        if (!ok) { say("Failed: " + output); return; }
+        // output of a failed command is the bridge's raw error ("exec timeout", "FAIL vpn_busy", ...): say it plainly
+        if (!ok) { say(Trouble.shortText(output)); return; }
         String s = describe(kind, output);
         if (s != null) say(s);
     }

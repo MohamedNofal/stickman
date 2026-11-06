@@ -6,6 +6,8 @@ import android.view.View;
 /** One sidebar section. build() is called once; the view is kept while the activity lives. */
 public abstract class Page {
     public abstract String title();
+    /** One short line under the title saying what the page is for (null = none). ApplyPage shows it. */
+    public String subtitle() { return null; }
     public abstract View build(MainActivity a);
     public void onShow() {}
     public void onHide() {}

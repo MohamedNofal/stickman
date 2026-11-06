@@ -29,18 +29,20 @@ public class PrivacyPage extends ApplyPage {
 
     @Override public String title() { return "Privacy"; }
 
+    @Override public String subtitle() { return "Block ads and trackers in every app, and stop Amazon's ad tracking."; }
+
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
 
-        LinearLayout s = card(l, "Private DNS now", null);
-        dnsNow = Theme.text(a, "Not read yet.", 16, Theme.TEXT);
+        LinearLayout s = card(l, "Right now", null);
+        dnsNow = Theme.text(a, "Not read yet: press Refresh.", 16, Theme.TEXT);
         s.addView(dnsNow);
         dnsCheck = Theme.text(a, "", 14, Theme.MUTED);
         s.addView(dnsCheck);
         button(s, "Refresh", v -> read());
 
-        LinearLayout d = card(l, "Ad-blocking DNS", "Blocks ads and trackers for every app. If the internet stops "
-            + "working after a change, Stickman switches it back off by itself.");
+        LinearLayout d = card(l, "Ad-blocking DNS", "Blocks ads and trackers in every app through an ad-blocking DNS "
+            + "service. If the internet stops working after a change, Stickman switches it back off by itself.");
         String[] names = new String[Catalog.DNS_PRESETS.length];
         for (int i = 0; i < names.length; i++) names[i] = Catalog.DNS_PRESETS[i][0];
         LinearLayout r1 = Theme.row(a), r2 = Theme.row(a);
@@ -53,7 +55,7 @@ public class PrivacyPage extends ApplyPage {
         }
         d.addView(r1);
         d.addView(r2);
-        d.addView(Theme.text(a, "Net Filter keeps running alongside", 14, Theme.MUTED));
+        d.addView(Theme.text(a, "Works alongside Net Filter.", 14, Theme.MUTED));
 
         LinearLayout p = card(l, "Limit ads & tracking", "Turns off the advertising ID, interest-based ads, "
             + "usage-data uploads and autoplaying featured videos.");
@@ -127,7 +129,7 @@ public class PrivacyPage extends ApplyPage {
             if (on && h != null && h.equals(spec)) desc = Catalog.DNS_PRESETS[i][0] + "  (" + spec + ")";
         }
         if (on && spec.endsWith(".dns.nextdns.io")) desc = "NextDNS  (" + spec + ")";
-        dnsNow.setText(desc + "\nLimit ads & tracking: " + ("1".equals(lim) ? "On" : "Off"));
+        dnsNow.setText("Ad-blocking DNS: " + desc + "\nLimit ads & tracking: " + ("1".equals(lim) ? "On" : "Off"));
         select(presets, sel);
         select(ads, "1".equals(lim) ? 0 : 1);
         return desc;

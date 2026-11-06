@@ -26,6 +26,8 @@ public class SleepPage extends ApplyPage {
 
     @Override public String title() { return "Sleep"; }
 
+    @Override public String subtitle() { return "Sleep timer, screen off, and what the stick does when you stop watching."; }
+
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
 
@@ -52,17 +54,19 @@ public class SleepPage extends ApplyPage {
             refresh();
         });
 
-        LinearLayout ss = card(l, "Screensaver", null);
+        LinearLayout ss = card(l, "Screensaver", "Shows the screensaver when nothing has been pressed for a while.");
         saver = choices(ss, new String[] { "On", "Off" }, i ->
             send(Commands.screensaver(i == 0), "saver:" + i, "Setting the screensaver…"));
         saverNow = now(ss);
 
-        LinearLayout st = card(l, "Sleep after", "Fire OS 8 may override this");
+        LinearLayout st = card(l, "Sleep after", "How long the stick stays idle before it goes to sleep (the screensaver "
+            + "may run first). Fire OS 8 may override this.");
         sleep = choices(st, SLEEP_LABELS, i ->
             send(Commands.sleepTimeout(SLEEP_MS[i]), "sleep:" + i, "Setting sleep time…"));
         sleepNow = now(st);
 
-        LinearLayout ot = card(l, "Screen off after", "Fire OS 8 may override this");
+        LinearLayout ot = card(l, "Screen off after", "How long without a button press before the screensaver or a dark "
+            + "screen starts. Fire OS 8 may override this.");
         off = choices(ot, OFF_LABELS, i ->
             send(Commands.screenOffTimeout(OFF_MS[i]), "off:" + i, "Setting screen-off time…"));
         offNow = now(ot);
@@ -90,7 +94,7 @@ public class SleepPage extends ApplyPage {
     void stored(Button[] bs, TextView now, String key) {
         int i = pref(key, -1);
         select(bs, i);
-        if (i < 0 && now.length() == 0) now.setText("Current: unknown");
+        if (i < 0 && now.length() == 0) now.setText("Current setting: not read yet");
     }
 
     TextView now(LinearLayout card) {
@@ -135,7 +139,8 @@ public class SleepPage extends ApplyPage {
         String s = LogTail.status("sleep_timer");
         String v = s == null ? null : s.trim();
         // no STATUS line seen yet: the state is unknown, so no chip is selected
-        String show = v == null ? "Current: unknown" : "off".equals(v) ? "Sleep timer is off." : "Sleep timer: " + v + " min.";
+        String show = v == null ? "Sleep timer: no news from Stickman's background helper yet."
+            : "off".equals(v) ? "Sleep timer is off." : "Sleep timer: " + v + " min.";
         if (!show.equals(timerShown)) {
             timerShown = show;
             timerInfo.setText(show);
@@ -148,7 +153,7 @@ public class SleepPage extends ApplyPage {
 
     @Override String describe(String kind, String out) {
         if (kind.equals("live")) { showLive(out); return null; }
-        if (kind.equals("conf")) return Store.pid(out, "STICKD") != null ? "Saved ✓" : "Saved, but stickd isn't running.";
+        if (kind.equals("conf")) return Store.pid(out, "STICKD") != null ? "Saved ✓" : "Saved, but the background automation isn't running: check Status.";
         if (kind.equals("screenoff")) return "Screen off sent. Press any button to bring it back.";
         int c = kind.indexOf(':');
         String k = kind.substring(0, c);
