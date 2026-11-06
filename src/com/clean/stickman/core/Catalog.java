@@ -104,6 +104,27 @@ public final class Catalog {
         {"com.amazon.whad", "Echo home audio", "Wireless home-audio device service (~15 MB)"},
     };
 
+    /** Offline names for processes the Tasks page shows that have no app label of their own. */
+    static final String[][] KNOWN_LABELS = {
+        {"system_server", "Android system"},
+        {"com.android.systemui", "System UI"},
+    };
+
+    /** Display name Stickman knows offline for pkg (debloat catalogue, then {@link #KNOWN_LABELS}), or null. */
+    public static String label(String pkg) {
+        if (pkg == null) return null;
+        for (String[] r : DEBLOAT_RECOMMENDED) if (r[0].equals(pkg)) return r[1];
+        for (String[] r : KNOWN_LABELS) if (r[0].equals(pkg)) return r[1];
+        return null;
+    }
+
+    /** One line on what a recommended debloat candidate does, or null when it isn't in the catalogue. */
+    public static String why(String pkg) {
+        if (pkg == null) return null;
+        for (String[] r : DEBLOAT_RECOMMENDED) if (r[0].equals(pkg)) return r[2];
+        return null;
+    }
+
     /** {label, target}: an intent action, or a component (contains '/') started with am start -n. */
     public static final String[][] SHORTCUTS = {
         {"Display & Sounds", "com.amazon.device.settings.action.DISPLAY_AND_SOUNDS"},
