@@ -132,7 +132,8 @@ public class SpeedPage extends ApplyPage {
         s.addView(sr);
         LinearLayout sr2 = Theme.row(a);
         button(sr2, "Your apps…", v -> pickAsleep());
-        button(sr2, "Amazon services…", v -> send("pm list packages -e com.amazon", "svc", "Reading Amazon services…"));
+        if (!com.clean.stickman.core.Edition.STORE)
+            button(sr2, "Amazon services…", v -> send("pm list packages -e com.amazon", "svc", "Reading Amazon services…"));
         s.addView(sr2);
         s.addView(Theme.text(a, "Background apps: who ran behind your back over the last " + BgTime.HOURS + " hours, busiest "
             + "first. Starts at boot: apps that launch themselves when the stick starts.", 13, Theme.MUTED));
@@ -479,7 +480,7 @@ public class SpeedPage extends ApplyPage {
         int reporting = 0;
         for (String p : com.clean.stickman.core.Telemetry.packages()) if (m.remove(p) != null) reporting++;
         if (m.isEmpty()) {
-            say(reporting > 0 ? "No apps are kept asleep or starved (Amazon's reporting apps are quiet: see Privacy)."
+            say(reporting > 0 && !com.clean.stickman.core.Edition.STORE ? "No apps are kept asleep or starved (Amazon's reporting apps are quiet: see Privacy)."
                 : "No apps are kept asleep or starved.");
             return;
         }

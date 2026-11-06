@@ -29,7 +29,14 @@ import java.util.ArrayList;
 
 /** App shell: left sidebar of sections + a content area that swaps Page views. Fully D-pad driven. */
 public class MainActivity extends Activity implements Bridge.Listener {
-    static final String[] SECTIONS = { "Remote", "Tasks", "Speed", "Sleep", "Privacy", "Debloat", "Shortcuts", "Status", "Settings" };
+    static final String[] ALL_SECTIONS = { "Remote", "Tasks", "Speed", "Sleep", "Privacy", "Debloat", "Shortcuts", "Status", "Settings" };
+    static final String[] SECTIONS = visibleSections();
+
+    static String[] visibleSections() {
+        java.util.List<String> l = new ArrayList<>();
+        for (String x : ALL_SECTIONS) if (!com.clean.stickman.core.Edition.hidden(x)) l.add(x);
+        return l.toArray(new String[0]);
+    }
     static final String VPN_WARNING = "A VPN (e.g. NordVPN) is connected. Applying will disconnect it. Continue?";
 
     final Page[] pages = new Page[SECTIONS.length];

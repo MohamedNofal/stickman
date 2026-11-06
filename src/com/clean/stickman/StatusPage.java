@@ -50,7 +50,8 @@ public class StatusPage extends Page {
         start.addView(Theme.heading(a, "Start here"));
         start.addView(Theme.text(a, "1.  Remote → Listen, then press the button on your remote you want to change.\n"
             + "2.  Speed → Boost when the stick feels slow, then Use recommended settings to keep it that way.\n"
-            + "3.  Debloat → Disable all switches off Amazon's extras; undo under Disabled by Stickman.\n\n"
+            + (com.clean.stickman.core.Edition.STORE ? "3.  Sleep → a sleep timer, or keep the TV awake while a video plays.\n\n"
+                : "3.  Debloat → Disable all switches off Amazon's extras; undo under Disabled by Stickman.\n\n")
             + "You can close Stickman afterwards: your buttons keep working.", 15, Theme.TEXT));
         l.addView(start);
 

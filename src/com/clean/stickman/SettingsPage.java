@@ -164,16 +164,19 @@ public class SettingsPage extends Page {
         }
     }
 
+    /** The update-freeze undo: only the full edition can freeze, so only it thaws. */
+    static String thaw() { return com.clean.stickman.core.Edition.STORE ? "" : Ota.thawScript() + "; "; }
+
     /** Replays the originals journal (and thaws OTA); Stickman stays on. */
     void restoreDefaults() {
         Store.setOtaFrozen(a, false);
-        send(Ota.thawScript() + "; " + Originals.restoreScript(), "restore", "Restoring…");
+        send(thaw() + Originals.restoreScript(), "restore", "Restoring…");
     }
 
     /** Master OFF followed by Restore defaults, in one go: exactly the two commands those buttons send. */
     void undoEverything() {
         final String stop = EnsureScript.stop();
-        final String restore = Ota.thawScript() + "; " + Originals.restoreScript();
+        final String restore = thaw() + Originals.restoreScript();
         mine.put(stop, "undo-stop");
         mine.put(restore, "undo");
         a.run(() -> {

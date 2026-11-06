@@ -5,8 +5,25 @@ cd "$(dirname "$0")"
 ANDROID_JAR=${ANDROID_JAR:-/opt/android-sdk/platforms/android-34/android.jar}
 D8_JAR=${D8_JAR:-/opt/android-sdk/build-tools/35.0.0/lib/d8.jar}
 PKG=com.clean.stickman
+EDITION=${1:-full}          # "./build.sh appstore" -> the Amazon Appstore edition (see core/Edition.java)
 OUT=build
+APK=stickman.apk
+SRC=src
 rm -rf "$OUT"; mkdir -p "$OUT/classes"
+if [ "$EDITION" = appstore ]; then
+  STORE_PKG=$(grep -o 'STORE_PKG = "[^"]*"' src/com/clean/stickman/core/Edition.java | cut -d'"' -f2)
+  APK=stickman-appstore.apk
+  SRC=$OUT/src-appstore
+  cp -r src "$SRC"
+  # edition flag on; every runtime use of the application id (string literals) moves to the store package.
+  # Java packages (com.clean.stickman.*) stay; ".FadeReceiver" component names become fully qualified.
+  sed -i 's/STORE = false;/STORE = true;/' "$SRC/com/clean/stickman/core/Edition.java"
+  grep -rl 'com\.clean\.stickman' "$SRC" | xargs sed -i \
+    -e "s#\"com\.clean\.stickman\"#\"$STORE_PKG\"#g" \
+    -e "s#com\.clean\.stickman/\.FadeReceiver#$STORE_PKG/com.clean.stickman.FadeReceiver#g"
+  RENAME="--rename-manifest-package $STORE_PKG"
+  echo "[edition] appstore -> $STORE_PKG"
+fi
 
 echo "[0/5] build native remapd (armv7 static)"
 ( cd native && arm-linux-gnueabihf-gcc -O2 -static -w -o remapd remapd.c layers.c && arm-linux-gnueabihf-strip remapd )
@@ -15,7 +32,7 @@ echo "[0/5] build native remapd (armv7 static)"
 
 echo "[1/5] compile java -> classes (javac against android.jar)"
 javac --release 8 -cp "$ANDROID_JAR" -d "$OUT/classes" \
-   -nowarn -Xlint:none $(find src -name '*.java')
+   -nowarn -Xlint:none $(find "$SRC" -name '*.java')
 
 echo "[2/5] dex classes -> classes.dex (build-tools d8)"
 java -cp "$D8_JAR" com.android.tools.r8.D8 \
@@ -27,7 +44,7 @@ aapt2 compile --dir res -o "$OUT/res.zip"
 aapt2 link -o "$OUT/base.apk" "$OUT/res.zip" \
    -I "$ANDROID_JAR" \
    --manifest AndroidManifest.xml \
-   --min-sdk-version 21 --target-sdk-version 30
+   --min-sdk-version 21 --target-sdk-version 30 $RENAME
 
 echo "[4/5] add classes.dex into apk"
 cd "$OUT"
@@ -48,6 +65,6 @@ if [ ! -f "$KS" ]; then
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=shellbridge"
 fi
 apksigner sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
-   --out stickman.apk "$OUT/app-aligned.apk"
+   --out "$APK" "$OUT/app-aligned.apk"
 
-echo "DONE -> $(pwd)/stickman.apk"
+echo "DONE -> $(pwd)/$APK"

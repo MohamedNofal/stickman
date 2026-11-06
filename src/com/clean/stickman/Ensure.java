@@ -22,6 +22,6 @@ public final class Ensure {
         String s = EnsureScript.build(ai.sourceDir, ai.nativeLibraryDir + "/libremapd.so", version,
             Store.remap(c).serialize(), Store.stickdText(c), true);
         // Fire OS resets suspensions on some updates; re-freeze OTA on every ensure (cheap and idempotent).
-        return s + "; " + com.clean.stickman.core.Ota.ensureLine(Store.otaFrozen(c));
+        return com.clean.stickman.core.Edition.STORE ? s : s + "; " + com.clean.stickman.core.Ota.ensureLine(Store.otaFrozen(c));
     }
 }
