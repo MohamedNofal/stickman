@@ -71,6 +71,34 @@ public final class Actions {
         }
     }
 
+    /**
+     * One plain line saying what a menu action does, shown next to its name in the button editor (a first-time
+     * user can't tell "Boost" from "Trim memory" by name). "" for ids that aren't offered.
+     */
+    public static String actHint(String id) {
+        switch (id) {
+            case BOOST: return "closes background apps to free memory";
+            case SLEEP_NOW: return "puts the Fire TV to sleep";
+            case SLEEP_TIMER: return "each press adds time: 15, 30, 60, 90 min, then off";
+            case SCREEN_OFF: return "black screen, sound keeps playing";
+            case SCREENSAVER_TOGGLE: return "turns the screensaver on or off";
+            case SCREENSHOT: return "saves a picture to Pictures/Stickman";
+            case PLAY_PAUSE: return "whatever is playing";
+            case NEXT: return "skips to the next track";
+            case PREVIOUS: return "back to the previous track";
+            case KILL_CURRENT: return "force-stops the app in front";
+            case OPEN_SCREEN: return "a Fire TV settings screen";
+            case TRIM: return "background apps give back unused memory; nothing closes";
+            default: return "";
+        }
+    }
+
+    /** "Name  ·  hint" for the editor's action list (more = the entry opens a further list, shown as "Name…"). */
+    public static String menuLabel(String id, boolean more) {
+        String h = actHint(id);
+        return actName(id) + (more ? "…" : "") + (h.isEmpty() ? "" : "  ·  " + h);
+    }
+
     public static String describe(String action, String appLabel) {
         if (action == null) return "Original";
         String a = action.trim();

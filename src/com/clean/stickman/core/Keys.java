@@ -52,4 +52,12 @@ public final class Keys {
 
     /** App buttons deliver press and release together, so only tap makes sense. */
     public static boolean tapOnly(int code) { return code >= 744 && code <= 747; }
+
+    /**
+     * Keys you get around menus with (the D-pad ring, OK and Back): changing what their press does can leave the
+     * user stuck, so the editor warns first. Home and Menu are not in it: remapping Home is the usual case.
+     */
+    public static boolean navigation(int code) {
+        return code == 96 || code == 103 || code == 105 || code == 106 || code == 108 || code == 158;
+    }
 }
