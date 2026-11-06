@@ -15,14 +15,16 @@ import com.clean.stickman.core.ListenDecision;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.RemoteLayout;
 import com.clean.stickman.core.RemotePresets;
+import com.clean.stickman.core.ResultText;
 import com.clean.stickman.core.Rule;
 
 import java.util.List;
 
 /**
- * The remote screen: a drawing of the chosen remote model (D-pad focus, OK edits a button), a profile switcher
- * (Default + per-app profiles), Listen mode (press a physical button -> it lights up and its editor opens;
- * a key not on the drawing can be assigned to a not-yet-learned button) and the Remote model chooser.
+ * The remote screen: a drawing of the chosen remote model (D-pad focus, OK edits a button), a button-set switcher
+ * (All apps + one set per app; "profiles" in remap.conf), Listen mode (press a physical button -> it lights up and
+ * its editor opens; a key not on the drawing can be assigned to a not-yet-learned button), the Remote model
+ * chooser, and "did it work?" feedback once a saved change has reached the remote.
  */
 public class RemotePage extends Page implements RemoteView.Listener, RemoteView.Info {
     static final long LISTEN_TIMEOUT_MS = 20000;
@@ -35,12 +37,14 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         + "even if it isn't on the drawing. While Stickman listens, buttons do nothing else (Home included).";
     static final String FIRST = "Nothing changed yet. Press Listen, then press the button on your remote you want to change. "
         + "Any remote works; the drawing is just a picture.";
+    /** A saved change whose ensure never got queued (e.g. the other-VPN question answered No) is reported after this. */
+    static final long APPLY_STALL_MS = 2500;
 
     MainActivity a;
     RemoteView remote;
     RemapModel m = new RemapModel();
     String profile = RemapModel.DEFAULT;
-    TextView profName, profInfo, btnName, btnLayers, listenInfo, modelInfo;
+    TextView profName, profInfo, btnName, btnLayers, applyInfo, listenInfo, modelInfo;
     /** "Other buttons": keys with rules that aren't on the drawing (heard with Listen); hidden when there are none. */
     LinearLayout extrasCard, extrasList;
     Button prev, next, add, remove, listen, model;
@@ -54,6 +58,12 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     long listenFrom, listenBaseAt;
     /** remapd confirmed it is swallowing buttons (the Listen.ON bridge command came back): presses count now. */
     boolean armed;
+    /** Button whose saved change is on its way to the remote (null = nothing to report), and since when. */
+    String applyName;
+    boolean applyReset, applyStalled;
+    long applyAt;
+    /** Consecutive ticks that saw nothing running or queued (a result already posted to this thread needs one). */
+    int applyIdleTicks;
 
     @Override public String title() { return "Remote"; }
 
@@ -99,10 +109,14 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         btnLayers = Theme.text(a, "", 15, Theme.TEXT);
         btnLayers.setLineSpacing(Theme.dp(a, 3), 1f);
         bc.addView(btnLayers);
+        // "Applying…" / "X is ready: press it to try it" / "Couldn't apply" for the last saved change
+        applyInfo = Theme.autoHide(Theme.text(a, "", 13, Theme.MUTED));
+        applyInfo.setPadding(0, Theme.dp(a, 6), 0, 0);
+        bc.addView(applyInfo);
         side.addView(bc);
 
         LinearLayout pc = Theme.card(a);
-        pc.addView(Theme.heading(a, "Profile"));
+        pc.addView(Theme.heading(a, "Buttons for"));
         LinearLayout pr = Theme.row(a);
         prev = Theme.button(a, "◀");
         prev.setId(View.generateViewId());
@@ -125,11 +139,11 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         profInfo = Theme.text(a, "", 13, Theme.MUTED);
         pc.addView(profInfo);
         LinearLayout pr2 = Theme.row(a);
-        add = Theme.button(a, "Add app profile");
+        add = Theme.button(a, "Different buttons in one app…");
         add.setId(View.generateViewId());
         add.setOnClickListener(v -> addProfile());
         pr2.addView(add);
-        remove = Theme.button(a, "Remove profile");
+        remove = Theme.button(a, "Remove this app's buttons");
         remove.setOnClickListener(v -> removeProfile());
         pr2.addView(remove);
         pc.addView(pr2);
@@ -170,7 +184,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         model.setText(p.title());
         int open = RemotePresets.unlearned(bs).size();
         modelInfo.setText(open == 0 ? "Only a picture: any remote works. Pick yours if it looks different."
-            : open + " button" + (open == 1 ? "" : "s") + " on this remote send a key Stickman doesn't know yet: select one and press OK to teach it.");
+            : open == 1 ? "1 greyed-out button on this drawing hasn't been seen yet: select it and press OK to teach it."
+            : open + " greyed-out buttons on this drawing haven't been seen yet: select one and press OK to teach it.");
     }
 
     void chooseModel() {
@@ -191,11 +206,13 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     void refresh() {
         boolean def = RemapModel.DEFAULT.equals(profile);
         List<String> ps = m.profiles();
-        profName.setText(def ? "Default" : ButtonEditor.appLabel(a, profile));
-        profInfo.setText((def ? "Every app (unless it has its own profile)" : "Only while this app is open · " + profile)
-            + "\nProfile " + (ps.indexOf(profile) + 1) + " of " + ps.size());
         boolean many = ps.size() > 1;
-        // with one profile the arrows are shown dimmed (disabled, so focus never lands on a dead control)
+        String app = def ? null : ButtonEditor.appLabel(a, profile);
+        profName.setText(def ? ButtonEditor.ALL_APPS : app);
+        String where = def ? "Every app" + (many ? ", unless an app has its own buttons" : "")
+            : "Only while " + app + " is open. Buttons not changed here keep their " + ButtonEditor.ALL_APPS + " setting";
+        profInfo.setText(many ? where + "\n" + (ps.indexOf(profile) + 1) + " of " + ps.size() + " · ◀ ▶ switch" : where);
+        // with one set the arrows are shown dimmed (disabled, so focus never lands on a dead control)
         prev.setEnabled(many);
         next.setEnabled(many);
         prev.setFocusable(many);
@@ -213,19 +230,30 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     /** Idle text of the Listen card: a first-time hint until something has been changed. */
     String idle() { return m.codes().isEmpty() ? FIRST : IDLE; }
 
-    /** One button per rule-bearing code that the drawing doesn't show (any profile). */
+    /** One button per rule-bearing code that the drawing doesn't show (any profile), saying what it does. */
     void refreshExtras() {
         extrasList.removeAllViews();
         RemoteLayout.Btn[] bs = remote.buttons();
         java.util.Map<String, String> labels = Store.labels(a, presetId);
         for (final int c : m.codes()) {
             if (RemoteLayout.indexOf(bs, c) >= 0) continue;
-            String n = extraName(labels, c);
-            Button b = Theme.button(a, n.equals("Button " + c) ? n : n + " (" + c + ")");
+            Button b = Theme.button(a, extraName(labels, c) + "   ›   " + summary(c));
             b.setOnClickListener(v -> openExtra(c));
             extrasList.addView(b);
         }
         extrasCard.setVisibility(extrasList.getChildCount() == 0 ? View.GONE : View.VISIBLE);
+    }
+
+    /** What code does in the selected set, in one line: "Open Kodi · hold: Boost". */
+    String summary(int code) {
+        String p = effective(code);
+        if (!m.hasRules(p, code)) return "changed only in another app";
+        StringBuilder sb = new StringBuilder();
+        String tap = m.get(p, code, Rule.Layer.TAP), dbl = m.get(p, code, Rule.Layer.DOUBLE), hold = m.get(p, code, Rule.Layer.HOLD);
+        if (tap != null) sb.append(ButtonEditor.describe(a, tap));
+        if (dbl != null) sb.append(sb.length() > 0 ? " · " : "").append("double: ").append(ButtonEditor.describe(a, dbl));
+        if (hold != null) sb.append(sb.length() > 0 ? " · " : "").append("hold: ").append(ButtonEditor.describe(a, hold));
+        return sb.toString();
     }
 
     /** The owner's name for an off-drawing key (label.<preset>.extra<code>), else the key's own name. */
@@ -240,7 +268,13 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         if (!ready()) return;
         m = Store.remap(a);
         String n = extraName(Store.labels(a, presetId), code);
-        ButtonEditor.open(a, m, profile, RemoteLayout.Btn.extra(code, n), presetId, () -> { loadRemote(); refresh(); });
+        ButtonEditor.open(a, m, profile, RemoteLayout.Btn.extra(code, n), presetId, this::saved, this::applying);
+    }
+
+    /** The editor changed something (rules, a name, a learned code): show it. */
+    void saved() {
+        loadRemote();
+        refresh();
     }
 
     void stepProfile(int d) {
@@ -258,7 +292,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     void addProfile() {
         if (!ready()) return;
-        ButtonEditor.pickApp(a, "Profile for which app?", app -> {
+        ButtonEditor.pickApp(a, "Which app gets its own buttons?", app -> {
             if (!ButtonEditor.validPkg(app[1])) return;
             m = Store.remap(a);
             m.addProfile(app[1]);
@@ -271,8 +305,9 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     void removeProfile() {
         if (RemapModel.DEFAULT.equals(profile) || !ready()) return;
         final String p = profile;
-        ThemedDialog.confirm(a, "Remove profile?",
-            "Remove the " + ButtonEditor.appLabel(a, p) + " profile? That app goes back to the Default buttons.", "Remove", () -> {
+        final String app = ButtonEditor.appLabel(a, p);
+        ThemedDialog.confirm(a, "Remove " + app + "'s buttons?",
+            app + " goes back to the " + ButtonEditor.ALL_APPS + " buttons.", "Remove", () -> {
                 m = Store.remap(a);
                 m.removeProfile(p);
                 Store.saveRemap(a, m);
@@ -293,7 +328,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     /** The pill names the button; what it does is in the Selected button card (no duplicate). */
     @Override public String hint(RemoteLayout.Btn b) {
-        return b.code == 0 ? b.name + " · not learned" : b.name;
+        return b.code == 0 ? b.name + " · not seen yet" : b.name;
     }
 
     // ---- RemoteView.Listener ----
@@ -302,7 +337,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         if (btnName == null) return;
         btnName.setText(b.name);
         if (b.code == 0) {
-            btnLayers.setText("Stickman doesn't know which key this button sends yet. Press OK, then press it on your remote.");
+            btnLayers.setText("Stickman hasn't seen this button yet. Press OK, then press it on your remote.");
             return;
         }
         int code = b.code;
@@ -313,7 +348,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         sb.append("Press:  ").append(tap == null ? "Original" : ButtonEditor.describe(a, tap));
         sb.append("\nDouble press:  ").append(dbl == null ? "Off" : ButtonEditor.describe(a, dbl));
         sb.append("\nHold:  ").append(Keys.tapOnly(code) ? "— (app buttons can't be held)" : hold == null ? "Original" : ButtonEditor.describe(a, hold));
-        if (inherited && m.hasRules(p, code)) sb.append("\n(from the Default profile)");
+        if (inherited && m.hasRules(p, code)) sb.append("\n(the ").append(ButtonEditor.ALL_APPS).append(" setting)");
         btnLayers.setText(sb);
     }
 
@@ -322,15 +357,14 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         if (b.code == 0) { teach(b); return; }
         if (!ready()) return;
         m = Store.remap(a);
-        ButtonEditor.open(a, m, profile, b, presetId, () -> { loadRemote(); refresh(); });
+        ButtonEditor.open(a, m, profile, b, presetId, this::saved, this::applying);
     }
 
     /** Unlearned button picked: listen for it and assign whatever key arrives. */
     void teach(RemoteLayout.Btn b) {
         final String slot = b.slot;
         new ThemedDialog(a).title("Teach “" + b.name + "”")
-            .message("Stickman doesn't know which key this button sends yet. Choose Listen, then press "
-                + b.name + " on your remote.")
+            .message("Stickman hasn't seen this button yet. Choose Listen, then press " + b.name + " on your remote.")
             .button("Listen", () -> { if (!listening) startListening(slot); })
             .cancel("Cancel").show();
     }
@@ -341,8 +375,46 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         loadRemote();
         refresh();
         remote.flash(code);
-        listenInfo.setText("Learned: " + remote.focused().name + " sends key " + code + ". Press OK on it to change what it does.");
+        listenInfo.setText("Learned " + remote.focused().name + ". Press OK on it to change what it does.");
         listenInfo.setTextColor(Theme.MUTED);
+    }
+
+    // ---- "did it work?" ----
+
+    /** ButtonEditor saved a change: the remote gets it when the queued ensure finishes (see onResult / onTick). */
+    void applying(String name, boolean reset) {
+        applyName = name;
+        applyReset = reset;
+        applyAt = System.currentTimeMillis();
+        applyStalled = false;
+        applyIdleTicks = 0;
+        applyInfo.setTextColor(Theme.MUTED);
+        applyInfo.setText("Applying to your remote…");
+    }
+
+    /** The ensure that carries the saved change came back: say whether the remote has it now. */
+    void applied(String output, boolean ok) {
+        String name = applyName;
+        applyName = null;
+        boolean good = ok && Store.pid(output, "REMAPD") != null;
+        String msg;
+        if (good) msg = applyReset ? name + " is updated on your remote." : name + " is ready: press it on your remote to try it.";
+        else if (ok) msg = "Couldn't apply: button remapping isn't running. See the Status page.";
+        else msg = "Couldn't apply. " + ResultText.human("FAIL " + output);
+        applyInfo.setTextColor(good ? Theme.TEXT : Theme.ACCENT);
+        applyInfo.setText(msg);
+        android.widget.Toast.makeText(a, msg, android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    /** Nothing is running or queued a while after the save (e.g. the other-VPN question got No): say so, no toast. */
+    @Override public void onTick() {
+        if (applyName == null || applyStalled || System.currentTimeMillis() - applyAt < APPLY_STALL_MS) return;
+        if (Bridge.busy || Bridge.hasPending()) { applyIdleTicks = 0; return; }
+        if (++applyIdleTicks < 2) return;
+        applyStalled = true;
+        applyInfo.setTextColor(Theme.ACCENT);
+        applyInfo.setText("Saved, but not on your remote yet: Stickman isn't connected. It applies the next time Stickman connects "
+            + "(reopen it, or reboot).");
     }
 
     // ---- listen mode ----
@@ -358,7 +430,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     boolean startListening(String slot) {
         learnSlot = null;
         if (!remapperRunning()) {
-            listenInfo.setText("Remapper not running. Turn Stickman on in Settings and wait for “Running ✓”.");
+            listenInfo.setText("Stickman isn't running yet (see the bottom of the sidebar). Turn it on in Settings and wait for “Running ✓”.");
             listenInfo.setTextColor(Theme.ACCENT);
             return false;
         }
@@ -383,13 +455,14 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     }
 
     @Override public void onResult(String cmd, String output, boolean ok) {
+        if (Ensure.MARKER.equals(cmd) && applyName != null) applied(output, ok);
         if (!listening || !Listen.ON.equals(cmd)) return;
         if (ok && Listen.onOk(cmd, output)) {
             armed = true;
             listenBaseAt = Math.max(listenBaseAt, LogTail.lastKeyAt);   // presses before remapd listened don't count
             listenInfo.setText("Press any button on your remote now. Nothing else will happen; Back cancels.");
         } else {
-            stopListening("Couldn't reach the remapper. Check that Stickman shows “Running ✓” and try again.");
+            stopListening("Couldn't start listening. Check that Stickman shows “Running ✓” and try again.");
         }
     }
 
@@ -419,7 +492,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         if (what == ListenDecision.PICK || what == ListenDecision.ALREADY) {
             final RemoteLayout.Btn b = remote.buttons()[RemoteLayout.indexOf(remote.buttons(), k)];
             boolean teaching = what == ListenDecision.ALREADY;
-            stopListening(teaching ? "That key is already " + b.name + " on this drawing. Try again?" : "Heard " + b.name + ".");
+            stopListening(teaching ? "That was " + b.name + ", which is already on the drawing. Try again?" : "Heard " + b.name + ".");
             remote.flash(k);
             if (!teaching) h.postDelayed(() -> { if (a.hasWindowFocus()) onPick(b); }, 650);
             return;
