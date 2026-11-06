@@ -43,6 +43,21 @@ public final class Lean {
     public static String memory(int level) { return memory(level, false); }
 
     /**
+     * What "Use recommended settings" on the Speed page applies, in the user's words, one per line. The commands are
+     * {@link #recommended()}; "Trim idle apps when the TV sleeps" is a stickd.conf change the page makes itself.
+     */
+    public static final String[] RECOMMENDED_STEPS = {
+        "Lean memory: Balanced (Android keeps up to 8 idle apps)",
+        "Background CPU limit on",
+        "Deep sleep while the TV is off",
+        "Fewer wake-ups",
+        "Trim idle apps when the TV sleeps",
+    };
+
+    /** The one-press recommended setup: exactly the commands the Balanced / CPU limit / deep sleep / wake-ups chips send. */
+    public static String[] recommended() { return new String[] { memory(1, true), dozeOn(), quiet(true) }; }
+
+    /**
      * 0 = off (originals back), 1 = Balanced (cap 8 + compaction), 2 = Max (cap 4 + compaction + slow restarts).
      * cpuLimit keeps the background CPU limit (a separate switch) in the same setting.
      */

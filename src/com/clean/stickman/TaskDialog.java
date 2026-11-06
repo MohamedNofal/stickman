@@ -11,13 +11,15 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.clean.stickman.core.RamHist;
+import com.clean.stickman.core.ResultText;
 import com.clean.stickman.core.TaskSnapshot;
 import com.clean.stickman.core.Units;
 
 /**
- * The Tasks page's tile dialog: label, "pkg · state · running 42 min", RAM / CPU / processes and a 60 s RAM trend,
- * with End app (default focus) · Always kill · Protect · Open · Cancel. A details-only variant (system strip) has
- * just Close. While open, {@link #update} refreshes the numbers and the trend from each new snapshot.
+ * The Tasks page's tile dialog: label, "in the background · running 42 min" (package underneath), RAM / CPU /
+ * processes, a 60 s RAM trend and one line on what the buttons do, with End app (default focus) · Always kill ·
+ * Protect · Open · Cancel. A details-only variant (system strip) has just Close. While open, {@link #update}
+ * refreshes the numbers and the trend from each new snapshot.
  */
 public class TaskDialog {
     /** What the page does for each button; the dialog closes before it is called. */
@@ -64,6 +66,12 @@ public class TaskDialog {
             why.setPadding(0, Theme.dp(c, 6), 0, 0);
             v.addView(why);
         }
+        if (!o.detailsOnly) {
+            TextView help = Theme.text(c, "End: close it now  ·  Always kill ⚡: close it every time you leave it  ·  "
+                + "Protect ★: never close it", 13, Theme.MUTED);
+            help.setPadding(0, Theme.dp(c, 8), 0, 0);
+            v.addView(help);
+        }
         d.view(v);
         update(app, hist);
 
@@ -98,39 +106,15 @@ public class TaskDialog {
         b.setFocusable(false);
     }
 
-    static String reasonText(String why) {
-        if ("never".equals(why)) return "always protected";
-        return why;
-    }
-
-    static String stateText(String st) {
-        if (st == null) return "?";
-        switch (st) {
-            case "fg": return "in front";
-            case "play": return "playing";
-            case "bg": return "background";
-            case "cached": return "cached";
-            case "sys": return "system";
-            default: return st;
-        }
-    }
-
-    /** 40 -> "40 s", 2520 -> "42 min", 11100 -> "3 h 5 min". */
-    static String duration(long sec) {
-        if (sec < 60) return Math.max(0, sec) + " s";
-        long m = sec / 60;
-        if (m < 60) return m + " min";
-        long h = m / 60;
-        m %= 60;
-        return m == 0 ? h + " h" : h + " h " + m + " min";
-    }
+    static String reasonText(String why) { return ResultText.reason(why); }
 
     /** New numbers for this dialog's package (app null = gone from the snapshot). */
     void update(TaskSnapshot.App app, RamHist hist) {
         if (app == null) {
-            sub.setText(pkg + " · not running");
+            sub.setText("Not running any more\n" + pkg);
         } else {
-            sub.setText(pkg + " · " + stateText(app.state) + " · running " + duration(app.upSec));
+            String st = ResultText.state(app.state);
+            sub.setText(Character.toUpperCase(st.charAt(0)) + st.substring(1) + " · running " + ResultText.duration(app.upSec) + "\n" + pkg);
             boolean agg = TaskMapView.SYS_OTHER.equals(app.pkg);
             stats.setText("RAM " + Units.mb(app.rssKb) + "   ·   CPU " + app.cpuPct + " %   ·   "
                 + app.procs + (agg ? (app.procs == 1 ? " package" : " packages") : (app.procs == 1 ? " process" : " processes")));

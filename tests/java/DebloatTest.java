@@ -96,6 +96,15 @@ public class DebloatTest {
         T.eq(null, Commands.debloat("com.amazon.tv.launcher", true), "disable refused");
         T.eq(null, Debloat.enableOne("a b", j.getPath()), "bad");
     }
+    public void testOfflineLabels() {
+        T.eq("Ambient screensaver", Catalog.label("com.amazon.tv.ftvambient"), "catalogue label");
+        T.eq("Android system", Catalog.label("system_server"), "system process");
+        T.eq(null, Catalog.label("com.netflix.ninja"), "unknown: caller falls back to the installed label");
+        T.eq(null, Catalog.label(null), "null");
+        T.eq("Photo screensaver; the biggest app (~100 MB)", Catalog.why("com.amazon.tv.ftvambient"), "why");
+        T.eq(null, Catalog.why("system_server"), "no why for non-debloat entries");
+    }
+
     public void testListRecorded() {
         String c = Debloat.recorded("bucket");
         T.yes(c.contains("^bucket ") && c.contains(Originals.FILE), c);

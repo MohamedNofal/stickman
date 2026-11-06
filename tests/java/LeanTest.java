@@ -156,6 +156,16 @@ public class LeanTest {
         T.yes(Lean.READ.contains("power_check_interval=60000") && Lean.READ.contains("min_interval=900000"), "READ reports both");
     }
 
+    public void testRecommendedIsExactlyTheChipCommands() {
+        String[] r = Lean.recommended();
+        T.eq(3, r.length, "three bridge commands");
+        T.eq(Lean.memory(1, true), r[0], "Balanced with the CPU limit kept on");
+        T.eq(Lean.dozeOn(), r[1], "deep sleep on");
+        T.eq(Lean.quiet(true), r[2], "fewer wake-ups on");
+        T.eq(5, Lean.RECOMMENDED_STEPS.length, "every step is named for the confirm dialog");
+        for (String s : Lean.RECOMMENDED_STEPS) T.yes(!s.contains("device_config") && !s.contains("doze"), "plain words: " + s);
+    }
+
     public void testClearCaches() {
         String s = Lean.clearCachesScript();
         T.yes(s.contains("pm trim-caches 999G") && s.contains("sm fstrim") && s.endsWith("echo \"CLEARED $((a-b))\""), s);

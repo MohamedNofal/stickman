@@ -14,12 +14,14 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.clean.stickman.core.Actions;
+import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EndPolicy;
 import com.clean.stickman.core.KillPolicy;
 import com.clean.stickman.core.OwnProfile;
 import com.clean.stickman.core.RamHist;
 import com.clean.stickman.core.RemapModel;
+import com.clean.stickman.core.ResultText;
 import com.clean.stickman.core.StickdConf;
 import com.clean.stickman.core.TaskKeepalive;
 import com.clean.stickman.core.TaskSnapshot;
@@ -46,6 +48,9 @@ import java.util.regex.Pattern;
 public class TasksPage extends ApplyPage {
     static final String TAG = "Stickman";
     static final long STALE_MS = 6000, RESULT_TIMEOUT_MS = 20000;
+    /** Without a fresh sample for this long the header says NO DATA and the map says where to look. */
+    static final long NO_DATA_MS = 15000;
+    static final String NO_DATA_HINT = "Nothing arrives from the stick. Check the Status page: is background automation running?";
     static final int STRIP_MAX = 6, STRIP_KEEP = 8;
     static final String[] SORTS = { "Sort by RAM", "Sort by CPU", "Sort by name" };
     static final Pattern KILLED = Pattern.compile("killed=(\\d+)");
@@ -80,6 +85,10 @@ public class TasksPage extends ApplyPage {
     /** Pending End / End all result (0 = none). */
     long endAt, endAllAt;
     String endPkg, endLabel;
+    /** What to say when the pending stickd.conf save (Protect / Always kill) completes. */
+    String savedMsg;
+    /** Since when (elapsedRealtime) no fresh sample has arrived while live (0 = fresh). */
+    long staleSince;
 
     @Override public String title() { return "Tasks"; }
 
@@ -94,7 +103,7 @@ public class TasksPage extends ApplyPage {
         head.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1f));
         ram = stat(head, "RAM – / – GB");
         cpu = stat(head, "CPU – %");
-        autoKill = stat(head, "Auto-kill –");
+        autoKill = stat(head, "Auto-close –");
         dot = new Dot(a);
         int ds = Theme.dp(a, 18);
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(ds, ds);
@@ -124,6 +133,10 @@ public class TasksPage extends ApplyPage {
         TextView hint = Theme.text(a, "OK  details      ⏯  pause / resume      ☰  sort · end all", 13, Theme.MUTED);
         hint.setPadding(Theme.dp(a, 2), Theme.dp(a, 6), 0, 0);
         l.addView(hint);
+        TextView legend = Theme.text(a, "Bigger tile = more memory   ·   ★ protected, never closed   ·   ⚡ always killed when left   ·   ▶ playing",
+            13, Theme.MUTED);
+        legend.setPadding(Theme.dp(a, 2), Theme.dp(a, 2), 0, 0);
+        l.addView(legend);
         return l;
     }
 
@@ -165,6 +178,7 @@ public class TasksPage extends ApplyPage {
         launchable = new HashSet<>();
         try { for (String[] app : ButtonEditor.launchables(a)) launchable.add(app[1]); } catch (RuntimeException ignored) {}
         refreshConf();
+        staleSince = 0;
         LogTail.FEED.setListener(feedListener);
         if (!paused) { startSampling(); applySnapshot(); }
         updateLive();
@@ -268,7 +282,7 @@ public class TasksPage extends ApplyPage {
     /** Auto-kill header and the ★ / ⚡ marks from the stored conf. */
     void refreshConf() {
         StickdConf c = conf();
-        autoKill.setText("Auto-kill " + (c.onLeave || c.intervalMin > 0 ? "On" : "Off"));
+        autoKill.setText("Auto-close " + (c.onLeave || c.intervalMin > 0 ? "On" : "Off"));
         map.setMarks(protectedSet(c, map.snapshot()), c.blacklist);
     }
 
@@ -293,6 +307,8 @@ public class TasksPage extends ApplyPage {
             hh.add(s.seq, s.atMs, x.rssKb);
             if (labelTried.add(x.pkg) && !x.pkg.startsWith("_")) {
                 String lb = ButtonEditor.appLabel(a, x.pkg);
+                // no label of its own: a name Stickman knows offline (catalogue, Android system), else the map shortens it
+                if (lb == null || lb.equals(x.pkg) || lb.trim().isEmpty()) lb = Catalog.label(x.pkg);
                 if (lb != null && !lb.equals(x.pkg) && !lb.trim().isEmpty()) { labels.put(x.pkg, lb); newLabels = true; }
             }
         }
@@ -400,25 +416,37 @@ public class TasksPage extends ApplyPage {
         return at == 0 ? Long.MAX_VALUE : System.currentTimeMillis() - at;
     }
 
+    /** Header state; the map shows the same reason in words while it has no tiles (a blank map is a dead end). */
     void updateLive() {
         if (a == null) return;
         if (paused) {
             dot.set(Theme.ACCENT, false);
             liveText.setText("PAUSED");
             liveText.setTextColor(Theme.ACCENT);
+            map.setEmptyText("Paused: press ⏯ to resume.");
             return;
         }
         if (LogTail.FEED.latest() == null || feedAge() > STALE_MS) {
             clearHist();
             dot.set(0, false);
-            liveText.setText(!Store.enabled(a) ? "Stickman is OFF"
-                : Bridge.otherVpnActive(a) ? "VPN active — not sampling" : "waiting…");
-            liveText.setTextColor(Theme.MUTED);
+            long now = SystemClock.elapsedRealtime();
+            if (staleSince == 0) staleSince = now;
+            String head, why;
+            int color = Theme.MUTED;
+            if (!Store.enabled(a)) { head = "Stickman is OFF"; why = "Stickman is OFF: turn it on in Settings to see what's running."; }
+            else if (Bridge.otherVpnActive(a)) { head = "VPN active — not sampling"; why = "Another VPN is on, so Stickman isn't watching the stick."; }
+            else if (now - staleSince > NO_DATA_MS) { head = "NO DATA"; why = NO_DATA_HINT; color = Theme.ACCENT; }
+            else { head = "waiting…"; why = "Waiting for the first sample (about 2 s)…"; }
+            liveText.setText(head);
+            liveText.setTextColor(color);
+            map.setEmptyText(why);
             return;
         }
+        staleSince = 0;
         dot.set(Dot.GREEN, true);
         liveText.setText("LIVE · 2 s");
         liveText.setTextColor(Dot.GREEN);
+        map.setEmptyText("Only the system is running: no apps to show.");
     }
 
     /** LIVE dot: soft glow, pulsing from the clock while live (no animator, nothing allocated per frame). */
@@ -528,18 +556,22 @@ public class TasksPage extends ApplyPage {
     void setAlwaysKill(final String pkg, boolean on) {
         final String lb = label(pkg);
         if (!on) {
+            savedMsg = lb + " is no longer always killed.";
             applyStickdConf(Store.removeFromList(a, "blacklist", pkg), "conf");
             refreshConf();
             return;
         }
-        ThemedDialog.confirm(a, "Always kill " + lb + "?", "Close " + lb + " every time it goes to the background?",
-            "Always kill", () -> {
+        ThemedDialog.confirm(a, "Always kill " + lb + "?", "Close " + lb + " every time it goes to the background, even with "
+            + "auto-close off? It shows ⚡ on its tile.", "Always kill", () -> {
+                savedMsg = lb + " ⚡ is closed whenever you leave it.";
                 applyStickdConf(Store.addToList(a, "blacklist", pkg), "conf");
                 refreshConf();
             });
     }
 
     void setProtect(String pkg, boolean on) {
+        String lb = label(pkg);
+        savedMsg = on ? lb + " ★ is protected: Stickman never closes it." : lb + " is no longer protected.";
         applyStickdConf(on ? Store.addToList(a, "whitelist", pkg) : Store.removeFromList(a, "whitelist", pkg), "conf");
         refreshConf();
     }
@@ -598,10 +630,10 @@ public class TasksPage extends ApplyPage {
             if (st != null && LogTail.statusAt("end") >= endAt - 1000 && st.startsWith(endPkg + " ")) {
                 endAt = 0;
                 int r = st.indexOf("refused=");
-                say(r >= 0 ? "Can't end: " + TaskDialog.reasonText(st.substring(r + 8).trim()) : "Ended " + endLabel);
+                say(r >= 0 ? "Can't end " + endLabel + ": " + ResultText.reason(st.substring(r + 8).trim()) : "Ended " + endLabel + ".");
             } else if (now - endAt > RESULT_TIMEOUT_MS && !Bridge.busy) {
                 endAt = 0;
-                say("No answer from Stickman's helper within 20 s. Check Status: is stickd running?");
+                say(NO_ANSWER);
             }
         }
         if (endAllAt != 0) {
@@ -610,17 +642,23 @@ public class TasksPage extends ApplyPage {
                 endAllAt = 0;
                 Matcher m = KILLED.matcher(st);
                 int k = m.find() ? Integer.parseInt(m.group(1)) : -1;
-                say(k < 0 ? "End all: " + st : k == 1 ? "Closed 1 app." : "Closed " + k + " apps.");
+                say(k < 0 ? "End all: " + st : k == 0 ? "Nothing was closed: the apps were protected, playing or in front." : "Closed " + ResultText.apps(k) + ".");
             } else if (now - endAllAt > RESULT_TIMEOUT_MS && !Bridge.busy) {
                 endAllAt = 0;
-                say("No answer from Stickman's helper within 20 s. Check Status: is stickd running?");
+                say(NO_ANSWER);
             }
         }
     }
 
+    static final String NO_ANSWER = "No answer from the stick within 20 s. Check the Status page: is background automation running?";
+
     @Override String describe(String kind, String out) {
         if (kind.equals("end") || kind.equals("end_all")) return null;   // the STATUS line reports the outcome
-        if (kind.equals("conf")) return Store.pid(out, "STICKD") != null ? "Saved ✓" : "Saved, but stickd isn't running.";
+        if (kind.equals("conf")) {
+            String m = savedMsg != null ? savedMsg : "Saved ✓";
+            savedMsg = null;
+            return Store.pid(out, "STICKD") != null ? m : "Saved, but background automation isn't running (see the Status page).";
+        }
         return null;
     }
 }

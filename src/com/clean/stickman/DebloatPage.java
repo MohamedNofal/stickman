@@ -10,15 +10,19 @@ import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
 import com.clean.stickman.core.Lean;
 import com.clean.stickman.core.Ota;
+import com.clean.stickman.core.ResultText;
 
 import java.util.List;
 
-/** Recommended + advanced Amazon extras to disable, the "disabled by Stickman" list and Restore all. */
+/**
+ * Recommended Amazon extras to disable (one-press Disable all), the "Disabled by Stickman" undo list, storage
+ * tools, the after-update check, the Fire OS update freeze and the advanced list.
+ */
 public class DebloatPage extends ApplyPage {
     static final long AUTO_READ_MS = 30000;
     static final String ADVANCED_WARNING = "These are Amazon's own system apps. Stickman already hides the ones it knows "
         + "are essential, but disabling an unknown one can break a feature (Alexa, the store, casting…). "
-        + "Everything you disable here can be turned back on below or with Restore all.";
+        + "Everything you disable here can be turned back on under Disabled by Stickman or with Restore all.";
 
     LinearLayout recBox, advBox, oursBox;
     Button advToggle, restoreAll, disableAll;
@@ -39,37 +43,43 @@ public class DebloatPage extends ApplyPage {
         button(top, "Refresh list", v -> read());
         l.addView(top);
 
-        LinearLayout oc = card(l, "System updates (OTA)", "Fire OS protects its updater, so it can't be switched "
-            + "off like the apps below. Freeze suspends the OTA app and its forced updater, and re-applies the freeze "
-            + "at boot. Apps still update from the Appstore.");
-        otaStatus = Theme.text(a, "Checking…", 15, Theme.MUTED);
-        oc.addView(otaStatus);
-        otaBtn = button(oc, "Freeze OTA…", v -> confirmOta());
-
-        LinearLayout rc = card(l, "Recommended", "Safe Amazon extras you can switch off. Home, Settings, updates, "
-            + "remotes and Net Filter can never be disabled here.");
+        LinearLayout rc = card(l, "Recommended", "Amazon extras that are safe to switch off: ads, promos, usage reporting "
+            + "and leftovers. Home, Settings, updates, remotes and Net Filter can never be disabled here.");
         disableAll = button(rc, "Disable all…", v -> confirmDisableAll());
         recBox = Theme.column(a);
         rc.addView(recBox);
 
-        LinearLayout ours = card(l, "Disabled by Stickman", null);
+        LinearLayout ours = card(l, "Disabled by Stickman", "Your undo list. If a feature stops working, turn its app back "
+            + "on here: it's instant and nothing else changes.");
         oursBox = Theme.column(a);
         ours.addView(oursBox);
         restoreAll = button(ours, "Restore all…", v -> ThemedDialog.confirm(a, "Restore all?",
             "Turn every app Stickman disabled back on? Other settings stay as they are.", "Restore",
             () -> send(Debloat.restoreAllScript() + "; " + Debloat.READ_CMD, "restore", "Restoring apps…")));
-        button(ours, "Free up space…", v -> ThemedDialog.confirm(a, "Free up space?",
+
+        LinearLayout st = card(l, "Storage", "Gets space back without changing what's installed or set up.");
+        LinearLayout str = Theme.row(a);
+        button(str, "Free up space…", v -> ThemedDialog.confirm(a, "Free up space?",
             "Amazon keeps downloading updates for apps even after they're disabled. This removes those updates from the "
             + "apps Stickman disabled, back to their small built-in version (they stay disabled).\n\nIf you turn one back "
             + "on later, the Appstore updates it again.", "Free up space",
-            () -> { freeAt = System.currentTimeMillis(); send(com.clean.stickman.core.Lean.freeSpaceDetached(), "freeing", "Freeing space…"); }));
-        button(ours, "Clear app caches…", v -> ThemedDialog.confirm(a, "Clear app caches?",
+            () -> { freeAt = System.currentTimeMillis(); send(Lean.freeSpaceDetached(), "freeing", "Freeing space…"); }));
+        button(str, "Clear app caches…", v -> ThemedDialog.confirm(a, "Clear app caches?",
             "Deletes every app's cache files (thumbnails, downloaded pages) and trims the storage. Apps rebuild their "
             + "caches as you use them; nothing you set up is lost.", "Clear caches",
             () -> { clearAt = System.currentTimeMillis(); send(Lean.clearCachesDetached(), "clearing", "Clearing caches…"); }));
+        st.addView(str);
+
         LinearLayout ck = card(l, "Check after an update", "Fire OS updates can quietly switch disabled apps back on and "
             + "undo Keep asleep / Starve. This finds anything that came back and offers to switch it off again.");
         button(ck, "Check now", v -> send(com.clean.stickman.core.Starve.checkScript(), "check", "Checking…"));
+
+        LinearLayout oc = card(l, "Fire OS system updates", "A Fire OS update can switch your disabled apps back on and "
+            + "slow the stick down. Freeze stops the stick from downloading or installing system updates until you "
+            + "unfreeze; apps still update from the Appstore.");
+        otaStatus = Theme.text(a, "Checking…", 15, Theme.MUTED);
+        oc.addView(otaStatus);
+        otaBtn = button(oc, "Freeze updates…", v -> confirmOta());
 
         LinearLayout ad = card(l, "Advanced", "All other Amazon apps. For people who know what they're switching off.");
         advToggle = button(ad, "Show advanced list…", v -> {
@@ -93,7 +103,7 @@ public class DebloatPage extends ApplyPage {
         if (a == null || Bridge.otherVpnActive(a)) return;
         if (System.currentTimeMillis() - readAt > AUTO_READ_MS) read();
         if (otaFrozen == null || System.currentTimeMillis() - otaReadAt > AUTO_READ_MS)
-            send(Ota.stateCmd(), "otastate", "Checking OTA state…");
+            send(Ota.stateCmd(), "otastate", "Checking the update state…");
     }
 
     void render() {
@@ -103,21 +113,21 @@ public class DebloatPage extends ApplyPage {
         a.keepFocusInPage(had);   // removing the focused row must not throw focus to the sidebar
     }
 
-    /** OTA card: status line + the Freeze/Unfreeze button label. */
+    /** Update-freeze card: status line + the Freeze/Unfreeze button label. */
     void renderOta() {
         if (otaStatus == null || otaBtn == null) return;
         if (otaFrozen == null) {
             otaStatus.setText("Checking…");
             otaStatus.setTextColor(Theme.MUTED);
-            otaBtn.setText("Freeze OTA…");
+            otaBtn.setText("Freeze updates…");
         } else if (otaFrozen) {
-            otaStatus.setText("Frozen — Fire OS system updates are blocked.");
+            otaStatus.setText("Frozen: Fire OS system updates are blocked until you unfreeze.");
             otaStatus.setTextColor(Theme.ACCENT);
-            otaBtn.setText("Unfreeze OTA…");
+            otaBtn.setText("Unfreeze updates…");
         } else {
-            otaStatus.setText("Allowed — Fire OS can download and install system updates.");
+            otaStatus.setText("Allowed: Fire OS can download and install system updates.");
             otaStatus.setTextColor(Theme.MUTED);
-            otaBtn.setText("Freeze OTA…");
+            otaBtn.setText("Freeze updates…");
         }
     }
 
@@ -135,7 +145,7 @@ public class DebloatPage extends ApplyPage {
                 + "from the Appstore.\n\nFire OS protects its updater, so Stickman suspends it instead of disabling it. "
                 + "The freeze is re-applied at boot.", "Freeze", () -> {
                     Store.setOtaFrozen(a, true);
-                    send(Ota.freezeScript() + "; " + Ota.stateCmd(), "otafreeze", "Freezing OTA…");
+                    send(Ota.freezeScript() + "; " + Ota.stateCmd(), "otafreeze", "Freezing updates…");
                 });
         }
     }
@@ -170,11 +180,11 @@ public class DebloatPage extends ApplyPage {
             recBox.addView(row);
         }
 
-        if (model.disabledByUs.isEmpty()) oursBox.addView(Theme.text(a, "None.", 14, Theme.MUTED));
+        if (model.disabledByUs.isEmpty()) oursBox.addView(Theme.text(a, "None: nothing has been disabled.", 14, Theme.MUTED));
         for (final String pkg : model.disabledByUs) {
             LinearLayout row = Theme.row(a);
-            row.addView(Theme.text(a, label(pkg), 15, Theme.TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
             final String lb = label(pkg);
+            row.addView(Theme.text(a, lb, 15, Theme.TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
             button(row, "Re-enable", v -> confirmEnable(pkg, lb));
             oursBox.addView(row);
         }
@@ -183,7 +193,7 @@ public class DebloatPage extends ApplyPage {
             List<String> adv = model.advanced();
             if (adv.isEmpty()) advBox.addView(Theme.text(a, "No other Amazon apps.", 14, Theme.MUTED));
             else advBox.addView(Theme.text(a, adv.size() + " apps, A–Z. Disable asks first; you can turn any of "
-                + "them back on above.", 14, Theme.MUTED));
+                + "them back on under Disabled by Stickman.", 14, Theme.MUTED));
             java.util.List<String[]> rows = new java.util.ArrayList<>();
             for (String pkg : adv) rows.add(new String[] { appLabel(pkg), pkg });
             java.util.Collections.sort(rows, (x, y) -> x[0].compareToIgnoreCase(y[0]));
@@ -202,9 +212,12 @@ public class DebloatPage extends ApplyPage {
         }
     }
 
+    /** Name for a disabled package: the catalogue's, else the installed app's label, else the package itself. */
     String label(String pkg) {
-        for (String[] r : Catalog.DEBLOAT_RECOMMENDED) if (r[0].equals(pkg)) return r[1];
-        return pkg;
+        String l = Catalog.label(pkg);
+        if (l != null) return l;
+        l = appLabel(pkg);
+        return l == null || l.trim().isEmpty() ? pkg : l;
     }
 
     /** App labels for the advanced list, looked up once per page show (not on every render). */
@@ -221,17 +234,20 @@ public class DebloatPage extends ApplyPage {
         final String cmd = cmdAndRead(Debloat.enableOne(pkg));
         if (cmd == null) return;
         ThemedDialog.confirm(a, "Turn " + label + " back on?",
-            pkg + "\n\nIt goes back to how Amazon shipped it. You can disable it again from Recommended or Advanced.",
+            "It goes back to how Amazon shipped it. You can disable it again from Recommended or Advanced.\n\n" + pkg,
             "Re-enable", () -> send(cmd, "enabled:" + label, "Turning " + label + " back on…"));
     }
 
     static String cmdAndRead(String cmd) { return cmd == null ? null : cmd + "; " + Debloat.READ_CMD; }
 
+    /** Says what the app does (when the catalogue knows) and how to undo; the package name comes last. */
     void confirmDisable(final String pkg, String label) {
         final String cmd = cmdAndRead(Commands.debloat(pkg, true));
         if (cmd == null) { say(label + " is protected and can't be disabled."); return; }
+        String why = Catalog.why(pkg);
         ThemedDialog.confirm(a, "Disable " + label + "?",
-            pkg + "\n\nYou can turn it back on from \"Disabled by Stickman\" or with Restore all.", "Disable",
+            (why == null ? "" : why + ".\n\n") + "You can turn it back on any time under \"Disabled by Stickman\" or with "
+            + "Restore all.\n\n" + pkg, "Disable",
             () -> send(cmd, "disabled:" + label, "Disabling " + label + "…"));
     }
 
@@ -246,8 +262,8 @@ public class DebloatPage extends ApplyPage {
         ThemedDialog.confirm(a, "Disable all " + rec.size() + "?",
             "Switches off every app in Recommended."
             + (keep.length() > 0 ? "\n\nIncludes " + keep + ": skip this if you use them." : "")
-            + "\n\nYou can turn any of them back on from \"Disabled by Stickman\" or with Restore all.",
-            "Disable all", () -> send(cmd, "disabledall", "Disabling " + rec.size() + " apps…"));
+            + "\n\nYou can turn any of them back on under \"Disabled by Stickman\" or with Restore all.",
+            "Disable all", () -> send(cmd, "disabledall", "Disabling " + ResultText.apps(rec.size()) + "…"));
     }
 
     /** When Free up space / Clear caches was started (0 = not waiting for its STATUS line). */
@@ -259,9 +275,9 @@ public class DebloatPage extends ApplyPage {
             String st = LogTail.status("freed");
             if (st != null && LogTail.statusAt("freed") >= freeAt - 1000) {
                 freeAt = 0;
-                long[] f = com.clean.stickman.core.Lean.parseFreed(st);
+                long[] f = Lean.parseFreed(st);
                 say(f == null ? "Free up space: " + st : f[1] == 0 ? "Nothing to free: none of the disabled apps have updates stored."
-                    : "Freed " + Math.max(0, f[0] / 1024) + " MB from " + f[1] + " app(s).");
+                    : "Freed " + Math.max(0, f[0] / 1024) + " MB from " + ResultText.apps(f[1]) + ".");
             } else if (System.currentTimeMillis() - freeAt > 5 * 60000) {
                 freeAt = 0;
                 say("Free up space didn't report back within 5 minutes.");
@@ -272,7 +288,8 @@ public class DebloatPage extends ApplyPage {
             if (st != null && LogTail.statusAt("cleared") >= clearAt - 1000) {
                 clearAt = 0;
                 Long kb = Lean.parseCleared(st);
-                say(kb == null ? "Clear caches: " + st : "Cleared " + Math.max(0, kb / 1024) + " MB of app caches and trimmed the storage.");
+                say(kb == null ? "Clear caches: " + st : kb <= 0 ? "Caches were already clean: nothing to clear."
+                    : "Cleared " + (kb < 1024 ? "less than 1" : Long.toString(kb / 1024)) + " MB of app caches and trimmed the storage.");
             } else if (System.currentTimeMillis() - clearAt > 5 * 60000) {
                 clearAt = 0;
                 say("Clear caches didn't report back within 5 minutes.");
@@ -292,7 +309,7 @@ public class DebloatPage extends ApplyPage {
         java.util.Set<String> seen = new java.util.LinkedHashSet<>();
         for (String[] d : dr) if (seen.add(d[1])) {
             String what = "pkg".equals(d[0]) ? "turned back on" : "can run in the background again";
-            sb.append("• ").append(ButtonEditor.appLabel(a, d[1])).append(": ").append(what).append('\n');
+            sb.append("• ").append(label(d[1])).append(": ").append(what).append('\n');
         }
         if (fix == null) return dr.size() + " item(s) came back, but they're protected now, so they were left alone.";
         ThemedDialog.confirm(a, dr.size() + " came back on", sb.toString().trim() + "\n\nSwitch them off again?", "Switch off",
@@ -307,15 +324,15 @@ public class DebloatPage extends ApplyPage {
             renderOta();
             if (kind.equals("otastate")) return null;
             Store.setOtaFrozen(a, otaFrozen);   // the device is the truth, not what we asked for
-            if (kind.equals("otafreeze")) return otaFrozen ? "OTA updates are frozen." : "Couldn't freeze OTA: " + firstLine(out);
-            return otaFrozen ? "Unfreeze didn't take: " + firstLine(out) : "OTA updates are allowed again.";
+            if (kind.equals("otafreeze")) return otaFrozen ? "Fire OS system updates are frozen." : "Couldn't freeze updates: " + firstLine(out);
+            return otaFrozen ? "Unfreeze didn't take: " + firstLine(out) : "Fire OS system updates are allowed again.";
         }
         if (kind.equals("check")) return checked(out);
         if (out.contains(Debloat.SEP)) { model = Debloat.parse(out); render(); }
         if (kind.equals("read")) { result.setText(""); return null; }
         if (kind.equals("restore")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("RESTORED (\\d+)").matcher(out);
-            return m.find() ? "Turned " + m.group(1) + " app(s) back on." : "Restored.";
+            return m.find() ? "Turned " + ResultText.apps(Long.parseLong(m.group(1))) + " back on." : "Restored.";
         }
         if (kind.equals("freeing")) {
             if (!out.contains("FREEING")) { freeAt = 0; return "Couldn't start: " + firstLine(out); }
@@ -331,11 +348,12 @@ public class DebloatPage extends ApplyPage {
         }
         if (kind.equals("disabledall")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("DISABLED_ALL (\\d+)").matcher(out);
-            return m.find() ? "Disabled " + m.group(1) + " app(s)." : "Done.";
+            return m.find() ? "Switched off " + ResultText.apps(Long.parseLong(m.group(1))) + ". Any of them can be turned back on under Disabled by Stickman."
+                : "Done.";
         }
         if (kind.startsWith("disabled:")) {
             String p = kind.substring(9);
-            return out.contains("disabled-user") ? p + " disabled." : p + ": " + firstLine(out);
+            return out.contains("disabled-user") ? p + " is off. Turn it back on under Disabled by Stickman if you miss it." : p + ": " + firstLine(out);
         }
         if (kind.startsWith("enabled:")) return kind.substring(8) + " is back on.";
         return out;

@@ -104,6 +104,8 @@ public class TaskMapView extends View {
     /** Last "+N more" membership, for the sticky CollapseState hysteresis. */
     Set<String> prevHidden = new HashSet<>();
     boolean okDown, paused;
+    /** Shown centred while there are no tiles (waiting, paused, off...), so an empty map says why. */
+    String emptyText;
     long tweenStart;
     boolean tweening;
     float tweenT = 1f;
@@ -149,6 +151,13 @@ public class TaskMapView extends View {
     public void setPaused(boolean p) {
         paused = p;
         if (p && tweening) { finishTween(); invalidate(); }
+    }
+
+    /** Text drawn in the middle while the map has no tiles; null for none. */
+    public void setEmptyText(String s) {
+        if (s == null ? emptyText == null : s.equals(emptyText)) return;
+        emptyText = s;
+        if (tiles.isEmpty()) invalidate();
     }
 
     public TaskSnapshot snapshot() { return snap; }
@@ -507,9 +516,20 @@ public class TaskMapView extends View {
 
     @Override protected void onDraw(Canvas c) {
         if (step()) postInvalidateOnAnimation();
+        if (tiles.isEmpty()) { drawEmpty(c); return; }
         boolean hasFocus = isFocused();
         for (int i = 0, n = tiles.size(); i < n; i++) drawTile(c, tiles.get(i));
         if (focus >= 0 && focus < tiles.size()) drawFocus(c, tiles.get(focus), hasFocus);
+    }
+
+    /** The empty-map message, centred; the shared text paint is reset by every tile draw anyway. */
+    void drawEmpty(Canvas c) {
+        if (emptyText == null) return;
+        text.setTypeface(Typeface.DEFAULT);
+        text.setTextSize(16 * dp);
+        text.setColor(Theme.MUTED);
+        text.setTextAlign(Paint.Align.CENTER);
+        c.drawText(emptyText, getWidth() / 2f, getHeight() / 2f - (text.ascent() + text.descent()) / 2, text);
     }
 
     static int withAlpha(int color, int a) { return (Math.round(((color >>> 24) & 0xFF) * a / 255f) << 24) | (color & 0xFFFFFF); }
