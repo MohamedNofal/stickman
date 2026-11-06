@@ -38,14 +38,14 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
   - **Freeze OTA**: stops Fire OS system updates until you unfreeze. The updater is protected, so Stickman suspends it instead of disabling it and re-applies the freeze at boot; Appstore app updates are unaffected.
 - **Sleep**: sleep timer with fade, screen off with audio on, stay awake while media plays, HDMI-CEC switch.
 - **Privacy**: ad-blocking private DNS that switches itself off if the internet breaks, and limit ads and tracking.
-- **Shortcuts** to hidden Amazon settings, and a **Status** page.
+- **Shortcuts** to hidden Amazon settings, and a **Status** page that says whether Stickman is working, what to do if it isn't, and what it has been doing, in plain words.
 
 ## Install
 
 1. **Settings, My Fire TV, About**: press OK on the device name 7 times to unlock Developer options.
 2. **Developer options**: turn on **ADB debugging**, and allow **Downloader** to install apps.
 3. In **Downloader**, open `https://github.com/MohamedNofal/stickman/releases/latest/download/stickman.apk` and install it.
-4. Open Stickman, accept the **VPN request**, then tick **Always allow** on "Allow USB debugging?". Wake the TV first if the screensaver is on.
+4. Open Stickman, accept the **VPN request**, then tick **Always allow** on "Allow USB debugging?". Wake the TV first if the screensaver is on. If a step was missed, Stickman says which one and what to do.
 
 Keep ADB debugging on: Stickman talks to the TV's own debugging service.
 
@@ -53,7 +53,7 @@ Keep ADB debugging on: Stickman talks to the TV's own debugging service.
 
 - **Emergency release:** hold **Back for 10 s**.
 - Stickman never touches the launcher, Settings, remote services, or whatever is playing. The system updater is only touched by the opt-in **Freeze OTA**.
-- Every change is recorded. **Settings, Restore defaults** puts everything back, even after you uninstall Stickman.
+- Every change is recorded. **Settings, Undo everything** turns Stickman off and puts the stick back the way it was; **Restore defaults** puts the stick back but keeps Stickman on. The record survives an uninstall, so a reinstall can still restore.
 
 ## More
 
