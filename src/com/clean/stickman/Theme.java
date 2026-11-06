@@ -43,6 +43,13 @@ public final class Theme {
         return t;
     }
 
+    /** One-line page description under {@link #title}: MUTED, same gap below as the title. */
+    public static TextView subtitle(Context c, String s) {
+        TextView t = text(c, s, 14, MUTED);
+        t.setPadding(0, 0, 0, dp(c, 12));
+        return t;
+    }
+
     public static TextView text(Context c, String s, float sp, int color) {
         TextView t = new TextView(c);
         t.setText(s);

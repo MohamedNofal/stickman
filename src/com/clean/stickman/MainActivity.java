@@ -23,6 +23,7 @@ import android.widget.TextView;
 import com.clean.stickman.core.FocusPick;
 import com.clean.stickman.core.Keys;
 import com.clean.stickman.core.RemoteLayout;
+import com.clean.stickman.core.Trouble;
 
 import java.util.ArrayList;
 
@@ -46,6 +47,12 @@ public class MainActivity extends Activity implements Bridge.Listener {
     boolean hadLogs;
     /** The open-time ensure was skipped because another VPN is up. */
     boolean vpnPaused;
+    /** When this activity was created: only a bridge failure newer than this gets the "here's the fix" dialog. */
+    long createdAt;
+    /** That dialog is shown once per activity (again after the user went to fix it in Developer options). */
+    boolean troubleShown;
+    /** The user left for Developer options from the dialog: re-check when they come back. */
+    boolean retryOnResume;
 
     Page makePage(int i) {
         switch (SECTIONS[i]) {
@@ -65,6 +72,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        createdAt = System.currentTimeMillis();
         FadeOverlay.stop();   // clear a sleep-fade overlay left behind
         hadLogs = checkSelfPermission(android.Manifest.permission.READ_LOGS) == PackageManager.PERMISSION_GRANTED;
         BootJob.schedule(this);
@@ -149,7 +157,23 @@ public class MainActivity extends Activity implements Bridge.Listener {
         tail = new LogTail();
         new Thread(tail, "logtail").start();
         if (current >= 0) pages[current].onShow();
+        if (retryOnResume) {
+            // back from Developer options: check again, and say again what's wrong if it still fails
+            retryOnResume = false;
+            troubleShown = false;
+            if (Store.enabled(this) && !Bridge.busy && !Bridge.otherVpnActive(this)) Bridge.run(this, Ensure.MARKER, false);
+        }
         h.post(this::tick);
+    }
+
+    /** Show a section by name (e.g. "Settings") and put the focus on its first control. */
+    void goTo(String section) {
+        for (int i = 0; i < SECTIONS.length; i++) {
+            if (!SECTIONS[i].equals(section)) continue;
+            select(i);
+            enterPage();
+            return;
+        }
     }
 
     @Override
@@ -398,25 +422,75 @@ public class MainActivity extends Activity implements Bridge.Listener {
             return;
         }
         updateStatusLine();
+        maybeShowTrouble();
         if (current >= 0) pages[current].onTick();
         h.postDelayed(this::tick, 400);
     }
 
+    /**
+     * Sidebar status line: one honest line about whether Stickman works right now. Bridge failures are said in
+     * plain words (the raw reason stays on the Status page); the first connection explains the TV's own prompt.
+     */
     void updateStatusLine() {
         String r = Bridge.lastResult;
         String s;
         int color = Theme.MUTED;
-        if (Bridge.busy) s = "Working…";
-        else if (vpnPaused && Store.enabled(this)) { s = "VPN active — Stickman paused"; color = Theme.ACCENT; }
-        else if (Bridge.VPN_BUSY.equals(r)) { s = "Another VPN is on: not applied"; color = Theme.ACCENT; }
-        else if (r.startsWith("FAIL")) { s = "Problem: " + r.substring(4).trim(); color = Theme.ACCENT; }
-        else if (!Store.enabled(this)) s = "Stickman is OFF";
-        else if (LogTail.remoteReleased()) { s = "Remote released (Back held): reopen Stickman to restart"; color = Theme.ACCENT; }
+        if (Bridge.busy) s = Store.lastEnsure(this).isEmpty()
+            ? "Connecting…\nIf the TV asks “Allow USB debugging?”, tick Always allow." : "Working…";
+        else if (vpnPaused && Store.enabled(this)) { s = "Paused: another VPN is on"; color = Theme.ACCENT; }
+        else if (r.startsWith("FAIL")) { s = Trouble.shortText(r); color = Theme.ACCENT; }
+        else if (!Store.enabled(this)) s = "Stickman is OFF: remote works normally";
+        else if (LogTail.remoteReleased()) { s = "Remote released (Back held 10 s): reopen Stickman to restart"; color = Theme.ACCENT; }
         else if (Store.pid(Store.lastEnsure(this), "REMAPD") != null) s = "Running ✓";
-        else s = r.isEmpty() ? "Starting…" : "Not running";
+        else s = r.isEmpty() ? "Starting…" : "Not running · see Status";
         if (LogTail.lastKey != 0 && System.currentTimeMillis() - LogTail.lastKeyAt < 4000)
             s += "\nLast button: " + Keys.name(LogTail.lastKey);
         statusLine.setText(s);
         statusLine.setTextColor(color);
+    }
+
+    /**
+     * A failure the user has to fix (ADB debugging off, "Allow USB debugging?" declined, VPN permission) gets one
+     * dialog with the fix, so a fresh install never dead-ends on a cryptic status line. Once per activity, only for
+     * a failure newer than this activity, and never on top of another dialog (no window focus).
+     */
+    void maybeShowTrouble() {
+        if (troubleShown || Bridge.busy || isFinishing() || !hasWindowFocus()) return;
+        String r = Bridge.lastResult;
+        if (!r.startsWith("FAIL") || Bridge.lastResultAt < createdAt) return;
+        if (!Trouble.askUser(r, Store.lastEnsure(this).isEmpty())) return;
+        troubleShown = true;
+        showTrouble(r);
+    }
+
+    void showTrouble(String r) {
+        int k = Trouble.kind(r);
+        ThemedDialog d = new ThemedDialog(this).title(Trouble.title(r)).message(Trouble.advice(r));
+        if (k == Trouble.ADB_OFF) d.button("Developer options", this::openDeveloperOptions);
+        if (k == Trouble.VPN) {
+            d.button("Allow the VPN", () -> {
+                Intent c = VpnService.prepare(this);
+                if (c != null) startActivityForResult(c, 1); else ensureOnOpen();
+            });
+        } else {
+            d.button("Try again", () -> { troubleShown = false; run(null, Ensure.MARKER); });
+        }
+        d.cancel("Close").focusButton(0).show();
+    }
+
+    /** Fire OS's Developer options screen (same action the Shortcuts page uses), else the stock one, else directions. */
+    void openDeveloperOptions() {
+        for (String action : new String[] { "com.amazon.device.settings.action.APPLICATION_DEVELOPMENT_SETTINGS",
+                android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS }) {
+            try {
+                startActivity(new Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                retryOnResume = true;
+                return;
+            } catch (RuntimeException ignored) {   // ActivityNotFound / SecurityException: try the next one
+            }
+        }
+        android.widget.Toast.makeText(this, "Open Settings → My Fire TV → Developer options, then come back.",
+            android.widget.Toast.LENGTH_LONG).show();
+        retryOnResume = true;
     }
 }
