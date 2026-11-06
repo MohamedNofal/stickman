@@ -55,6 +55,8 @@ public class SpeedPage extends ApplyPage {
 
     @Override public String title() { return "Speed"; }
 
+    @Override public String subtitle() { return "Boost now, keep memory free, and stop apps running behind your back."; }
+
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
 

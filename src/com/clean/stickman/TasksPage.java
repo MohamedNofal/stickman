@@ -114,6 +114,7 @@ public class TasksPage extends ApplyPage {
         head.addView(liveText);
         head.setPadding(0, 0, 0, Theme.dp(a, 6));
         l.addView(head);
+        l.addView(Theme.subtitle(a, "What is running now, sized by memory. OK on an app for details."));
 
         result = Theme.autoHide(Theme.text(a, "", 15, Theme.ACCENT));
         result.setPadding(0, 0, 0, Theme.dp(a, 4));

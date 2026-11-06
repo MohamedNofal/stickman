@@ -24,6 +24,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
 - **Tasks**: a live map of running apps sized by RAM, with End, Always kill and Protect.
 - **Speed**:
   - Boost and auto-close.
+  - Use recommended settings: one press applies the sensible defaults (Lean memory Balanced, background CPU limit, deep sleep, fewer wake-ups, trim when the TV sleeps).
   - **Trim**: every app that isn't in front gives back the memory it doesn't need, nothing is closed; also automatically when the TV sleeps or on a timer.
   - **Lean memory**: Android keeps fewer idle apps in memory and compresses the rest.
   - **Background CPU limit**: a background app that keeps hogging the CPU is closed by Android within a minute.
@@ -35,7 +36,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
   - **Free up space**: removes the updates Amazon keeps downloading for disabled apps.
   - **Clear app caches** and trim the storage.
   - **Check after an update**: switches off again anything an update turned back on.
-  - **Freeze OTA**: stops Fire OS system updates until you unfreeze. The updater is protected, so Stickman suspends it instead of disabling it and re-applies the freeze at boot; Appstore app updates are unaffected.
+  - **Freeze updates (OTA)**: stops Fire OS system updates until you unfreeze. The updater is protected, so Stickman suspends it instead of disabling it and re-applies the freeze at boot; Appstore app updates are unaffected.
 - **Sleep**: sleep timer with fade, screen off with audio on, stay awake while media plays, HDMI-CEC switch.
 - **Privacy**: ad-blocking private DNS that switches itself off if the internet breaks, and limit ads and tracking.
 - **Shortcuts** to hidden Amazon settings, and a **Status** page that says whether Stickman is working, what to do if it isn't, and what it has been doing, in plain words.
@@ -52,7 +53,7 @@ Keep ADB debugging on: Stickman talks to the TV's own debugging service.
 ## Safety
 
 - **Emergency release:** hold **Back for 10 s**.
-- Stickman never touches the launcher, Settings, remote services, or whatever is playing. The system updater is only touched by the opt-in **Freeze OTA**.
+- Stickman never touches the launcher, Settings, remote services, or whatever is playing. The system updater is only touched by the opt-in **Freeze updates (OTA)**.
 - Every change is recorded. **Settings, Undo everything** turns Stickman off and puts the stick back the way it was; **Restore defaults** puts the stick back but keeps Stickman on. The record survives an uninstall, so a reinstall can still restore.
 
 ## More

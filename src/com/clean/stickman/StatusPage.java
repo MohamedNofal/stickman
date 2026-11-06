@@ -49,8 +49,8 @@ public class StatusPage extends Page {
         start = Theme.card(a);
         start.addView(Theme.heading(a, "Start here"));
         start.addView(Theme.text(a, "1.  Remote → Listen, then press the button on your remote you want to change.\n"
-            + "2.  Speed → Boost when the stick feels slow; Lean memory keeps it that way.\n"
-            + "3.  Debloat → Disable all switches off Amazon's extras. Everything can be undone.\n\n"
+            + "2.  Speed → Boost when the stick feels slow, then Use recommended settings to keep it that way.\n"
+            + "3.  Debloat → Disable all switches off Amazon's extras; undo under Disabled by Stickman.\n\n"
             + "You can close Stickman afterwards: your buttons keep working.", 15, Theme.TEXT));
         l.addView(start);
 

@@ -37,6 +37,8 @@ public class DebloatPage extends ApplyPage {
 
     @Override public String title() { return "Debloat"; }
 
+    @Override public String subtitle() { return "Switch off Amazon's extras. Everything can be undone."; }
+
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
         LinearLayout top = Theme.row(a);
