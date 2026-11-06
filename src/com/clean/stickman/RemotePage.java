@@ -10,6 +10,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.clean.stickman.core.Keys;
+import com.clean.stickman.core.Listen;
 import com.clean.stickman.core.ListenDecision;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.RemoteLayout;
@@ -30,24 +31,27 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     /** Linux code of Back: cancels listening instead of being "heard". */
     static final int BACK = 158;
     static final String CANCELLED = "Listening cancelled.";
-    static final String IDLE = "Press Listen, then press any button on your remote to jump straight to it.";
+    static final String IDLE = "Press Listen, then press the button on your remote you want to change: it opens right away, "
+        + "even if it isn't on the drawing. While Stickman listens, buttons do nothing else (Home included).";
 
     MainActivity a;
     RemoteView remote;
     RemapModel m = new RemapModel();
     String profile = RemapModel.DEFAULT;
     TextView profName, profInfo, btnName, btnLayers, listenInfo, modelInfo;
+    /** "Other buttons": keys with rules that aren't on the drawing (heard with Listen); hidden when there are none. */
+    LinearLayout extrasCard, extrasList;
     Button prev, next, add, remove, listen, model;
     String presetId = RemotePresets.DEFAULT;
     /** Slot being taught when listening was started from an unlearned button, else null. */
     String learnSlot;
-    /** Off-drawing key waiting to be offered ("Assign to…") once the window has focus again; 0 = none. */
-    int pendingOffer;
     final Handler h = new Handler();
     boolean listening;
     /** Until when a Back release (from the press that cancelled listening) is swallowed. */
     long swallowBackUntil;
     long listenFrom, listenBaseAt;
+    /** remapd confirmed it is swallowing buttons (the Listen.ON bridge command came back): presses count now. */
+    boolean armed;
 
     @Override public String title() { return "Remote"; }
 
@@ -63,19 +67,9 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
         LinearLayout side = Theme.column(a);
         side.addView(Theme.title(a, "Remote"));
-        TextView intro = Theme.text(a, "Pick a button with the D-pad and press OK to change it. Orange dots mark changed buttons.", 14, Theme.MUTED);
+        TextView intro = Theme.text(a, "Any remote works: Stickman learns buttons as you press them. Orange dots mark changed buttons.", 14, Theme.MUTED);
         intro.setPadding(0, 0, 0, Theme.dp(a, 12));
         side.addView(intro);
-
-        LinearLayout bc = Theme.card(a);
-        bc.addView(Theme.heading(a, "Selected button"));
-        btnName = Theme.text(a, "", 20, Theme.TEXT);
-        btnName.setTypeface(Typeface.DEFAULT_BOLD);
-        bc.addView(btnName);
-        btnLayers = Theme.text(a, "", 15, Theme.TEXT);
-        btnLayers.setLineSpacing(Theme.dp(a, 3), 1f);
-        bc.addView(btnLayers);
-        side.addView(bc);
 
         LinearLayout lc = Theme.card(a);
         lc.addView(Theme.heading(a, "Listen"));
@@ -86,6 +80,24 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listenInfo = Theme.text(a, IDLE, 13, Theme.MUTED);
         lc.addView(listenInfo);
         side.addView(lc);
+
+        extrasCard = Theme.card(a);
+        extrasCard.addView(Theme.heading(a, "Your other buttons"));
+        extrasCard.addView(Theme.text(a, "Buttons you changed that aren't on the drawing. Press one to change it again.", 13, Theme.MUTED));
+        extrasList = Theme.column(a);
+        extrasCard.addView(extrasList);
+        extrasCard.setVisibility(View.GONE);
+        side.addView(extrasCard);
+
+        LinearLayout bc = Theme.card(a);
+        bc.addView(Theme.heading(a, "Selected button"));
+        btnName = Theme.text(a, "", 20, Theme.TEXT);
+        btnName.setTypeface(Typeface.DEFAULT_BOLD);
+        bc.addView(btnName);
+        btnLayers = Theme.text(a, "", 15, Theme.TEXT);
+        btnLayers.setLineSpacing(Theme.dp(a, 3), 1f);
+        bc.addView(btnLayers);
+        side.addView(bc);
 
         LinearLayout pc = Theme.card(a);
         pc.addView(Theme.heading(a, "Profile"));
@@ -189,8 +201,30 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         remote.setNextFocusRightId(listen.getId());
         add.setNextFocusUpId(many ? prev.getId() : listen.getId());
         remove.setVisibility(def ? View.GONE : View.VISIBLE);
+        refreshExtras();
         onFocusButton(remote.focused());
         remote.invalidate();
+    }
+
+    /** One button per rule-bearing code that the drawing doesn't show (any profile). */
+    void refreshExtras() {
+        extrasList.removeAllViews();
+        RemoteLayout.Btn[] bs = remote.buttons();
+        for (final int c : m.codes()) {
+            if (RemoteLayout.indexOf(bs, c) >= 0) continue;
+            Button b = Theme.button(a, Keys.name(c) + (Keys.name(c).startsWith("Key ") ? "" : " (key " + c + ")"));
+            b.setOnClickListener(v -> openExtra(c));
+            extrasList.addView(b);
+        }
+        extrasCard.setVisibility(extrasList.getChildCount() == 0 ? View.GONE : View.VISIBLE);
+    }
+
+    /** Editor for a key that isn't on the drawing: rules work for any key code remapd can see. */
+    void openExtra(int code) {
+        if (listening) stopListening(null);
+        if (!ready()) return;
+        m = Store.remap(a);
+        ButtonEditor.open(a, m, profile, RemoteLayout.Btn.extra(code, Keys.name(code)), presetId, () -> { loadRemote(); refresh(); });
     }
 
     void stepProfile(int d) {
@@ -295,26 +329,6 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listenInfo.setTextColor(Theme.MUTED);
     }
 
-    /** Show the pending "Assign to…" once the window has focus (e.g. after the app button's app is left). */
-    void tryOffer() {
-        if (pendingOffer <= 0 || listening) return;
-        if (!a.hasWindowFocus()) { h.postDelayed(this::tryOffer, 250); return; }
-        int code = pendingOffer;
-        pendingOffer = 0;
-        offerAssign(code);
-    }
-
-    /** A key that isn't on the drawing arrived while listening: offer the unlearned buttons. */
-    void offerAssign(final int code) {
-        final RemoteLayout.Btn[] bs = remote.buttons();
-        final List<Integer> open = RemotePresets.unlearned(bs);
-        String[] names = new String[open.size()];
-        for (int i = 0; i < names.length; i++) names[i] = bs[open.get(i)].name;
-        new ThemedDialog(a).title("Heard " + Keys.name(code) + ". Assign to:")
-            .items(names, w -> assign(bs[open.get(w)].slot, code))
-            .cancel("Cancel").show();
-    }
-
     // ---- listen mode ----
 
     boolean remapperRunning() {
@@ -337,24 +351,35 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
             listenInfo.setTextColor(Theme.ACCENT);
             return false;
         }
-        pendingOffer = 0;
         learnSlot = slot;
         listening = true;
+        armed = false;
         listenFrom = System.currentTimeMillis();
         listenBaseAt = LogTail.lastKeyAt;
         listen.setText("Listening… " + LISTEN_TIMEOUT_MS / 1000 + " s");
         listen.setSelected(true);
-        listenInfo.setText("Press any button on your remote now. Back cancels. "
-            + "(Buttons that leave this screen, like Home or the app buttons, still do their job.)");
+        listenInfo.setText("One moment…");
         listenInfo.setTextColor(Theme.TEXT);
         remote.setListening(true);
+        a.run(null, Listen.ON);   // remapd swallows every button until Listen.OFF (or 30 s without a refresh)
         h.post(this::poll);
         return true;
     }
 
+    @Override public void onResult(String cmd, String output, boolean ok) {
+        if (!listening || !Listen.ON.equals(cmd)) return;
+        if (ok && Listen.onOk(cmd, output)) {
+            armed = true;
+            listenBaseAt = Math.max(listenBaseAt, LogTail.lastKeyAt);   // presses before remapd listened don't count
+            listenInfo.setText("Press any button on your remote now. Nothing else will happen; Back cancels.");
+        } else {
+            stopListening("Couldn't reach the remapper. Check that Stickman shows “Running ✓” and try again.");
+        }
+    }
+
     void poll() {
         if (!listening) return;
-        long now = System.currentTimeMillis(), at = LogTail.lastKeyAt;
+        long now = System.currentTimeMillis(), at = armed ? LogTail.lastKeyAt : listenBaseAt;
         int k = LogTail.lastKey;
         if (at > listenBaseAt && at - listenFrom >= LISTEN_GRACE_MS && k == BACK) {
             swallowBackUntil = System.currentTimeMillis() + 1500;   // its release may still reach the app
@@ -369,10 +394,10 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
             assign(slot, k);
             return;
         }
-        if (what == ListenDecision.OFFER) {
-            stopListening("Heard " + Keys.name(k) + ", which isn't on this drawing. Choose which button it is.");
-            pendingOffer = k;
-            h.postDelayed(this::tryOffer, 300);
+        if (what == ListenDecision.EXTRA) {
+            final int code = k;
+            stopListening("Heard " + Keys.name(k) + ". It isn't on the drawing, but you can change it like any button.");
+            h.postDelayed(() -> { if (a.hasWindowFocus()) openExtra(code); }, 400);
             return;
         }
         if (what == ListenDecision.PICK || what == ListenDecision.ALREADY) {
@@ -391,9 +416,12 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     }
 
     void stopListening(String msg) {
+        boolean was = listening;
         listening = false;
+        armed = false;
         learnSlot = null;
         h.removeCallbacksAndMessages(null);
+        if (was && a != null) a.run(null, Listen.OFF);   // buttons work normally again
         if (listen == null) return;
         listen.setText("Listen for a button");
         listen.setSelected(false);
@@ -425,7 +453,6 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     @Override public void onShow() {
         if (a != null) reload();
-        if (a != null && pendingOffer > 0) h.postDelayed(this::tryOffer, 300);
     }
 
     @Override public void onHide() {

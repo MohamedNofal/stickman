@@ -131,6 +131,13 @@ public final class RemapModel {
         if (!DEFAULT.equals(pkg)) profiles.remove(pkg);
     }
 
+    /** Every code with a rule in any profile, ascending. */
+    public java.util.Set<Integer> codes() {
+        java.util.TreeSet<Integer> s = new java.util.TreeSet<>();
+        for (TreeMap<Integer, String[]> p : profiles.values()) s.addAll(p.keySet());
+        return s;
+    }
+
     public boolean hasRules(String profile, int code) {
         TreeMap<Integer, String[]> p = profiles.get(profile);
         return p != null && p.containsKey(code);

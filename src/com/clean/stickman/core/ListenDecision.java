@@ -14,12 +14,13 @@ public final class ListenDecision {
     public static final int CANCEL = 1;
     /** Key not on the drawing while teaching: it becomes learnSlot's code. */
     public static final int ASSIGN = 2;
-    /** Key not on the drawing, plain listening, unlearned buttons exist: offer "Assign to…". */
-    public static final int OFFER = 3;
+    /** (3 was "offer an unlearned slot"; a heard key is now always usable as itself, see EXTRA.) */
     /** Key on the drawing, plain listening: open its editor. */
     public static final int PICK = 4;
     /** Key on the drawing while teaching: it can't be this button; say so. */
     public static final int ALREADY = 5;
+    /** Key not on the drawing, plain listening: open the key's own editor (any id works, whatever the remote). */
+    public static final int EXTRA = 6;
 
     public static int decide(int code, RemoteLayout.Btn[] bs, String learnSlot) {
         if (code <= 0) return IGNORE;
@@ -31,6 +32,6 @@ public final class ListenDecision {
             return i >= 0 && bs[i].code == 0 ? ASSIGN : IGNORE;
         }
         if (drawn) return PICK;
-        return RemotePresets.unlearned(bs).isEmpty() ? IGNORE : OFFER;
+        return EXTRA;   // the drawing is only a picture: whatever the remote sends is a button the owner can change
     }
 }

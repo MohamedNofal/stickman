@@ -16,8 +16,11 @@
  *
  * Config: /data/local/tmp/stickman/remap.conf (v2: "set", "profile <name>", "<code> <layer> <action>",
  * v1 "<code> <action>" = tap). Active profile: /data/local/tmp/stickman/profile (missing -> default).
- * Both are re-read when their mtime/size change. Actions:
+ * Both are re-read when their mtime/size change (inotify on the directory makes that immediate). Actions:
  *   start <pkg/activity> | key <code> | none | orig | act <id> [arg] (-> act/ spool) | sh <command...>
+ * Listen: while /data/local/tmp/stickman/listen exists (and is younger than LISTEN_MAX_S, so a crashed app can
+ * never leave the remote dead) every button is swallowed and only logged ("KEY <code>"): the app's Listen mode
+ * reads the log, and nothing else happens (no app opens, no original key). Back held 10 s still exits.
  */
 #define _GNU_SOURCE
 #include <dirent.h>
@@ -54,6 +57,8 @@
 #define PROFILE_PATH DIR_PATH "profile"
 #define SPOOL_DIR DIR_PATH "act"
 #define PID_PATH DIR_PATH "remapd.pid"
+#define LISTEN_PATH DIR_PATH "listen"
+#define LISTEN_MAX_S 30
 #define NOUT (2 * MAXKEY + 8)
 
 /* parsed remap.conf: profiles[0] is "default"; rules are last-write-wins per (profile, code, layer) */
@@ -69,6 +74,8 @@ static const char *conf_path;
 static const char *grab_name = REMOTE_NAME;   /* argv[2]: test mode, e.g. "Stickman Test Remote" */
 static const char *pid_path = PID_PATH;       /* argv[3]: test mode pid file */
 static long long conf_key = -2, prof_key = -2;   /* mtime ns + size; -1 = missing, -2 = never read */
+static int listening;                            /* listen file present and fresh: swallow every button */
+static int dino = -1;                            /* inotify on DIR_PATH: conf / profile / listen changes */
 static lyr_state *L;
 static lyr_out outs[NOUT];
 static int rfd = -1, ufd = -1, grabbed;
@@ -197,7 +204,21 @@ static void compute_effective(void) {
     }
 }
 
+static void release_all(void);
+
+/* listen file present and touched within LISTEN_MAX_S -> swallow every button; on entry drop anything the clone
+ * or the layer state machine still holds (e.g. the OK press that started Listen) so no key sticks or fires later */
+static void check_listen(void) {
+    struct stat st;
+    int on = stat(LISTEN_PATH, &st) == 0 && time(NULL) - st.st_mtime < LISTEN_MAX_S;
+    if (on == listening) return;
+    if (on) release_all();
+    listening = on;
+    alog(on ? "listening: buttons swallowed" : "listening off");
+}
+
 static void load_conf(void) {
+    check_listen();
     long long ck = file_key(conf_path), pk = file_key(PROFILE_PATH);
     if (ck == conf_key && pk == prof_key) return;
     int conf_changed = ck != conf_key;
@@ -365,6 +386,7 @@ static void handle(struct input_event *ev) {
         if (ev->value == 1) { alog("KEY %d", c); key_t0[c] = now_ms(); }
         if (ev->value == 0 && key_t0[c]) { alog("UP %d after %lldms", c, now_ms() - key_t0[c]); key_t0[c] = 0; }
         if (c == PANIC_KEY) back_down_at = ev->value ? (ev->value == 1 ? now_ms() : back_down_at) : 0;
+        if (listening) return;   /* logged above, nothing passed on */
         if (grabbed) {
             /* a lone PASS rides on this event's own SYN (zero-change passthrough); when several
              * outputs come at once (flush / late deadline) each PASS gets its own SYN */
@@ -373,7 +395,7 @@ static void handle(struct input_event *ev) {
         }
         return;
     }
-    if (grabbed) emit(ev->type, ev->code, ev->value);
+    if (grabbed && !listening) emit(ev->type, ev->code, ev->value);
 }
 
 static void device_lost(const char *why) {
@@ -412,6 +434,8 @@ int main(int argc, char **argv) {
     FILE *pf = fopen(pid_path, "w");
     if (pf) { fprintf(pf, "%d\n", getpid()); fclose(pf); }
     alog("remapd starting pid %d device \"%s\"", getpid(), grab_name);
+    dino = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (dino >= 0 && inotify_add_watch(dino, DIR_PATH, IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_CLOSE_WRITE | IN_ATTRIB) < 0) { close(dino); dino = -1; }
 
     for (;;) {
         load_conf();
@@ -430,7 +454,7 @@ int main(int argc, char **argv) {
             if (ufd < 0) ufd = make_uinput(rfd);
             if (ufd < 0) { close(rfd); rfd = -1; sleep(5); continue; }
         }
-        set_grab(nmapped > 0);
+        set_grab(nmapped > 0 || listening);
 
         /* timeout: nearest layer deadline / panic deadline, else 1 s (to notice config changes) */
         int timeout = 1000; long long t = now_ms();
@@ -438,12 +462,13 @@ int main(int argc, char **argv) {
         if (dl >= 0) { long long left = dl - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
         if (back_down_at) { long long left = back_down_at + PANIC_MS - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
 
-        struct pollfd p = { .fd = rfd, .events = POLLIN };
-        int r = poll(&p, 1, timeout);
-        if (r > 0) {
-            /* stickd may have switched the profile while we waited: use it for the key that woke us */
+        struct pollfd p[2] = { { .fd = rfd, .events = POLLIN }, { .fd = dino, .events = POLLIN } };
+        int r = poll(p, dino >= 0 ? 2 : 1, timeout);
+        if (r > 0 && dino >= 0 && (p[1].revents & POLLIN)) { char drain[1024]; while (read(dino, drain, sizeof drain) > 0) {} }
+        if (r > 0 && p[0].revents) {
+            /* stickd may have switched the profile (or the app started Listen) while we waited: apply it to this key */
             load_conf();
-            if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) { device_lost("remote gone"); continue; }
+            if (p[0].revents & (POLLERR | POLLHUP | POLLNVAL)) { device_lost("remote gone"); continue; }
             struct input_event evs[64];
             ssize_t n = read(rfd, evs, sizeof evs);
             if (n < 0 && errno != EAGAIN) { device_lost("read error"); continue; }

@@ -8,8 +8,8 @@ public class ListenDecisionTest {
 
     public void testPlainListening() {
         T.eq(ListenDecision.PICK, ListenDecision.decide(96, pro(), null), "drawn key opens editor");
-        T.eq(ListenDecision.OFFER, ListenDecision.decide(600, pro(), null), "off-drawing key offered when unlearned exist");
-        T.eq(ListenDecision.IGNORE, ListenDecision.decide(600, RemoteLayout.forPreset("enhanced"), null), "nothing to assign: keep listening");
+        T.eq(ListenDecision.EXTRA, ListenDecision.decide(600, pro(), null), "off-drawing key is its own button even when unlearned slots exist");
+        T.eq(ListenDecision.EXTRA, ListenDecision.decide(600, RemoteLayout.forPreset("enhanced"), null), "nothing to assign: any key gets its own editor");
         T.eq(ListenDecision.CANCEL, ListenDecision.decide(158, pro(), null), "Back cancels");
         T.eq(ListenDecision.IGNORE, ListenDecision.decide(0, pro(), null), "no key");
     }
@@ -34,5 +34,18 @@ public class ListenDecisionTest {
     public void testHomeAccentOnlyOn2026() {
         for (RemotePresets.Preset p : RemotePresets.ALL)
             T.eq(p.id.equals("remote2026"), p.homeAccent, p.id + " homeAccent");
+    }
+
+    public void testExtraButtons() {
+        com.clean.stickman.core.RemapModel m = new com.clean.stickman.core.RemapModel();
+        T.eq(0, m.codes().size(), "none");
+        m.set(com.clean.stickman.core.RemapModel.DEFAULT, 377, com.clean.stickman.core.Rule.Layer.TAP, "none");
+        m.set("com.x", 172, com.clean.stickman.core.Rule.Layer.HOLD, "none");
+        m.set("com.x", 377, com.clean.stickman.core.Rule.Layer.HOLD, "none");
+        T.eq("[172, 377]", m.codes().toString(), "codes over every profile, ascending, once");
+        RemoteLayout.Btn b = RemoteLayout.Btn.extra(377, "Key 377");
+        T.eq(377, b.code, "code");
+        T.eq("x377", b.slot, "slot never collides with k<code>/app/custom slots");
+        T.eq(-1, com.clean.stickman.core.RemotePresets.slotIndex(RemoteLayout.forPreset("enhanced"), b.slot), "not on any drawing");
     }
 }
