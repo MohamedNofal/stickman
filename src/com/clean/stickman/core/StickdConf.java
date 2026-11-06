@@ -7,13 +7,17 @@ import java.util.Set;
 public final class StickdConf {
     /** The stickd.conf the app ships with (everything off). */
     public static final String DEFAULT_TEXT =
-        "autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=\nautokill.blacklist=\nstayawake.media=0\n";
+        "autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=\nautokill.blacklist=\nstayawake.media=0\n"
+        + "trim.on_sleep=0\ntrim.interval_min=0\n";
 
     public boolean onLeave;
     public int intervalMin;
     public Set<String> whitelist = new LinkedHashSet<>();
     public Set<String> blacklist = new LinkedHashSet<>();
     public boolean stayAwakeMedia;
+    /** Trim every background app when the TV goes to sleep / every N minutes (0 = off). */
+    public boolean trimOnSleep;
+    public int trimIntervalMin;
 
     public static StickdConf parse(String text) {
         StickdConf c = new StickdConf();
@@ -31,6 +35,8 @@ public final class StickdConf {
                 case "autokill.whitelist": c.whitelist = csv(v); break;
                 case "autokill.blacklist": c.blacklist = csv(v); break;
                 case "stayawake.media": c.stayAwakeMedia = "1".equals(v); break;
+                case "trim.on_sleep": c.trimOnSleep = "1".equals(v); break;
+                case "trim.interval_min": c.trimIntervalMin = intOr0(v); break;
                 default: break;
             }
         }
@@ -78,7 +84,9 @@ public final class StickdConf {
             + "autokill.interval_min=" + Math.max(0, intervalMin) + "\n"
             + "autokill.whitelist=" + join(whitelist) + "\n"
             + "autokill.blacklist=" + join(blacklist) + "\n"
-            + "stayawake.media=" + (stayAwakeMedia ? 1 : 0) + "\n";
+            + "stayawake.media=" + (stayAwakeMedia ? 1 : 0) + "\n"
+            + "trim.on_sleep=" + (trimOnSleep ? 1 : 0) + "\n"
+            + "trim.interval_min=" + Math.max(0, trimIntervalMin) + "\n";
     }
 
     private static String join(Set<String> s) {

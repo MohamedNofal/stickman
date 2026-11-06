@@ -8,6 +8,7 @@ import android.widget.TextView;
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
+import com.clean.stickman.core.Lean;
 import com.clean.stickman.core.Ota;
 
 import java.util.List;
@@ -62,6 +63,10 @@ public class DebloatPage extends ApplyPage {
             + "apps Stickman disabled, back to their small built-in version (they stay disabled).\n\nIf you turn one back "
             + "on later, the Appstore updates it again.", "Free up space",
             () -> { freeAt = System.currentTimeMillis(); send(com.clean.stickman.core.Lean.freeSpaceDetached(), "freeing", "Freeing space…"); }));
+        button(ours, "Clear app caches…", v -> ThemedDialog.confirm(a, "Clear app caches?",
+            "Deletes every app's cache files (thumbnails, downloaded pages) and trims the storage. Apps rebuild their "
+            + "caches as you use them; nothing you set up is lost.", "Clear caches",
+            () -> { clearAt = System.currentTimeMillis(); send(Lean.clearCachesDetached(), "clearing", "Clearing caches…"); }));
         LinearLayout ck = card(l, "Check after an update", "Fire OS updates can quietly switch disabled apps back on and "
             + "undo Keep asleep / Starve. This finds anything that came back and offers to switch it off again.");
         button(ck, "Check now", v -> send(com.clean.stickman.core.Starve.checkScript(), "check", "Checking…"));
@@ -245,20 +250,33 @@ public class DebloatPage extends ApplyPage {
             "Disable all", () -> send(cmd, "disabledall", "Disabling " + rec.size() + " apps…"));
     }
 
-    /** When Free up space was started (0 = not waiting for its STATUS freed line). */
-    long freeAt;
+    /** When Free up space / Clear caches was started (0 = not waiting for its STATUS line). */
+    long freeAt, clearAt;
 
     @Override public void onTick() {
-        if (a == null || freeAt == 0) return;
-        String st = LogTail.status("freed");
-        if (st != null && LogTail.statusAt("freed") >= freeAt - 1000) {
-            freeAt = 0;
-            long[] f = com.clean.stickman.core.Lean.parseFreed(st);
-            say(f == null ? "Free up space: " + st : f[1] == 0 ? "Nothing to free: none of the disabled apps have updates stored."
-                : "Freed " + Math.max(0, f[0] / 1024) + " MB from " + f[1] + " app(s).");
-        } else if (System.currentTimeMillis() - freeAt > 5 * 60000) {
-            freeAt = 0;
-            say("Free up space didn't report back within 5 minutes.");
+        if (a == null) return;
+        if (freeAt != 0) {
+            String st = LogTail.status("freed");
+            if (st != null && LogTail.statusAt("freed") >= freeAt - 1000) {
+                freeAt = 0;
+                long[] f = com.clean.stickman.core.Lean.parseFreed(st);
+                say(f == null ? "Free up space: " + st : f[1] == 0 ? "Nothing to free: none of the disabled apps have updates stored."
+                    : "Freed " + Math.max(0, f[0] / 1024) + " MB from " + f[1] + " app(s).");
+            } else if (System.currentTimeMillis() - freeAt > 5 * 60000) {
+                freeAt = 0;
+                say("Free up space didn't report back within 5 minutes.");
+            }
+        }
+        if (clearAt != 0) {
+            String st = LogTail.status("cleared");
+            if (st != null && LogTail.statusAt("cleared") >= clearAt - 1000) {
+                clearAt = 0;
+                Long kb = Lean.parseCleared(st);
+                say(kb == null ? "Clear caches: " + st : "Cleared " + Math.max(0, kb / 1024) + " MB of app caches and trimmed the storage.");
+            } else if (System.currentTimeMillis() - clearAt > 5 * 60000) {
+                clearAt = 0;
+                say("Clear caches didn't report back within 5 minutes.");
+            }
         }
     }
 
@@ -302,6 +320,10 @@ public class DebloatPage extends ApplyPage {
         if (kind.equals("freeing")) {
             if (!out.contains("FREEING")) { freeAt = 0; return "Couldn't start: " + firstLine(out); }
             return "Freeing space… this can take a minute or two.";
+        }
+        if (kind.equals("clearing")) {
+            if (!out.contains("CLEARING")) { clearAt = 0; return "Couldn't start: " + firstLine(out); }
+            return "Clearing caches…";
         }
         if (kind.equals("fixed")) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("FIXED (\\d+)").matcher(out);

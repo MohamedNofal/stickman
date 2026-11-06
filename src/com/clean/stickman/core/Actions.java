@@ -22,12 +22,14 @@ public final class Actions {
     public static final String TASKS_STOP = "tasks_stop";
     public static final String END = "end";
     public static final String END_ALL = "end_all";
+    /** Trim: every app that isn't in front gives back memory it doesn't need; nothing is closed. */
+    public static final String TRIM = "trim";
 
     /** Every action id, in menu order. */
     public static final String[] ALL = {
         BOOST, SLEEP_NOW, SLEEP_TIMER, SLEEP_TIMER_SET, SCREEN_OFF, SCREENSAVER_TOGGLE, SCREENSHOT,
         PLAY_PAUSE, NEXT, PREVIOUS, KILL_CURRENT, OPEN_SCREEN, DNS_CHECK, RELOAD,
-        TASKS_START, TASKS_STOP, END, END_ALL
+        TASKS_START, TASKS_STOP, END, END_ALL, TRIM
     };
 
     /** Ids whose action line needs an argument. */
@@ -64,6 +66,7 @@ public final class Actions {
             case TASKS_STOP: return "Stop task sampling";
             case END: return "End app";
             case END_ALL: return "End all apps";
+            case TRIM: return "Trim memory";
             default: return id;
         }
     }

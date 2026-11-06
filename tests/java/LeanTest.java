@@ -87,6 +87,11 @@ public class LeanTest {
         T.eq(0, Lean.parse("LEAN null null off DOZE off false")[0], "off");
         T.eq(1, Lean.parse("LEAN 8 true off DOZE off false")[0], "balanced");
         T.eq(2, Lean.parse("x\nLEAN 4 true on DOZE on true\n")[0], "max");
+        int[] full = Lean.parse("LEAN 4 true on DOZE on true CPU on QUIET off");
+        T.eq(2, full[0], "level with the new fields");
+        T.eq(1, full[2], "cpu limit on");
+        T.eq(0, full[3], "quiet off");
+        T.eq(0, Lean.parse("LEAN 4 true on DOZE on true")[2], "old line: cpu off");
         T.eq(1, Lean.parse("LEAN 4 true on DOZE on true")[1], "doze on");
         T.eq(0, Lean.parse("LEAN 4 true on DOZE on false")[1], "file but deep idle reset = off");
         T.eq(-1, Lean.parse("LEAN 12 true off DOZE off false")[0], "custom");
@@ -129,5 +134,34 @@ public class LeanTest {
         T.yes(s.contains("setsid nohup") && s.contains("log -t Stickd -p i \"STATUS freed $l\"") && s.endsWith("echo FREEING"), s);
         String b64 = s.substring(s.indexOf("echo ") + 5, s.indexOf(" | base64"));
         T.eq(Lean.freeSpaceScript(), new String(java.util.Base64.getDecoder().decode(b64)), "same script");
+    }
+
+    public void testCpuLimitAndQuietShareSettingsWithLean() throws Exception {
+        File d = StarveTest.tmp();
+        sh(d, Lean.memory(2, true));
+        T.eq(Lean.RESTART + "," + Lean.CPU_LIMIT, kv(d, "global.activity_manager_constants"), "max + cpu limit in one setting");
+        sh(d, Lean.cpuLimit(2, false));
+        T.eq(Lean.RESTART, kv(d, "global.activity_manager_constants"), "cpu off keeps max's slow restarts");
+        sh(d, Lean.memory(1, true));
+        T.eq(Lean.CPU_LIMIT, kv(d, "global.activity_manager_constants"), "balanced + cpu");
+        sh(d, Lean.memory(0, false));
+        T.eq(null, kv(d, "global.activity_manager_constants"), "all off: original (unset) back");
+        sh(d, Lean.quiet(true));
+        T.eq(Lean.QUIET_ALARM, kv(d, "global.alarm_manager_constants"), "alarms spaced");
+        T.eq("2", kv(d, "jobscheduler.max_job_max_bg_on_normal"), "jobs");
+        T.eq("10", kv(d, "jobscheduler.min_ready_non_active_jobs_count"), "batching");
+        sh(d, Lean.quiet(false));
+        T.eq(null, kv(d, "global.alarm_manager_constants"), "alarms back");
+        T.eq(null, kv(d, "jobscheduler.max_job_max_bg_on_normal"), "jobs back");
+        T.yes(Lean.READ.contains("power_check_interval=60000") && Lean.READ.contains("min_interval=900000"), "READ reports both");
+    }
+
+    public void testClearCaches() {
+        String s = Lean.clearCachesScript();
+        T.yes(s.contains("pm trim-caches 999G") && s.contains("sm fstrim") && s.endsWith("echo \"CLEARED $((a-b))\""), s);
+        String det = Lean.clearCachesDetached();
+        T.yes(det.contains("STATUS cleared $l") && det.endsWith("echo CLEARING"), det);
+        T.eq(163000L, (long) Lean.parseCleared("CLEARED 163000"), "kB");
+        T.eq(null, Lean.parseCleared("nothing"), "none");
     }
 }

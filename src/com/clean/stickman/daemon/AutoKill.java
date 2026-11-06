@@ -5,6 +5,7 @@ import com.clean.stickman.core.KillPolicy;
 import com.clean.stickman.core.LruParser;
 import com.clean.stickman.core.MediaState;
 import com.clean.stickman.core.StickdConf;
+import com.clean.stickman.core.Trim;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -33,6 +34,9 @@ final class AutoKill {
     private final Object leaveLock = new Object();
     private ScheduledFuture<?> pendingLeave;
     private volatile long lastIntervalKill = System.currentTimeMillis();
+    private volatile long lastTrim = System.currentTimeMillis();
+    /** Last known TV sleep state (trim.on_sleep fires on the awake -> asleep edge). */
+    private boolean wasAsleep;
 
     /** Shell used for kills (tests swap in a recorder). */
     interface Shell { String run(String cmd); }
@@ -44,6 +48,7 @@ final class AutoKill {
         // Off the spool thread: a Boost with many candidates takes tens of seconds and must not delay a following
         // sleep_timer / screen_off. Runs on the auto-kill thread (kills stay serialised under killLock).
         d.register(Actions.BOOST, a -> timer.execute(this::boostSafe));
+        d.register(Actions.TRIM, a -> timer.execute(() -> trimSafe("now")));
         d.addFgListener((pkg, prev) -> onForeground());
         timer.scheduleWithFixedDelay(this::intervalTick, 1, 1, TimeUnit.MINUTES);
     }
@@ -71,15 +76,49 @@ final class AutoKill {
 
     private void intervalTick() {
         try {
-            int min = d.conf().intervalMin;
+            StickdConf c = d.conf();
+            int min = c.intervalMin;
             long now = System.currentTimeMillis();
-            if (min <= 0) { lastIntervalKill = now; return; }
-            if (now - lastIntervalKill >= min * 60_000L) {
+            if (min <= 0) lastIntervalKill = now;
+            else if (now - lastIntervalKill >= min * 60_000L) {
                 lastIntervalKill = now;
                 autoKill();
             }
+            int tm = c.trimIntervalMin;
+            if (tm <= 0) lastTrim = now;
+            else if (now - lastTrim >= tm * 60_000L) {
+                lastTrim = now;
+                trimSafe("interval");
+            }
+            if (c.trimOnSleep) {
+                boolean asleep = isAsleep(sh.run("dumpsys power | grep -m1 mWakefulness="));
+                if (asleep && !wasAsleep) trimSafe("sleep");
+                wasAsleep = asleep;
+            } else wasAsleep = false;
         } catch (Throwable t) {
             Sh.log("autokill interval error: " + t);
+        }
+    }
+
+    /** "mWakefulness=Asleep" / "Dozing" = the TV is off (or dozing towards it). */
+    static boolean isAsleep(String wakefulness) {
+        return wakefulness != null && (wakefulness.contains("Asleep") || wakefulness.contains("Dozing"));
+    }
+
+    private void trimSafe(String why) {
+        try { trimAll(why); } catch (Throwable t) { Sh.log("trim error: " + t); }
+    }
+
+    /** Every process that isn't in front gives back what it doesn't need; nothing is closed. */
+    void trimAll(String why) {
+        synchronized (killLock) {
+            long before = memAvailableKb();
+            List<String> targets = Trim.targets(LruParser.parse(sh.run(Trim.LRU_CMD)), d.foreground());
+            for (String p : targets) sh.run(Trim.cmd(p));
+            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
+            long after = memAvailableKb();
+            long freed = (before < 0 || after < 0) ? 0 : Math.max(0, (after - before) / 1024);
+            Sh.log("STATUS trim freed_mb=" + freed + " trimmed=" + targets.size() + " why=" + why);
         }
     }
 

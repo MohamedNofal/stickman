@@ -24,12 +24,16 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
 - **Tasks**: a live map of running apps sized by RAM, with End, Always kill and Protect.
 - **Speed**:
   - Boost and auto-close.
+  - **Trim**: every app that isn't in front gives back the memory it doesn't need, nothing is closed; also automatically when the TV sleeps or on a timer.
   - **Lean memory**: Android keeps fewer idle apps in memory and compresses the rest.
+  - **Background CPU limit**: a background app that keeps hogging the CPU is closed by Android within a minute.
+  - **Fewer wake-ups**: repeating alarms at most every 15 minutes, two background jobs at a time.
   - **Deep sleep** while the TV is off.
-  - **Keep asleep / Starve** any app.
+  - **Keep asleep / Starve** any app, picked from your apps, Amazon's services, the apps that **start at boot**, or who actually **ran in the background** over the last 3 hours.
 - **Debloat**:
   - About 37 recommended Amazon extras, with one-press Disable all.
   - **Free up space**: removes the updates Amazon keeps downloading for disabled apps.
+  - **Clear app caches** and trim the storage.
   - **Check after an update**: switches off again anything an update turned back on.
   - **Freeze OTA**: stops Fire OS system updates until you unfreeze. The updater is protected, so Stickman suspends it instead of disabling it and re-applies the freeze at boot; Appstore app updates are unaffected.
 - **Sleep**: sleep timer with fade, screen off with audio on, stay awake while media plays, HDMI-CEC switch.
