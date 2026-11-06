@@ -4,7 +4,7 @@
 
 A no-root power remote and stick manager for Amazon Fire TV.
 
-- **Remap any remote button** to any app or action: tap, double-tap and hold, with per-app profiles. The original action never fires and the new one is instant, with no 5-second delay and no Amazon home screen flash.
+- **Remap any remote button** to any app or action: press, double press and hold, and different buttons inside one app if you like. The original action never fires and the new one is instant, with no 5-second delay and no Amazon home screen flash.
 - **No root, no computer.** Stickman gets shell access on the stick itself through a small local VPN that only carries its own commands.
 - **Makes the stick lighter:** frees RAM, reclaims storage and debloats Amazon extras, and everything can be undone.
 
@@ -20,7 +20,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
 
 ## Features
 
-- **Remote**: tap / double / hold layers, per-app profiles, presets for every Fire TV remote, and learning for unknown buttons. Any button can open an app, act as another key, or run an action: Boost, sleep timer, screen off, screenshot, media controls, close the current app.
+- **Remote**: press, double press and hold, different buttons inside one app, presets for every Fire TV remote, and learning for unknown buttons. Any button can open an app, act as another key, or run an action: Boost, sleep timer, screen off, screenshot, media controls, close the current app.
 - **Tasks**: a live map of running apps sized by RAM, with End, Always kill and Protect.
 - **Speed**:
   - Boost and auto-close.

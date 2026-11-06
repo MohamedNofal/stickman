@@ -12,6 +12,7 @@ import android.widget.TextView;
 import com.clean.stickman.core.Keys;
 import com.clean.stickman.core.Listen;
 import com.clean.stickman.core.ListenDecision;
+import com.clean.stickman.core.Trouble;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.RemoteLayout;
 import com.clean.stickman.core.RemotePresets;
@@ -286,7 +287,8 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
 
     boolean ready() {
         if (Store.hasRemap(a)) return true;
-        ButtonEditor.message(a, "Not connected yet", "Stickman hasn't connected yet: open it again once it shows Running.");
+        ButtonEditor.message(a, "Not connected yet", "Stickman hasn't connected to the stick yet: try again once the sidebar "
+            + "shows “Running ✓”. If it shows a problem instead, the Status page says what to do.");
         return false;
     }
 
@@ -430,7 +432,9 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     boolean startListening(String slot) {
         learnSlot = null;
         if (!remapperRunning()) {
-            listenInfo.setText("Stickman isn't running yet (see the bottom of the sidebar). Turn it on in Settings and wait for “Running ✓”.");
+            String r = Bridge.lastResult;
+            listenInfo.setText(r.startsWith("FAIL") ? Trouble.shortText(r) + " The Status page says what to do."
+                : "Stickman isn't running yet (see the bottom of the sidebar). Turn it on in Settings and wait for “Running ✓”.");
             listenInfo.setTextColor(Theme.ACCENT);
             return false;
         }
