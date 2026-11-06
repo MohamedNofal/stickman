@@ -15,7 +15,8 @@ public class ShortcutsPage extends ApplyPage {
 
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
-        LinearLayout grid = card(l, "Amazon settings screens", "Jump straight to Amazon's settings screens, including hidden ones.");
+        LinearLayout grid = card(l, "Amazon settings screens", "Jump straight to Amazon's settings screens, including hidden ones. "
+            + "Any of them can live on a remote button too: Remote → the button → Press → A Stickman action → Open Amazon screen.");
         int n = Catalog.SHORTCUTS.length + 1;
         LinearLayout row = null;
         for (int i = 0; i < n; i++) {

@@ -467,8 +467,16 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         return true;
     }
 
+    /** Fresh install (nothing changed yet): land on Listen, so the first OK press starts it. Once per app open. */
+    boolean landedOnListen;
+
     @Override public void onShow() {
-        if (a != null) reload();
+        if (a == null) return;
+        reload();
+        if (!landedOnListen && m.codes().isEmpty()) {
+            landedOnListen = true;
+            listen.post(() -> { listen.requestFocus(); });
+        }
     }
 
     @Override public void onHide() {

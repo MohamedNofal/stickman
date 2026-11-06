@@ -19,6 +19,8 @@ public class StatusPage extends Page {
 
     MainActivity a;
     TextView daemons, info, live, ram, temp, storage, wifi, os;
+    /** "Start here" card, shown until a button has been changed. */
+    LinearLayout start;
     long refreshedAt, liveShownAt = -1;
 
     @Override public String title() { return "Status"; }
@@ -37,6 +39,14 @@ public class StatusPage extends Page {
         top.addView(info);
         top.setPadding(0, 0, 0, Theme.dp(a, 12));
         l.addView(top);
+
+        start = Theme.card(a);
+        start.addView(Theme.heading(a, "Start here"));
+        start.addView(Theme.text(a, "1.  Remote → Listen, then press the button on your remote you want to change.\n"
+            + "2.  Speed → Boost when the stick feels slow; Lean memory keeps it that way.\n"
+            + "3.  Debloat → Disable all switches off Amazon's extras. Everything can be undone.\n\n"
+            + "If the remote ever misbehaves, hold Back for 10 seconds: it works normally again.", 15, Theme.TEXT));
+        l.addView(start);
 
         LinearLayout d = Theme.card(a);
         d.addView(Theme.heading(a, "Background services"));
@@ -83,6 +93,7 @@ public class StatusPage extends Page {
 
     @Override public void onShow() {
         if (a == null) return;
+        start.setVisibility(Store.hasRemap(a) && !Store.remap(a).codes().isEmpty() ? View.GONE : View.VISIBLE);
         if (System.currentTimeMillis() - refreshedAt > AUTO_REFRESH_MS && !Bridge.otherVpnActive(a)) refresh();
         else if (refreshedAt == 0) info.setText("Press Refresh to read the stick's status.");
         onTick();
