@@ -50,7 +50,22 @@ public final class Commands {
             + Originals.setting("secure", "limit_ad_tracking", on) + "; "
             + Originals.setting("secure", "advertisingIdApp:interestBasedAds:value", off) + "; "
             + Originals.setting("secure", "USAGE_METRICS_UPLOAD_ENABLED", off) + "; "
+            // the three switches under Amazon's Settings > Preferences > Privacy, plus marketing metrics
+            + Originals.setting("secure", "settingsApp:deviceUsageData:value", off) + "; "
+            + Originals.setting("secure", "settingsApp:appUsageData:value", off) + "; "
+            + Originals.setting("secure", "usage_metrics_marketing_enabled", off) + "; "
+            + Originals.setting("secure", "pact_usage_collection_enabled", off) + "; "
             + Originals.setting("global", "com.amazon.tv.settings.featured_item_video_enabled", off);
+    }
+
+    /**
+     * Location off journals the current mode (3, "high accuracy", on the stick) and sets 0; on gives the journaled
+     * value back, or sets 3 when Stickman never changed it.
+     */
+    public static String location(boolean on) {
+        if (!on) return Originals.setting("secure", "location_mode", "0");
+        return Originals.giveBack("setting", "secure", "location_mode")
+            + "; [ \"$(settings get secure location_mode)\" = 0 ] && settings put secure location_mode 3; true";
     }
 
     /** Keep asleep (on) / wake (off): see {@link Starve}. null for invalid names and, when on, protected packages. */

@@ -475,7 +475,14 @@ public class SpeedPage extends ApplyPage {
     /** Asleep & starved apps (from the originals journal); choosing one lets it run normally again. */
     void showAsleep(String out) {
         Map<String, Boolean> m = Starve.parseList(out);
-        if (m.isEmpty()) { say("No apps are kept asleep or starved."); return; }
+        // Amazon's reporting apps are quieted from the Privacy page: not "apps" the user put to sleep here
+        int reporting = 0;
+        for (String p : com.clean.stickman.core.Telemetry.packages()) if (m.remove(p) != null) reporting++;
+        if (m.isEmpty()) {
+            say(reporting > 0 ? "No apps are kept asleep or starved (Amazon's reporting apps are quiet: see Privacy)."
+                : "No apps are kept asleep or starved.");
+            return;
+        }
         result.setText("");
         final List<String> pkgs = new ArrayList<>(m.keySet());
         final String[] names = new String[pkgs.size()];

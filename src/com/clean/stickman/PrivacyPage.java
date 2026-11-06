@@ -8,6 +8,7 @@ import android.widget.TextView;
 
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
+import com.clean.stickman.core.Telemetry;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -15,21 +16,24 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Private-DNS ad blocking presets, a DNS status card, and the "limit ads & tracking" switch. */
+/**
+ * Private-DNS ad blocking presets, a status card, the "limit ads & tracking" switch, Quiet telemetry (appops on
+ * Amazon's reporting apps that Fire OS won't let anyone disable) and the location switch.
+ */
 public class PrivacyPage extends ApplyPage {
     static final long AUTO_READ_MS = 30000;
-    /** Prints one line "DNS <mode> <specifier> ADS <limit_ad_tracking>". */
+    /** Prints one line "DNS <mode> <specifier> ADS <limit_ad_tracking> QUIET <n> LOC <location_mode>". */
     static final String READ = "echo DNS $(settings get global private_dns_mode) $(settings get global private_dns_specifier)"
-        + " ADS $(settings get secure limit_ad_tracking)";
-    static final Pattern STATE = Pattern.compile("DNS (\\S+) (\\S+) ADS (\\S+)");
+        + " ADS $(settings get secure limit_ad_tracking) QUIET " + Telemetry.COUNT_EXPR + " LOC $(settings get secure location_mode)";
+    static final Pattern STATE = Pattern.compile("DNS (\\S+) (\\S+) ADS (\\S+)(?: QUIET (\\d+))?(?: LOC (\\S+))?");
 
-    Button[] presets, ads;
+    Button[] presets, ads, quiet, loc;
     TextView dnsNow, dnsCheck;
     long readAt, checkShownAt = -1;
 
     @Override public String title() { return "Privacy"; }
 
-    @Override public String subtitle() { return "Block ads and trackers in every app, and stop Amazon's ad tracking."; }
+    @Override public String subtitle() { return "Block ads and trackers in every app, and keep Amazon's reporting quiet."; }
 
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
@@ -55,12 +59,26 @@ public class PrivacyPage extends ApplyPage {
         }
         d.addView(r1);
         d.addView(r2);
-        d.addView(Theme.text(a, "Works alongside Net Filter.", 14, Theme.MUTED));
+        d.addView(Theme.text(a, "Works alongside Net Filter. AdGuard blocks Amazon's metrics hosts; NextDNS with its "
+            + "Amazon list also blocks the event and impression hosts that Amazon's built-in reporting services use.", 14, Theme.MUTED));
 
-        LinearLayout p = card(l, "Limit ads & tracking", "Turns off the advertising ID, interest-based ads, "
-            + "usage-data uploads and autoplaying featured videos.");
+        LinearLayout p = card(l, "Limit ads & tracking", "Turns off the advertising ID, interest-based ads, device and "
+            + "app usage data, marketing metrics and autoplaying featured videos.");
         ads = choices(p, new String[] { "On", "Off" }, i ->
             send(Commands.privacy(i == 0) + "; " + READ, "ads:" + i, "Applying…"));
+
+        LinearLayout q = card(l, "Amazon's reporting apps", "Fire OS won't let these eight be disabled: "
+            + Telemetry.summary() + ". Quiet stops all of them running in the background and takes app-usage access "
+            + "from the statistics one. Nothing you use depends on them; Restore defaults puts them back. Amazon's "
+            + "built-in Minerva services can't be stopped this way: only an ad-blocking DNS reaches those.");
+        quiet = choices(q, new String[] { "Quiet", "Let them run" }, i ->
+            send(Telemetry.quiet(i == 0) + "; " + READ, "quiet:" + i,
+                i == 0 ? "Quieting Amazon's reporting apps…" : "Letting them run again…"));
+
+        LinearLayout lc = card(l, "Location", "The stick looks up a Wi-Fi based location for weather, ads and "
+            + "regional content. Off stops those lookups; everything else keeps working.");
+        loc = choices(lc, new String[] { "On", "Off" }, i ->
+            send(Commands.location(i == 0) + "; " + READ, "loc:" + i, i == 0 ? "Turning location on…" : "Turning location off…"));
 
         return Theme.scroll(a, l);
     }
@@ -120,6 +138,8 @@ public class PrivacyPage extends ApplyPage {
         m = STATE.matcher(last);
         m.find();
         String mode = m.group(1), spec = m.group(2), lim = m.group(3);
+        int n = m.group(4) == null ? -1 : Integer.parseInt(m.group(4));
+        String locMode = m.group(5);
         boolean on = "hostname".equals(mode) && !"null".equals(spec);
         String desc = on ? spec : "Off (" + ("null".equals(mode) ? "default" : mode) + ")";
         int sel = -1;
@@ -129,9 +149,14 @@ public class PrivacyPage extends ApplyPage {
             if (on && h != null && h.equals(spec)) desc = Catalog.DNS_PRESETS[i][0] + "  (" + spec + ")";
         }
         if (on && spec.endsWith(".dns.nextdns.io")) desc = "NextDNS  (" + spec + ")";
-        dnsNow.setText("Ad-blocking DNS: " + desc + "\nLimit ads & tracking: " + ("1".equals(lim) ? "On" : "Off"));
+        boolean locOn = locMode == null || !"0".equals(locMode);
+        dnsNow.setText("Ad-blocking DNS: " + desc + "\nLimit ads & tracking: " + ("1".equals(lim) ? "On" : "Off")
+            + "\nAmazon's reporting apps: " + Telemetry.state(n)
+            + "\nLocation: " + (locMode == null ? "not read yet" : locOn ? "On" : "Off"));
         select(presets, sel);
         select(ads, "1".equals(lim) ? 0 : 1);
+        select(quiet, n < 0 ? -1 : n >= Telemetry.APPS.length ? 0 : n == 0 ? 1 : -1);
+        select(loc, locMode == null ? -1 : locOn ? 0 : 1);
         return desc;
     }
 
@@ -146,6 +171,13 @@ public class PrivacyPage extends ApplyPage {
             return desc.startsWith("Off") ? "Private DNS is off." : "Private DNS: " + desc + ". Checking the internet still works…";
         }
         if (kind.startsWith("ads:")) return "Limit ads & tracking " + (kind.endsWith("0") ? "on." : "off.");
+        if (kind.startsWith("quiet:")) {
+            int n = Telemetry.count(out);
+            if (kind.endsWith("0")) return n >= Telemetry.APPS.length ? "Amazon's reporting apps are quiet."
+                : "Only " + Math.max(n, 0) + " of " + Telemetry.APPS.length + " could be quieted: press Refresh and try again.";
+            return n == 0 ? "Amazon's reporting apps run normally again." : "Some are still quiet: press Refresh and try again.";
+        }
+        if (kind.startsWith("loc:")) return kind.endsWith("0") ? "Location on." : "Location off.";
         return out;
     }
 }
