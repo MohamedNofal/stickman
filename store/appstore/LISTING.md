@@ -49,7 +49,7 @@ remote, remap, button, remote buttons, netflix button, launcher, sleep timer, me
 - Fire TV app icon 1280x720: firetv-app-icon-1280x720.png
 - Fire TV background 1920x1080: firetv-background-1920x1080.png
 - Promo image 1024x500: promo-1024x500.png
-- Screenshots 1920x1080: screenshots/*.png (Appstore edition, taken on the stick)
+- Screenshots 1920x1080: screenshots/1-remote … 7-settings.png (Appstore edition, taken on the stick 2026-11-07)
 
 ## Content rating answers
 No violence, no sexual content, no gambling, no user-generated content, no location sharing, no in-app purchases, no ads, no account or personal data collection.
