@@ -5,3 +5,4 @@ build/
 native/remapd
 native/fakeremote
 .superpowers/
+store/appstore/upload/
