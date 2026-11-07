@@ -1,6 +1,6 @@
 # Amazon Appstore listing: Stickman (Appstore edition)
 
-Build: `./build.sh appstore` -> `stickman-appstore.apk` (package `com.clean.stickman.tv`).
+Build: `./build.sh appstore` -> `stickman-appstore.apk` (package `com.clean.stickman.tv`, targets API 34 as Amazon requires; the GitHub build stays on 30).
 Price: USD 1.99 (Amazon converts for other marketplaces). Category: Utilities. Platform: Fire TV only.
 Privacy policy URL: https://github.com/MohamedNofal/stickman/blob/main/store/appstore/PRIVACY.md
 

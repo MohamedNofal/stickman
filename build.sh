@@ -9,6 +9,8 @@ EDITION=${1:-full}          # "./build.sh appstore" -> the Amazon Appstore editi
 OUT=build
 APK=stickman.apk
 SRC=src
+MANIFEST=AndroidManifest.xml
+TARGET_SDK=30
 rm -rf "$OUT"; mkdir -p "$OUT/classes"
 if [ "$EDITION" = appstore ]; then
   STORE_PKG=$(grep -o 'STORE_PKG = "[^"]*"' src/com/clean/stickman/core/Edition.java | cut -d'"' -f2)
@@ -22,6 +24,13 @@ if [ "$EDITION" = appstore ]; then
     -e "s#\"com\.clean\.stickman\"#\"$STORE_PKG\"#g" \
     -e "s#com\.clean\.stickman/\.FadeReceiver#$STORE_PKG/com.clean.stickman.FadeReceiver#g"
   RENAME="--rename-manifest-package $STORE_PKG"
+  # Amazon now requires Fire TV apps to target API 34. On Fire OS 7/8 (API 28-30) nothing changes; on an Android 14
+  # Fire TV the bridge's foreground service needs a type: VPN apps use systemExempted.
+  TARGET_SDK=34
+  MANIFEST=$OUT/AndroidManifest-appstore.xml
+  sed -e 's#<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />#&\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />#' \
+      -e 's#<service android:name=".BridgeService" android:exported="false"#& android:foregroundServiceType="systemExempted"#' \
+      AndroidManifest.xml > "$MANIFEST"
   echo "[edition] appstore -> $STORE_PKG"
 fi
 
@@ -43,8 +52,8 @@ echo "[3/5] link resources -> base apk (aapt2)"
 aapt2 compile --dir res -o "$OUT/res.zip"
 aapt2 link -o "$OUT/base.apk" "$OUT/res.zip" \
    -I "$ANDROID_JAR" \
-   --manifest AndroidManifest.xml \
-   --min-sdk-version 21 --target-sdk-version 30 $RENAME
+   --manifest "$MANIFEST" \
+   --min-sdk-version 21 --target-sdk-version $TARGET_SDK $RENAME
 
 echo "[4/5] add classes.dex into apk"
 cd "$OUT"
