@@ -11,6 +11,7 @@ import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
 import com.clean.stickman.core.Lean;
 import com.clean.stickman.core.Ota;
+import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.ResultText;
 
 import java.util.List;
@@ -76,7 +77,12 @@ public class DebloatPage extends ApplyPage {
         LinearLayout un = card(l, "Uninstall Amazon apps", "Amazon lets you remove a few of its apps for real. Stickman "
             + "opens Amazon's own page for the app: press Uninstall there. Only a tiny built-in placeholder stays, and you "
             + "can get the app back from the Appstore.");
-        button(un, "Show apps…", v -> send(AmazonUninstall.CMD, "amzlist", "Reading Amazon's list…"));
+        LinearLayout unr = Theme.row(a);
+        button(unr, "Show apps…", v -> send(AmazonUninstall.CMD, "amzlist", "Reading Amazon's list…"));
+        button(unr, "Downloaded updates…", v -> send(AmazonUninstall.UPDATES_CMD, "updlist", "Reading Amazon's app updates…"));
+        un.addView(unr);
+        un.addView(Theme.text(a, "Downloaded updates: other Amazon apps keep a full downloaded copy on top of their small "
+            + "built-in one. For apps that are switched off, Stickman can remove that copy.", 13, Theme.MUTED));
 
         LinearLayout ck = card(l, "Check after an update", "Fire OS updates can quietly switch disabled apps back on and "
             + "undo Keep asleep / Starve. This finds anything that came back and offers to switch it off again.");
@@ -356,6 +362,37 @@ public class DebloatPage extends ApplyPage {
         }).cancel("Close").show();
     }
 
+    /** Amazon apps with a downloaded update: off ones can drop it; on ones would re-download it, so offer to switch off first. */
+    void showUpdates(String out) {
+        final List<AmazonUninstall.Update> ups = AmazonUninstall.parseUpdates(out);
+        if (ups.isEmpty()) { say("No Amazon app has a downloaded update to remove."); return; }
+        result.setText("");
+        String[] rows = new String[ups.size()];
+        for (int i = 0; i < rows.length; i++) {
+            AmazonUninstall.Update u = ups.get(i);
+            rows[i] = label(u.pkg) + "  ·  " + (u.kb / 1024) + " MB  ·  "
+                + (Catalog.isProtected(u.pkg) ? "part of Fire OS" : u.disabled ? "off: can remove" : "on");
+        }
+        new ThemedDialog(a).title("Downloaded app updates").items(rows, w -> {
+            final AmazonUninstall.Update u = ups.get(w);
+            final String lb = label(u.pkg);
+            final String mb = (u.kb / 1024) + " MB";
+            if (Catalog.isProtected(u.pkg)) { say(lb + " is part of Fire OS: Stickman leaves it alone."); return; }
+            if (u.disabled) {
+                ThemedDialog.confirm(a, "Remove " + lb + "'s update?", "Frees about " + mb + ". " + lb + " goes back to its small "
+                    + "built-in version and stays off. If you turn it on again, the Appstore downloads the update again.",
+                    "Remove", () -> send(AmazonUninstall.removeUpdate(u.pkg), "updremoved:" + lb + ":" + mb, "Removing " + lb + "'s update…"));
+                return;
+            }
+            String why = Catalog.why(u.pkg);
+            ThemedDialog.confirm(a, "Switch off " + lb + " and remove its update?", lb + " is on, so Amazon would download the "
+                + "update again. Stickman can switch it off first, then remove the update (about " + mb + ")."
+                + (why != null ? "\n\nWhat it does: " + why + "." : "") + "\n\nYou can turn it back on under Disabled by Stickman.",
+                "Switch off & remove", () -> send(Originals.disablePkg(u.pkg) + "; " + AmazonUninstall.removeUpdate(u.pkg) + "; " + Debloat.READ_CMD,
+                    "updremoved:" + lb + ":" + mb, "Switching off " + lb + "…"));
+        }).cancel("Close").show();
+    }
+
     /** Back from Amazon's page: was the app removed? */
     String amazonChecked(String out) {
         String pkg = amzOpened, lb = amzOpenedLabel;
@@ -372,6 +409,13 @@ public class DebloatPage extends ApplyPage {
 
     @Override String describe(String kind, String out) {
         if (kind.equals("amzlist")) { showAmazonApps(out); return null; }
+        if (kind.equals("updlist")) { showUpdates(out); return null; }
+        if (kind.startsWith("updremoved:")) {
+            String[] k = kind.split(":", 3);
+            if (out != null && out.contains(Debloat.SEP)) { model = Debloat.parse(out); render(); }   // the undo list gains the app
+            return out != null && out.contains("UPDATE_REMOVED") ? k[1] + "'s update is removed ✓  About " + k[2] + " freed."
+                : "Couldn't remove " + k[1] + "'s update: " + firstLine(out);
+        }
         if (kind.equals("amzcheck")) return amazonChecked(out);
         if (kind.equals("amzopen")) return "Press Uninstall on Amazon's page, then Back.";
         if (kind.equals("otastate") || kind.equals("otafreeze") || kind.equals("otathaw")) {

@@ -46,6 +46,43 @@ public final class AmazonUninstall {
     /** True when the list command ran to the end (an empty list then means Amazon lists nothing here). */
     public static boolean complete(String out) { return out != null && out.contains("UAPP_END"); }
 
+    /**
+     * Amazon system apps carrying a downloaded update in /data/app: one "UPD pkg kb disabled(0|1)" line each, then
+     * "UPD_END". Removing the update ({@link #removeUpdate}) returns the app to its small built-in version.
+     */
+    public static final String UPDATES_CMD =
+        "D=$(pm list packages -d 2>/dev/null); pm list packages -f -s 2>/dev/null | sed -n 's/^package:\\(\\/data\\/app\\/.*\\)\\/base\\.apk=\\(com\\.amazon\\.[A-Za-z0-9._]*\\)$/\\2 \\1/p' "
+        + "| while read p d; do s=$(du -sk \"$d\" 2>/dev/null | cut -f1); "
+        + "if echo \"$D\" | grep -qx \"package:$p\"; then x=1; else x=0; fi; echo \"UPD $p ${s:-0} $x\"; done; echo UPD_END";
+
+    public static final class Update {
+        public final String pkg; public final long kb; public final boolean disabled;
+        Update(String pkg, long kb, boolean disabled) { this.pkg = pkg; this.kb = kb; this.disabled = disabled; }
+    }
+
+    /** Biggest first. */
+    public static List<Update> parseUpdates(String out) {
+        List<Update> r = new ArrayList<>();
+        if (out == null) return r;
+        for (String l : out.split("\n")) {
+            String[] p = l.trim().split("\\s+");
+            if (p.length != 4 || !p[0].equals("UPD") || !Originals.validPkg(p[1]) || !p[2].matches("\\d{1,12}") || !p[3].matches("[01]")) continue;
+            r.add(new Update(p[1], Long.parseLong(p[2]), p[3].equals("1")));
+        }
+        r.sort((x, y) -> Long.compare(y.kb, x.kb));
+        return r;
+    }
+
+    /**
+     * Back to the built-in version and kept disabled (the same steps as Free up space); prints "UPDATE_REMOVED" when
+     * the downloaded copy is gone. Only for disabled, unprotected packages; null otherwise.
+     */
+    public static String removeUpdate(String pkg) {
+        if (!Originals.validPkg(pkg) || Catalog.isProtected(pkg)) return null;
+        return "pm uninstall-system-updates " + pkg + " >/dev/null 2>&1; pm disable-user --user 0 " + pkg + " >/dev/null 2>&1; "
+            + "pm path " + pkg + " 2>/dev/null | head -n 1 | grep -q '^package:/data/app/' && echo UPDATE_KEPT || echo UPDATE_REMOVED";
+    }
+
     /** Opens Amazon's app page for pkg (its Uninstall button is there); null for a bad name. */
     public static String open(String pkg) {
         if (!Originals.validPkg(pkg)) return null;

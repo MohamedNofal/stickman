@@ -26,4 +26,20 @@ public class AmazonUninstallTest {
         T.eq(0, new ProcessBuilder("sh", "-n", f.getPath()).start().waitFor(), "valid shell");
         f.delete();
     }
+
+    public void testUpdates() throws Exception {
+        String out = "UPD com.amazon.firebat 29900 0\nUPD com.amazon.gamehub 8400 1\nUPD com.amazon.alexamediaplayer.runtime.ftv 47000 1\nUPD bad;x 1 1\nUPD_END\n";
+        java.util.List<AmazonUninstall.Update> u = AmazonUninstall.parseUpdates(out);
+        T.eq(3, u.size(), "valid rows");
+        T.eq("com.amazon.alexamediaplayer.runtime.ftv", u.get(0).pkg, "biggest first");
+        T.yes(u.get(0).disabled && !u.get(1).disabled, "disabled flag");
+        String r = AmazonUninstall.removeUpdate("com.amazon.gamehub");
+        T.yes(r.startsWith("pm uninstall-system-updates com.amazon.gamehub") && r.contains("pm disable-user --user 0 com.amazon.gamehub"), "remove + keep disabled");
+        T.eq(null, AmazonUninstall.removeUpdate("com.amazon.tv.launcher"), "protected never");
+        T.eq(null, AmazonUninstall.removeUpdate("a; b"), "bad name");
+        java.io.File f = java.io.File.createTempFile("amazonupdates", ".sh");
+        java.nio.file.Files.write(f.toPath(), AmazonUninstall.UPDATES_CMD.getBytes("UTF-8"));
+        T.eq(0, new ProcessBuilder("sh", "-n", f.getPath()).start().waitFor(), "valid shell");
+        f.delete();
+    }
 }

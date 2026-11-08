@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.clean.stickman" android:versionCode="17" android:versionName="1.9">
+    package="com.clean.stickman" android:versionCode="18" android:versionName="1.9.1">
     <!-- Fire TV only: no touchscreen needed, leanback (TV) required; the Amazon Appstore targets devices from these -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="true" />

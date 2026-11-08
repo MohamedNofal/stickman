@@ -36,6 +36,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
   - **Free up space**: removes the updates Amazon keeps downloading for disabled apps.
   - **Clear app caches** and trim the storage.
   - **Check after an update**: switches off again anything an update turned back on.
+  - **Uninstall Amazon apps**: Amazon's own list of removable apps (Silk, Amazon Music, miniTV, Photos, ...), with sizes; Stickman opens Amazon's page and you press Uninstall. **Downloaded updates** removes the full downloaded copy of switched-off Amazon apps.
   - **Freeze updates (OTA)**: stops Fire OS system updates until you unfreeze. The updater is protected, so Stickman suspends it instead of disabling it and re-applies the freeze at boot; Appstore app updates are unaffected.
 - **Sleep**: sleep timer with fade, screen off with audio on, stay awake while media plays, HDMI-CEC switch.
 - **Privacy**: ad-blocking private DNS that switches itself off if the internet breaks, limit ads and tracking (Amazon's own usage-data switches included), a location switch, and **Quiet telemetry**: the eight Amazon reporting apps Fire OS won't let you disable are kept from running in the background, journaled like everything else.
