@@ -5,6 +5,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.clean.stickman.core.AmazonUninstall;
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Debloat;
@@ -72,6 +73,11 @@ public class DebloatPage extends ApplyPage {
             () -> { clearAt = System.currentTimeMillis(); send(Lean.clearCachesDetached(), "clearing", "Clearing caches…"); }));
         st.addView(str);
 
+        LinearLayout un = card(l, "Uninstall Amazon apps", "Amazon lets you remove a few of its apps for real. Stickman "
+            + "opens Amazon's own page for the app: press Uninstall there. Only a tiny built-in placeholder stays, and you "
+            + "can get the app back from the Appstore.");
+        button(un, "Show apps…", v -> send(AmazonUninstall.CMD, "amzlist", "Reading Amazon's list…"));
+
         LinearLayout ck = card(l, "Check after an update", "Fire OS updates can quietly switch disabled apps back on and "
             + "undo Keep asleep / Starve. This finds anything that came back and offers to switch it off again.");
         button(ck, "Check now", v -> send(com.clean.stickman.core.Starve.checkScript(), "check", "Checking…"));
@@ -100,9 +106,14 @@ public class DebloatPage extends ApplyPage {
         send(Debloat.READ_CMD, "read", "Reading the app list…");
     }
 
+    /** The app whose Amazon page Stickman opened; on return the page says whether it was removed. */
+    String amzOpened, amzOpenedLabel;
+    long amzOpenedKb;
+
     @Override public void onShow() {
         appLabels.clear();   // apps may have been installed/updated since the last show
         if (a == null || Bridge.otherVpnActive(a)) return;
+        if (amzOpened != null) send(AmazonUninstall.CMD, "amzcheck", "Checking " + amzOpenedLabel + "…");
         if (System.currentTimeMillis() - readAt > AUTO_READ_MS) read();
         if (otaFrozen == null || System.currentTimeMillis() - otaReadAt > AUTO_READ_MS)
             send(Ota.stateCmd(), "otastate", "Checking the update state…");
@@ -319,7 +330,50 @@ public class DebloatPage extends ApplyPage {
         return dr.size() + " of " + n + " came back on.";
     }
 
+    /** Amazon's uninstallable apps: removed ones are listed too, so the user sees the whole picture. */
+    void showAmazonApps(String out) {
+        final List<AmazonUninstall.App> apps = AmazonUninstall.parse(out);
+        if (apps.isEmpty()) {
+            say(AmazonUninstall.complete(out) ? "Amazon doesn't list any removable apps on this stick." : "Couldn't read Amazon's list.");
+            return;
+        }
+        result.setText("");
+        String[] rows = new String[apps.size()];
+        for (int i = 0; i < rows.length; i++) {
+            AmazonUninstall.App ap = apps.get(i);
+            rows[i] = label(ap.pkg) + "  ·  " + (ap.installed() ? (ap.kb / 1024) + " MB" : "removed ✓");
+        }
+        new ThemedDialog(a).title("Amazon apps you can uninstall").items(rows, w -> {
+            AmazonUninstall.App ap = apps.get(w);
+            String lb = label(ap.pkg);
+            if (!ap.installed()) { say(lb + " is already removed: only its tiny built-in placeholder is left."); return; }
+            ThemedDialog.confirm(a, "Uninstall " + lb + "?", "Stickman opens Amazon's page for " + lb + ". Press Uninstall "
+                + "there, confirm, then press Back to come back here.\n\nThis frees about " + (ap.kb / 1024) + " MB.",
+                "Open the page", () -> {
+                    amzOpened = ap.pkg; amzOpenedLabel = lb; amzOpenedKb = ap.kb;
+                    send(AmazonUninstall.open(ap.pkg), "amzopen", "Opening Amazon's page for " + lb + "…");
+                });
+        }).cancel("Close").show();
+    }
+
+    /** Back from Amazon's page: was the app removed? */
+    String amazonChecked(String out) {
+        String pkg = amzOpened, lb = amzOpenedLabel;
+        long kb = amzOpenedKb;
+        amzOpened = null;
+        if (pkg == null) return null;
+        for (AmazonUninstall.App ap : AmazonUninstall.parse(out)) {
+            if (!ap.pkg.equals(pkg)) continue;
+            return ap.installed() ? lb + " is still installed. Use Show apps… again to retry."
+                : lb + " is removed ✓  About " + (kb / 1024) + " MB freed.";
+        }
+        return null;
+    }
+
     @Override String describe(String kind, String out) {
+        if (kind.equals("amzlist")) { showAmazonApps(out); return null; }
+        if (kind.equals("amzcheck")) return amazonChecked(out);
+        if (kind.equals("amzopen")) return "Press Uninstall on Amazon's page, then Back.";
         if (kind.equals("otastate") || kind.equals("otafreeze") || kind.equals("otathaw")) {
             otaFrozen = Ota.parseFrozen(out);
             otaReadAt = System.currentTimeMillis();

@@ -108,6 +108,8 @@ public final class Catalog {
     static final String[][] KNOWN_LABELS = {
         {"system_server", "Android system"},
         {"com.android.systemui", "System UI"},
+        {"com.amazon.cloud9", "Amazon Silk browser"},
+        {"com.amazon.spiderpork", "Amazon sports"},
     };
 
     /** Display name Stickman knows offline for pkg (debloat catalogue, then {@link #KNOWN_LABELS}), or null. */
