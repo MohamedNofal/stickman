@@ -40,6 +40,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
 - **Sleep**: sleep timer with fade, screen off with audio on, stay awake while media plays, HDMI-CEC switch.
 - **Privacy**: ad-blocking private DNS that switches itself off if the internet breaks, limit ads and tracking (Amazon's own usage-data switches included), a location switch, and **Quiet telemetry**: the eight Amazon reporting apps Fire OS won't let you disable are kept from running in the background, journaled like everything else.
 - **Shortcuts** to hidden Amazon settings, and a **Status** page that says whether Stickman is working, what to do if it isn't, and what it has been doing, in plain words.
+- **Updates itself** (from 1.9): when a new version is out, Stickman shows what's new and asks: Update now, Always update automatically (installs while the TV is asleep), or Not now. Settings → Updates has Check now and the automatic on/off switch. Only this repository's releases are used, and Android refuses any APK not signed like the installed one.
 
 ## Install
 
@@ -48,7 +49,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
 3. In **Downloader**, open `https://github.com/MohamedNofal/stickman/releases/latest/download/stickman.apk` and install it.
 4. Open Stickman, accept the **VPN request**, then tick **Always allow** on "Allow USB debugging?". Wake the TV first if the screensaver is on. If a step was missed, Stickman says which one and what to do.
 
-Keep ADB debugging on: Stickman talks to the TV's own debugging service.
+Keep ADB debugging on: Stickman talks to the TV's own debugging service. From 1.9 on, Stickman updates itself; you only install by hand once.
 
 ## Safety
 
