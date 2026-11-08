@@ -91,6 +91,7 @@ public final class Stickd {
         new AutoKill(this).install();
         new Sleep(this).install();
         new TaskSampler(this).install(this);
+        new Updater(this).install();
 
         // The events buffer may hold no resume line yet: seed the foreground from dumpsys.
         String seed = EventParser.dumpsysResumed(Sh.run("dumpsys activity activities | grep -m1 mResumedActivity"));

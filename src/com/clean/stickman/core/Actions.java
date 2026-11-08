@@ -24,6 +24,9 @@ public final class Actions {
     public static final String END_ALL = "end_all";
     /** Trim: every app that isn't in front gives back memory it doesn't need; nothing is closed. */
     public static final String TRIM = "trim";
+    /** GitHub edition self-update (Settings only, never a button action): check GitHub / download and install now. */
+    public static final String UPDATE_CHECK = "update_check";
+    public static final String UPDATE_NOW = "update_now";
 
     /** Every action id, in menu order. */
     public static final String[] ALL = {

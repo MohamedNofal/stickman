@@ -8,7 +8,7 @@ public final class StickdConf {
     /** The stickd.conf the app ships with (everything off). */
     public static final String DEFAULT_TEXT =
         "autokill.on_leave=0\nautokill.interval_min=0\nautokill.whitelist=\nautokill.blacklist=\nstayawake.media=0\n"
-        + "trim.on_sleep=0\ntrim.interval_min=0\n";
+        + "trim.on_sleep=0\ntrim.interval_min=0\nupdate.auto=0\n";
 
     public boolean onLeave;
     public int intervalMin;
@@ -18,6 +18,8 @@ public final class StickdConf {
     /** Trim every background app when the TV goes to sleep / every N minutes (0 = off). */
     public boolean trimOnSleep;
     public int trimIntervalMin;
+    /** GitHub edition: download new releases and install them when the TV goes to sleep. Off until the user agrees. */
+    public boolean updateAuto;
 
     public static StickdConf parse(String text) {
         StickdConf c = new StickdConf();
@@ -37,6 +39,7 @@ public final class StickdConf {
                 case "stayawake.media": c.stayAwakeMedia = "1".equals(v); break;
                 case "trim.on_sleep": c.trimOnSleep = "1".equals(v); break;
                 case "trim.interval_min": c.trimIntervalMin = intOr0(v); break;
+                case "update.auto": c.updateAuto = "1".equals(v); break;
                 default: break;
             }
         }
@@ -86,7 +89,8 @@ public final class StickdConf {
             + "autokill.blacklist=" + join(blacklist) + "\n"
             + "stayawake.media=" + (stayAwakeMedia ? 1 : 0) + "\n"
             + "trim.on_sleep=" + (trimOnSleep ? 1 : 0) + "\n"
-            + "trim.interval_min=" + Math.max(0, trimIntervalMin) + "\n";
+            + "trim.interval_min=" + Math.max(0, trimIntervalMin) + "\n"
+            + "update.auto=" + (updateAuto ? 1 : 0) + "\n";
     }
 
     private static String join(Set<String> s) {

@@ -13,6 +13,9 @@ import com.clean.stickman.core.Ota;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.ResultText;
 import com.clean.stickman.core.Trouble;
+import com.clean.stickman.core.Actions;
+import com.clean.stickman.core.StickdConf;
+import com.clean.stickman.core.Update;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -57,6 +60,42 @@ public class SettingsPage extends Page {
         master.setOnClickListener(v -> toggleMaster());
         c1.addView(master);
         l.addView(c1);
+
+        if (!com.clean.stickman.core.Edition.STORE) {
+            LinearLayout cu = Theme.card(a);
+            cu.addView(Theme.heading(a, "Updates"));
+            updInfo = Theme.text(a, "", 15, Theme.TEXT);
+            cu.addView(updInfo);
+            cu.addView(Theme.text(a, "Stickman checks GitHub for new versions. With automatic updates on, a new version "
+                + "downloads by itself and installs while the TV is asleep, so it never interrupts you. Your settings and "
+                + "buttons are kept.", 14, Theme.MUTED));
+            LinearLayout ru = Theme.row(a);
+            Button chk = Theme.button(a, "Check now");
+            chk.setOnClickListener(v -> updateAction(Actions.UPDATE_CHECK, "Checking GitHub for a new version…"));
+            ru.addView(chk);
+            Button now = Theme.button(a, "Update now");
+            now.setOnClickListener(v -> ThemedDialog.confirm(a, "Update Stickman now?", "Stickman downloads the newest "
+                + "version and installs it. It closes for a moment and restarts by itself; your settings and buttons are kept.",
+                "Update", () -> updateAction(Actions.UPDATE_NOW, "Updating… Stickman closes and restarts by itself.")));
+            ru.addView(now);
+            Button news = Theme.button(a, "What's new");
+            news.setOnClickListener(v -> whatsNew());
+            ru.addView(news);
+            cu.addView(ru);
+            cu.addView(Theme.text(a, "Automatic updates", 14, Theme.MUTED));
+            LinearLayout rc = Theme.row(a);
+            rc.setTag(Theme.CHIPS);
+            autoBtns = new Button[2];
+            String[] an = { "On", "Off" };
+            for (int i = 0; i < 2; i++) {
+                final boolean on = i == 0;
+                autoBtns[i] = Theme.button(a, an[i]);
+                autoBtns[i].setOnClickListener(v -> setAutoUpdate(on));
+                rc.addView(autoBtns[i]);
+            }
+            cu.addView(rc);
+            l.addView(cu);
+        }
 
         LinearLayout c4 = Theme.card(a);
         c4.addView(Theme.heading(a, "Undo"));
@@ -137,6 +176,46 @@ public class SettingsPage extends Page {
         int dbl = m == null ? 250 : m.doubleMs, hold = m == null ? 600 : m.holdMs;
         for (int i = 0; i < DOUBLE_MS.length; i++) doubleBtns[i].setSelected(DOUBLE_MS[i] == dbl);
         for (int i = 0; i < HOLD_MS.length; i++) holdBtns[i].setSelected(HOLD_MS[i] == hold);
+    }
+
+    // ---- updates (GitHub edition) ----
+    TextView updInfo;
+    Button[] autoBtns;
+    long updShownAt = -1;
+
+    void updateAction(String id, String pending) {
+        if (!Store.enabled(a)) { say("Turn Stickman on first: its background automation does the update."); return; }
+        send(Commands.act(id, null), "update", pending);
+    }
+
+    void setAutoUpdate(boolean on) {
+        StickdConf c = StickdConf.parse(Store.stickdText(a));
+        c.updateAuto = on;
+        Store.saveStickdText(a, c.serialize());
+        refreshUpdates(true);
+        if (Store.enabled(a)) send(Ensure.MARKER, "autoupdate", "Saving…");
+        say(on ? "Automatic updates on: new versions install while the TV is asleep." : "Automatic updates off: use Update now when you like.");
+    }
+
+    /** Notes of the newest version Stickman knows about (the available one, else the installed one). */
+    void whatsNew() {
+        java.util.Map<String, String> st = Update.parseStatus(LogTail.status("update"));
+        String installed = WhatsNew.installedVersion(a), latest = st.get("latest");
+        String v = latest != null && !"-".equals(latest) && Update.newer(latest, installed) ? latest : installed;
+        if (v == null) return;
+        say("Fetching what's new in " + v + "…");
+        WhatsNew.show(a, v, "What's new in " + v, () -> say("Couldn't load the notes for " + v + ": is the stick online?"));
+    }
+
+    void refreshUpdates(boolean force) {
+        if (updInfo == null) return;
+        long at = LogTail.statusAt("update");
+        if (!force && at == updShownAt) return;
+        updShownAt = at;
+        updInfo.setText(Update.describe(Update.parseStatus(LogTail.status("update")), WhatsNew.installedVersion(a)));
+        boolean on = StickdConf.parse(Store.stickdText(a)).updateAuto;
+        autoBtns[0].setSelected(on);
+        autoBtns[1].setSelected(!on);
     }
 
     void say(String s) {
@@ -234,10 +313,11 @@ public class SettingsPage extends Page {
         return -1;
     }
 
-    @Override public void onShow() { if (a != null) refresh(); }
+    @Override public void onShow() { if (a != null) { refresh(); refreshUpdates(true); } }
 
     @Override public void onTick() {
         if (a == null) return;
+        refreshUpdates(false);
         String s = Bridge.busy ? "Working…" : Bridge.lastResult.isEmpty() ? ResultText.human("")
             : ResultText.human(Bridge.lastResult) + "  ·  " + new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date(Bridge.lastResultAt));
         if (!s.equals(lastShown)) { lastShown = s; last.setText(s); }
@@ -259,6 +339,8 @@ public class SettingsPage extends Page {
             case "restore": say("Defaults restored: the stick's settings and apps are back to Amazon's. Stickman is still on."); break;
             case "stop": say("Stopped. The remote works normally."); break;
             case "undo-stop": break;   // the "undo" result reports the whole thing
+            case "update": break;          // stickd reports through its STATUS update line (shown on the card)
+            case "autoupdate": break;
             case "undo": say("Everything is undone: Stickman is off and the stick is back the way it was."); break;
             default: say(output);
         }

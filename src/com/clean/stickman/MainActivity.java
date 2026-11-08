@@ -58,6 +58,8 @@ public class MainActivity extends Activity implements Bridge.Listener {
     long createdAt;
     /** That dialog is shown once per activity (again after the user went to fix it in Developer options). */
     boolean troubleShown;
+    /** The update question / what's-new note was considered for this activity (once). */
+    boolean updateChecked;
     /** The user left for Developer options from the dialog: re-check when they come back. */
     boolean retryOnResume;
 
@@ -430,6 +432,11 @@ public class MainActivity extends Activity implements Bridge.Listener {
         }
         updateStatusLine();
         maybeShowTrouble();
+        // a few seconds in, and only with no other dialog up: what's new after an update, or the update question
+        if (!updateChecked && !Bridge.busy && hasWindowFocus() && System.currentTimeMillis() - createdAt > 5000) {
+            updateChecked = true;
+            WhatsNew.onStart(this);
+        }
         if (current >= 0) pages[current].onTick();
         h.postDelayed(this::tick, 400);
     }
