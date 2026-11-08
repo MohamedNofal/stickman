@@ -81,15 +81,53 @@ final class WhatsNew {
             String[] test = testSource();
             String json = get(test != null ? test[0] : Update.API);
             Update.Release r = Update.parse(json, test != null ? test[1] : Update.URL_PREFIX);
+            if (r != null) lastKnownLatest = r.version;
+            android.util.Log.i("Stickman", "update: startup check found " + (r == null ? "nothing" : r.version)
+                + " (installed " + installed + ", test source " + (test != null) + ")");
             if (r == null || !Update.shouldOffer(r.version, installed, declined)) return;
             String notes = Update.plainNotes(Update.notes(json));
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (!a.isFinishing()) offer(a, r.version, installed, notes);
+                if (!a.isFinishing() && claim(r.version)) offer(a, r.version, installed, notes);
             });
         }, "updatecheck").start();
     }
 
+    /** The latest version the app's own startup check saw on GitHub (null = not checked / no answer). */
+    static volatile String lastKnownLatest;
+
+    /** The version already offered in this process: the startup check and stickd's report never ask twice. */
+    private static String offered;
+
+    static synchronized boolean claim(String version) {
+        if (version.equals(offered)) return false;
+        offered = version;
+        return true;
+    }
+
+    /**
+     * stickd's own 6-hourly check found a newer version (its STATUS update line): ask, with that version's notes
+     * from GitHub. Skipped when automatic updates are on (it installs while the TV sleeps) or the user declined it.
+     */
+    static void offerFromStatus(final MainActivity a, java.util.Map<String, String> st) {
+        if (com.clean.stickman.core.Edition.STORE) return;
+        String state = st.get("state"), latest = st.get("latest");
+        String installed = installedVersion(a);
+        String declined = Store.prefs(a).getString("declinedVersion", null);
+        boolean auto = com.clean.stickman.core.StickdConf.parse(Store.stickdText(a)).updateAuto;
+        android.util.Log.i("Stickman", "update: stickd says " + state + " " + latest + " (installed " + installed
+            + ", declined " + declined + ", auto " + auto + ")");
+        if (!"available".equals(state) && !"ready".equals(state)) return;
+        if (!Update.shouldOffer(latest, installed, declined)) return;
+        if (auto) return;
+        if (!claim(latest)) return;
+        new Thread(() -> {
+            String notes = Update.plainNotes(Update.notes(get(Update.TAG_API + "v" + latest)));
+            new Handler(Looper.getMainLooper()).post(() -> { if (!a.isFinishing()) offer(a, latest, installed, notes); });
+        }, "updatenotes").start();
+    }
+
     static void offer(final MainActivity a, final String latest, String installed, String notes) {
+        android.util.Log.i("Stickman", "update: asking about " + latest + " (" + notes.length() + " chars of notes)");
         android.widget.LinearLayout col = new android.widget.LinearLayout(a);
         col.setOrientation(android.widget.LinearLayout.VERTICAL);
         if (!notes.isEmpty()) {

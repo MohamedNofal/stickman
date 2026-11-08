@@ -212,7 +212,13 @@ public class SettingsPage extends Page {
         long at = LogTail.statusAt("update");
         if (!force && at == updShownAt) return;
         updShownAt = at;
-        updInfo.setText(Update.describe(Update.parseStatus(LogTail.status("update")), WhatsNew.installedVersion(a)));
+        java.util.Map<String, String> st = Update.parseStatus(LogTail.status("update"));
+        String installed = WhatsNew.installedVersion(a), known = WhatsNew.lastKnownLatest;
+        if (st.get("state") == null && known != null) {   // no recent report from stickd: use the app's own check
+            st.put("state", Update.newer(known, installed) ? "available" : "uptodate");
+            st.put("latest", known);
+        }
+        updInfo.setText(Update.describe(st, installed));
         boolean on = StickdConf.parse(Store.stickdText(a)).updateAuto;
         autoBtns[0].setSelected(on);
         autoBtns[1].setSelected(!on);

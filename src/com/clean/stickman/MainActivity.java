@@ -60,6 +60,8 @@ public class MainActivity extends Activity implements Bridge.Listener {
     boolean troubleShown;
     /** The update question / what's-new note was considered for this activity (once). */
     boolean updateChecked;
+    /** The stickd update status already looked at (LogTail.statusAt), so each report is considered once. */
+    long updateStatusSeen = -1;
     /** The user left for Developer options from the dialog: re-check when they come back. */
     boolean retryOnResume;
 
@@ -436,6 +438,12 @@ public class MainActivity extends Activity implements Bridge.Listener {
         if (!updateChecked && !Bridge.busy && hasWindowFocus() && System.currentTimeMillis() - createdAt > 5000) {
             updateChecked = true;
             WhatsNew.onStart(this);
+        }
+        // stickd's periodic check found a new version since: ask (once per version per run, see WhatsNew.claim)
+        long ua = LogTail.statusAt("update");
+        if (updateChecked && ua != updateStatusSeen && hasWindowFocus() && !Bridge.busy) {
+            updateStatusSeen = ua;
+            WhatsNew.offerFromStatus(this, com.clean.stickman.core.Update.parseStatus(LogTail.status("update")));
         }
         if (current >= 0) pages[current].onTick();
         h.postDelayed(this::tick, 400);

@@ -145,6 +145,8 @@ final class Updater {
         if (out.contains("Success")) {
             current = r.version;
             log("installed", r.version, null);
+            // the user just pressed Update now: bring Stickman back (it shows what's new); a sleep install stays quiet
+            if ("now".equals(why)) Sh.run("am start -n " + EnsureScript.PKG + "/com.clean.stickman.MainActivity >/dev/null 2>&1");
         } else {
             log("error", r.version, "install refused: " + out.trim());
         }
