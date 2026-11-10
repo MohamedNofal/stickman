@@ -1,6 +1,7 @@
 package com.clean.stickman.daemon;
 
 import com.clean.stickman.core.Actions;
+import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.DnsGuard;
 import com.clean.stickman.core.EnsureScript;
 import com.clean.stickman.core.EventParser;
@@ -43,6 +44,8 @@ final class Sleep {
     private final SleepSchedule sched = new SleepSchedule();
     /** RemapD KEY watcher during a fade; touched only on the timer thread. */
     private Process keyWatcher;
+    /** RemapD KEY watcher while the screen-off curtain is up; touched only on the timer thread. */
+    private Process curtainWatcher;
     // DNS guard; guarded by this.
     private ScheduledFuture<?> dnsTask;
     private int dnsGen;
@@ -56,6 +59,7 @@ final class Sleep {
             if (m < 0) { Sh.log("sleep_timer_set bad arg: " + a); return; }
             set(m);
         });
+        d.register(Actions.SCREEN_OFF, a -> timer.execute(this::curtain));
         d.register(Actions.DNS_CHECK, a -> dnsCheck());
         // A previous stickd may have died mid-fade: clear any overlay it left behind.
         timer.execute(() -> Sh.run(SleepTimer.FADE_END));
@@ -95,10 +99,26 @@ final class Sleep {
     private void fireEnd(int gen) {
         if (!sched.end(gen)) return;
         stopKeyWatcher();
-        Sh.run("cmd media_session dispatch pause");
+        Sh.run(Commands.media("pause"));
         Sh.run("input keyevent KEYCODE_SLEEP");
         Sh.run(SleepTimer.FADE_END);
         Sh.log("STATUS sleep_timer off");
+    }
+
+    // ---- screen off ----
+    /**
+     * Timer thread. Black overlay drawn by the app (HDMI and its audio stay up). The app removes it on the first
+     * button it receives; buttons remapd swallows never reach it, so any remapd KEY line ends it from here too.
+     * A press of a button mapped to screen_off while it is up arrives as KEY (ends it) + this action (the app
+     * ignores a show request right after a dismissal), so the button toggles.
+     */
+    private void curtain() {
+        if (curtainWatcher != null) { curtainWatcher.destroy(); curtainWatcher = null; }
+        Sh.run(SleepTimer.CURTAIN_ON);
+        curtainWatcher = watchKeys(() -> {
+            if (curtainWatcher != null) { curtainWatcher.destroy(); curtainWatcher = null; }
+            Sh.run(SleepTimer.CURTAIN_KEY);
+        }, "stickd-curtainkeys");
     }
 
     /** Timer thread. A remote key press during the fade (remapd logs "KEY <code>") cancels the timer. */
@@ -112,6 +132,11 @@ final class Sleep {
     /** Timer thread. Follows fresh RemapD lines; lines older than the watcher start (logcat replay) are ignored. */
     private void startKeyWatcher(int gen) {
         stopKeyWatcher();
+        keyWatcher = watchKeys(() -> onKeyDuringFade(gen), "stickd-fadekeys");
+    }
+
+    /** Runs onKey once, on the timer thread, at the first RemapD KEY line from now on. Null if logcat failed. */
+    private Process watchKeys(Runnable onKey, String threadName) {
         final long since = System.currentTimeMillis();
         final Process p;
         try {
@@ -120,16 +145,15 @@ final class Sleep {
             p.getOutputStream().close();
         } catch (Exception e) {
             Sh.log("key watcher error: " + e);
-            return;
+            return null;
         }
-        keyWatcher = p;
         Thread t = new Thread(() -> {
             try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = r.readLine()) != null) {
                     long ms = EventParser.remapKeyEpochMs(line);
                     if (ms >= since) {
-                        timer.execute(() -> onKeyDuringFade(gen));
+                        timer.execute(onKey);
                         break;
                     }
                 }
@@ -138,9 +162,10 @@ final class Sleep {
             } finally {
                 p.destroy();
             }
-        }, "stickd-fadekeys");
+        }, threadName);
         t.setDaemon(true);
         t.start();
+        return p;
     }
 
     /** Timer thread. */

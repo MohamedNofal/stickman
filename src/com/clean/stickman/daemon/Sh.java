@@ -2,7 +2,6 @@ package com.clean.stickman.daemon;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.util.concurrent.TimeUnit;
 
 /** Shell helpers for stickd (plain Java: runs under app_process without a Context). */
 public final class Sh {
@@ -23,7 +22,7 @@ public final class Sh {
             Drain out = new Drain(p.getInputStream());
             Drain err = new Drain(p.getErrorStream());
             out.start(); err.start();
-            boolean done = p.waitFor(timeoutMs, TimeUnit.MILLISECONDS);
+            boolean done = waitFor(p, timeoutMs);
             if (!done) {
                 p.destroy();
             }
@@ -42,6 +41,23 @@ public final class Sh {
         }
     }
 
+    /** Process.waitFor(timeout) and String.join only exist from Android 8 (API 26); these run on Fire OS 5/6 too. */
+    static boolean waitFor(Process p, long timeoutMs) throws InterruptedException {
+        long end = System.nanoTime() + timeoutMs * 1000000L;
+        while (true) {
+            try { p.exitValue(); return true; } catch (IllegalThreadStateException running) { }
+            long left = (end - System.nanoTime()) / 1000000L;
+            if (left <= 0) return false;
+            Thread.sleep(Math.min(left, 20));
+        }
+    }
+
+    static String join(String sep, Iterable<? extends CharSequence> parts) {
+        StringBuilder b = new StringBuilder();
+        for (CharSequence c : parts) { if (b.length() > 0) b.append(sep); b.append(c); }
+        return b.toString();
+    }
+
     /** Writes one line to logcat (tag Stickd) via the log binary; argv, not a shell, so no quoting issues. */
     public static void log(String msg) {
         System.out.println(msg);
@@ -49,7 +65,7 @@ public final class Sh {
             Process p = new ProcessBuilder("/system/bin/log", "-t", TAG, msg).redirectErrorStream(true).start();
             p.getOutputStream().close();
             new Drain(p.getInputStream()).run();
-            p.waitFor(5, TimeUnit.SECONDS);
+            waitFor(p, 5000);
             p.destroy();
         } catch (Exception ignored) {
         }

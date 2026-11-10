@@ -44,6 +44,6 @@ public class ShortcutsPage extends ApplyPage {
     }
 
     @Override String describe(String kind, String out) {
-        return "Screen off".equals(kind) ? "Screen off sent. Press any button to bring it back." : "Opened " + kind + ".";
+        return "Screen off".equals(kind) ? null : "Opened " + kind + ".";
     }
 }

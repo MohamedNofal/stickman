@@ -27,5 +27,7 @@ public class SleepTimerTest {
     public void testFadeCommands() {
         T.eq("am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.FADE_START --ei seconds 60", SleepTimer.fadeStart(60), "start");
         T.eq("am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.FADE_END", SleepTimer.FADE_END, "end");
+        T.eq("am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.CURTAIN_ON", SleepTimer.CURTAIN_ON, "curtain on");
+        T.eq("am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.CURTAIN_KEY", SleepTimer.CURTAIN_KEY, "curtain key");
     }
 }

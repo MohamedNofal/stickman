@@ -161,6 +161,8 @@ public class StatusPage extends Page {
             down = remap == null || stick == null;
             sb.append(line("Button remapping", remap)).append('\n');
             sb.append(line("Background automation", stick)).append('\n');
+            String remote = com.clean.stickman.core.RemoteState.describe(le);
+            if (remote != null && remap != null) sb.append(remote).append('\n');
             sb.append("Checked ").append(new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(Store.lastEnsureAt(a))));
         }
         if (Bridge.busy) sb.append("\nTalking to the stick…");

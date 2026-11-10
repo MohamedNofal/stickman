@@ -21,10 +21,18 @@ public final class EventParser {
         catch (NumberFormatException e) { return -1; }
     }
 
-    private static final Pattern RESUMED =
-        Pattern.compile("wm_set_resumed_activity: \\[\\d+,([A-Za-z0-9_.]+)/[^,\\]]*");
+    /**
+     * Event-log tags that name the app in front, newest first. Tag 30043 was renamed twice in AOSP with the same
+     * payload {@code [user,<pkg>/<activity>,<reason>]}: wm_set_resumed_activity (Android 11+, Fire OS 8),
+     * am_set_resumed_activity (Android 8-10, Fire OS 7), am_focused_activity (Android 5-7, Fire OS 5/6; no reason
+     * field on 5/6.0).
+     */
+    public static final String[] RESUMED_TAGS = { "wm_set_resumed_activity", "am_set_resumed_activity", "am_focused_activity" };
 
-    /** Package from a {@code wm_set_resumed_activity: [0,<pkg>/<act>,<reason>]} line, or null. */
+    private static final Pattern RESUMED =
+        Pattern.compile("(?:wm_set_resumed_activity|am_set_resumed_activity|am_focused_activity): \\[\\d+,([A-Za-z0-9_.]+)/[^,\\]]*");
+
+    /** Package from a line of one of {@link #RESUMED_TAGS}, or null. */
     public static String resumedPackage(String logLine) {
         if (logLine == null) return null;
         Matcher m = RESUMED.matcher(logLine);

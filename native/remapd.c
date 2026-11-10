@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -230,8 +231,19 @@ static void load_conf(void) {
          ncrules, nprofs, active_prof, nmapped, cfg_double_ms, cfg_hold_ms);
 }
 
+/* key injector (Fire OS 5-7: no /dev/uinput for shell): a child app_process that injects through InputManager */
+static int ifd = -1, inj_lost;
+static pid_t ipid = -1;
+
 static void emit(int type, int code, int value) {
-    if (ufd < 0) return;
+    if (ufd < 0) {
+        /* the injector takes key down/up only and makes its own auto-repeat (the dispatcher repeats real devices only) */
+        if (ifd >= 0 && type == EV_KEY && value != 2) {
+            char b[32]; int n = snprintf(b, sizeof b, "%d %d\n", code, value);
+            if (write(ifd, b, n) != n && errno != EAGAIN) inj_lost = 1;
+        }
+        return;
+    }
     struct input_event ev; memset(&ev, 0, sizeof ev);
     ev.type = type; ev.code = code; ev.value = value;
     if (write(ufd, &ev, sizeof ev) < 0) {}
@@ -255,14 +267,25 @@ static void run_start(const char *cmd, int code) {
     if (p != 0) return;
     signal(SIGCHLD, SIG_DFL);
     setsid();
-    char full[460]; snprintf(full, sizeof full, "%s 2>&1", cmd);
-    FILE *f = popen(full, "r");
-    if (!f) _exit(127);
-    char out[1024]; size_t n = 0, r;
-    while (n < sizeof out - 1 && (r = fread(out + n, 1, sizeof out - 1 - n, f)) > 0) n += r;
+    /* not popen(): libc runs /bin/sh, which only exists from Android 10 (Fire OS 5-7 have /system/bin/sh only),
+     * so every "open app" shortcut silently did nothing there */
+    int pf[2];
+    if (pipe(pf) < 0) _exit(127);
+    pid_t c = fork();
+    if (c < 0) _exit(127);
+    if (c == 0) {
+        int dn = open("/dev/null", O_RDONLY); dup2(dn, 0); dup2(pf[1], 1); dup2(pf[1], 2);
+        close(pf[0]); close(pf[1]);
+        execl("/system/bin/sh", "sh", "-c", cmd, (char *)0);
+        _exit(127);
+    }
+    close(pf[1]);
+    char out[1024]; size_t n = 0; ssize_t r;
+    while (n < sizeof out - 1 && (r = read(pf[0], out + n, sizeof out - 1 - n)) > 0) n += r;
     out[n] = 0;
-    { char drain[256]; while (fread(drain, 1, sizeof drain, f) > 0) {} }
-    pclose(f);
+    { char drain[256]; while (read(pf[0], drain, sizeof drain) > 0) {} }
+    close(pf[0]);
+    int st = 0; waitpid(c, &st, 0);
     if (am_start_failed(out)) { tap(code); alog("key %d start failed -> original", code); }
     _exit(0);
 }
@@ -327,6 +350,53 @@ static void run_outs(int n, int syn) {
 /* release anything the clone still holds down (device lost / grab dropped / exit) */
 static void release_all(void) { run_outs(lyr_reset(L, outs, NOUT), 1); }
 
+/* ---- which device is the remote, and what state it is in (for the app's Status page) ---- */
+static char remote_name[128];   /* name of the device we opened */
+static int strict_name;         /* argv[2] given (test harness): exact name only */
+static int passthrough;         /* no virtual remote (uinput refused): buttons cannot be swallowed, actions still run */
+
+/* one line in DIR/remote.state, rewritten only when it changes: "ok <name>", "passthrough <name>: <why>",
+ * "notfound <name|name|...>" */
+static void set_state(const char *fmt, ...) {
+    static char last[512];
+    char cur[512]; va_list ap; va_start(ap, fmt); vsnprintf(cur, sizeof cur, fmt, ap); va_end(ap);
+    if (!strcmp(cur, last)) return;
+    snprintf(last, sizeof last, "%s", cur);
+    alog("STATUS remote %s", cur);
+    FILE *f = fopen(DIR_PATH "/remote.state.tmp", "w");
+    if (!f) return;
+    fprintf(f, "%s\n", cur); fclose(f);
+    rename(DIR_PATH "/remote.state.tmp", DIR_PATH "/remote.state");
+}
+
+static int has_word(const char *name, const char *w) {
+    char low[128]; size_t i = 0;
+    for (; name[i] && i < sizeof low - 1; i++) low[i] = (char)tolower((unsigned char)name[i]);
+    low[i] = 0;
+    return strstr(low, w) != NULL;
+}
+
+/* How much a device looks like the Fire TV remote: 0 = not it. The exact name always wins (every Fire OS 8 remote
+ * is "Amazon Fire TV Remote"); other Fire OS versions and remotes use other names, so fall back to "has a d-pad
+ * plus Back or Home", preferring Amazon/remote names and avoiding the HDMI-CEC and keyboard devices. */
+static int score_remote(int fd, const char *name) {
+    if (!strcmp(name, grab_name) && !getenv("REMAPD_TEST_NO_EXACT")) return 1000;   /* env: dev test of the fallback */
+    if (strict_name) return 0;
+    unsigned char b[(KEY_MAX + 8) / 8]; memset(b, 0, sizeof b);
+    if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof b), b) < 0) return 0;
+#define HAS(k) (b[(k) / 8] & (1 << ((k) % 8)))
+    if (!(HAS(KEY_UP) && HAS(KEY_DOWN) && HAS(KEY_LEFT) && HAS(KEY_RIGHT))) return 0;
+    if (!(HAS(KEY_BACK) || HAS(KEY_HOMEPAGE) || HAS(KEY_HOME))) return 0;
+    int sc = 20;
+    if (has_word(name, "amazon")) sc += 40;
+    if (has_word(name, "remote")) sc += 40;
+    if (has_word(name, "fire tv")) sc += 20;
+    if (has_word(name, "cec")) sc -= 60;
+    if (HAS(KEY_Q) && HAS(KEY_SPACE)) sc -= 10;   /* a full keyboard */
+#undef HAS
+    return sc > 0 ? sc : 0;
+}
+
 static int is_virtual(int fd) {
     char phys[64] = {0};
     ioctl(fd, EVIOCGPHYS(sizeof phys - 1), phys);
@@ -335,23 +405,36 @@ static int is_virtual(int fd) {
 
 static int open_remote(void) {
     DIR *d = opendir("/dev/input"); if (!d) return -1;
-    struct dirent *e; int found = -1;
+    struct dirent *e; int found = -1, best = 0;
+    char seen[400] = "", bestp[64] = ""; size_t sl = 0;
     while ((e = readdir(d))) {
         if (strncmp(e->d_name, "event", 5)) continue;
         char p[64]; snprintf(p, sizeof p, "/dev/input/%s", e->d_name);
         int fd = open(p, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
         if (fd < 0) { static int warned; if (warned++ < 8) alog("open %s: %s", p, strerror(errno)); continue; }
         char name[128] = {0}; ioctl(fd, EVIOCGNAME(sizeof name - 1), name);
-        if (!strcmp(name, grab_name) && !is_virtual(fd)) { found = fd; alog("remote at %s", p); break; }
-        close(fd);
+        if (is_virtual(fd)) { close(fd); continue; }
+        if (sl < sizeof seen - 2) sl += snprintf(seen + sl, sizeof seen - sl, "%s%s", sl ? "|" : "", name[0] ? name : "?");
+        if (sl >= sizeof seen) sl = sizeof seen - 1;
+        int sc = score_remote(fd, name);
+        if (sc > best) {
+            if (found >= 0) close(found);
+            found = fd; best = sc;
+            snprintf(remote_name, sizeof remote_name, "%s", name); snprintf(bestp, sizeof bestp, "%s", p);
+            if (sc >= 1000) break;
+        } else close(fd);
     }
     closedir(d);
+    if (found >= 0) alog("remote at %s \"%s\" (match %d)", bestp, remote_name, best);
+    else set_state("notfound %s", seen[0] ? seen : "-");
     return found;
 }
 
+static int uinput_err;
 static int make_uinput(int src) {
-    int fd = open("/dev/uinput", O_WRONLY | O_CLOEXEC | O_NONBLOCK);
-    if (fd < 0) { alog("uinput open failed: %s", strerror(errno)); return -1; }
+    int fd = getenv("REMAPD_TEST_NO_UINPUT") ? (errno = EACCES, -1)   /* env: dev test of passthrough */
+                                             : open("/dev/uinput", O_WRONLY | O_CLOEXEC | O_NONBLOCK);
+    if (fd < 0) { uinput_err = errno; alog("uinput open failed: %s", strerror(errno)); return -1; }
     unsigned char bits[(KEY_MAX + 8) / 8]; memset(bits, 0, sizeof bits);
     ioctl(src, EVIOCGBIT(EV_KEY, sizeof bits), bits);
     ioctl(fd, UI_SET_EVBIT, EV_KEY); ioctl(fd, UI_SET_EVBIT, EV_SYN);
@@ -364,16 +447,68 @@ static int make_uinput(int src) {
     ioctl(fd, UI_SET_PHYS, VIRT_PHYS);
     struct input_id id; ioctl(src, EVIOCGID, &id);
     struct uinput_user_dev u; memset(&u, 0, sizeof u);
-    snprintf(u.name, sizeof u.name, "%s", REMOTE_NAME);
+    snprintf(u.name, sizeof u.name, "%s", remote_name[0] ? remote_name : REMOTE_NAME);   /* same name -> same key layout */
     u.id = id;                          /* same bus/vendor/product -> Vendor_0171_Product_0427.kl */
     if (write(fd, &u, sizeof u) != sizeof u || ioctl(fd, UI_DEV_CREATE) < 0) {
-        alog("uinput create failed: %s", strerror(errno)); close(fd); return -1;
+        uinput_err = errno; alog("uinput create failed: %s", strerror(errno)); close(fd); return -1;
     }
     alog("virtual remote created");
     return fd;
 }
 
+static void injector_stop(void) {
+    if (ifd >= 0) close(ifd);
+    if (ipid > 0) kill(ipid, SIGKILL);
+    ifd = -1; ipid = -1; inj_lost = 0;
+}
+
+/* Start the injector from the installed APK (path in DIR/apk, written by the ensure script) and wait for its
+ * READY line. Returns 0 when keys can be replayed through it. */
+static int make_injector(int src) {
+    if (getenv("REMAPD_TEST_NO_INJECT")) return -1;   /* env: dev test of passthrough */
+    char apk[512] = "";
+    FILE *f = fopen(DIR_PATH "apk", "r");
+    if (f) { if (fgets(apk, sizeof apk, f)) apk[strcspn(apk, "\r\n")] = 0; fclose(f); }
+    if (!apk[0] || access(apk, R_OK) != 0) { alog("injector: no readable apk"); return -1; }
+    int in[2], out[2];
+    if (pipe(in) < 0) return -1;
+    if (pipe(out) < 0) { close(in[0]); close(in[1]); return -1; }
+    struct input_id id; memset(&id, 0, sizeof id); ioctl(src, EVIOCGID, &id);
+    pid_t p = fork();
+    if (p < 0) { close(in[0]); close(in[1]); close(out[0]); close(out[1]); return -1; }
+    if (p == 0) {
+        dup2(in[0], 0); dup2(out[1], 1);
+        int nul = open("/dev/null", O_WRONLY); if (nul >= 0) dup2(nul, 2);
+        for (int i = 3; i < 64; i++) close(i);
+        char v[8], pr[8], ve[8];
+        snprintf(v, sizeof v, "%04x", id.vendor); snprintf(pr, sizeof pr, "%04x", id.product); snprintf(ve, sizeof ve, "%04x", id.version);
+        setenv("CLASSPATH", apk, 1);
+        execl("/system/bin/app_process", "app_process", "/system/bin", "--nice-name=stickinj",
+              "com.clean.stickman.daemon.Injector", v, pr, ve, remote_name, (char *)NULL);
+        _exit(127);
+    }
+    close(in[0]); close(out[1]);
+    char buf[512]; size_t got = 0; int ready = 0; long long end = now_ms() + 15000;
+    while (!ready && now_ms() < end) {
+        struct pollfd pp = { .fd = out[0], .events = POLLIN };
+        if (poll(&pp, 1, 500) <= 0) continue;
+        ssize_t n = read(out[0], buf + got, sizeof buf - 1 - got);
+        if (n <= 0) break;
+        got += n; buf[got] = 0;
+        if (strstr(buf, "READY")) ready = 1;
+        if (got > sizeof buf - 64) got = 0;
+    }
+    close(out[0]);
+    if (!ready) { alog("injector did not start"); close(in[1]); kill(p, SIGKILL); return -1; }
+    fcntl(in[1], F_SETFD, FD_CLOEXEC);
+    fcntl(in[1], F_SETFL, fcntl(in[1], F_GETFL) | O_NONBLOCK);
+    ifd = in[1]; ipid = p; inj_lost = 0;
+    alog("key injector started pid %d", p);
+    return 0;
+}
+
 static void set_grab(int on) {
+    if (passthrough) on = 0;   /* nothing to replay the keys through: never take the remote away from Android */
     if (rfd < 0 || on == grabbed) return;
     if (!on) release_all();
     if (ioctl(rfd, EVIOCGRAB, on ? 1 : 0) == 0) { grabbed = on; alog(on ? "remote grabbed" : "remote released"); }
@@ -387,8 +522,9 @@ static void handle(struct input_event *ev) {
         if (ev->value == 0 && key_t0[c]) { alog("UP %d after %lldms", c, now_ms() - key_t0[c]); key_t0[c] = 0; }
         if (c == PANIC_KEY) back_down_at = ev->value ? (ev->value == 1 ? now_ms() : back_down_at) : 0;
         if (listening) return;   /* logged above, nothing passed on */
-        if (grabbed) {
-            /* a lone PASS rides on this event's own SYN (zero-change passthrough); when several
+        if (grabbed || (passthrough && nmapped > 0)) {
+            /* in passthrough Android already saw the key itself: PASS outputs go nowhere (no clone), actions run.
+             * a lone PASS rides on this event's own SYN (zero-change passthrough); when several
              * outputs come at once (flush / late deadline) each PASS gets its own SYN */
             int n = lyr_on_key(L, c, ev->value, now_ms(), outs, NOUT);
             run_outs(n, n > 1);
@@ -401,7 +537,7 @@ static void handle(struct input_event *ev) {
 static void device_lost(const char *why) {
     alog("%s", why);
     release_all();
-    close(rfd); rfd = -1; grabbed = 0;
+    close(rfd); rfd = -1; grabbed = 0; passthrough = 0;
 }
 
 /* pid in PID_PATH if it names a live process whose comm is exactly "remapd" (and isn't us), else 0 */
@@ -424,7 +560,7 @@ static int other_instance(void) {
 
 int main(int argc, char **argv) {
     conf_path = argc > 1 ? argv[1] : DEF_CONF;
-    if (argc > 2 && argv[2][0]) grab_name = argv[2];
+    if (argc > 2 && argv[2][0]) { grab_name = argv[2]; strict_name = 1; }
     if (argc > 3 && argv[3][0]) pid_path = argv[3];
     int other = other_instance();   /* before grabbing anything: only one process may own the remote */
     if (other) { alog("remapd already running pid %d", other); return 0; }
@@ -452,13 +588,30 @@ int main(int argc, char **argv) {
             }
             grabbed = 0;
             if (ufd < 0) ufd = make_uinput(rfd);
-            if (ufd < 0) { close(rfd); rfd = -1; sleep(5); continue; }
+            /* No virtual remote on this system: keep going without the grab. Buttons then do their normal job AND
+             * their Stickman action (better than nothing working); the Status page says so. Expected on Fire OS
+             * 5-7: AOSP only opens /dev/uinput to the shell user from Android 10 (ueventd "0660 uhid uhid"); before
+             * that it is system:net_bt_stack / system:bluetooth. (Android 9 does open /dev/uhid to shell: a HID
+             * clone there would give full remapping on Fire OS 7. Not done yet.) */
+            if (ufd < 0 && ifd < 0) make_injector(rfd);   /* Fire OS 5-7: replay keys through InputManager instead */
+            passthrough = ufd < 0 && ifd < 0;
+            if (passthrough) set_state("passthrough %s: %s", remote_name, strerror(uinput_err));
+            else set_state(ufd >= 0 ? "ok %s" : "inject %s", remote_name);
+        }
+        if (ifd >= 0 && (inj_lost || kill(ipid, 0) < 0)) {
+            /* never hold the remote with nothing to replay its keys: let go and fall back to listen-only */
+            alog("key injector gone: remote released");
+            if (grabbed) { ioctl(rfd, EVIOCGRAB, 0); grabbed = 0; }
+            injector_stop();
+            passthrough = 1;
+            set_state("passthrough %s: key injector stopped", remote_name);
         }
         set_grab(nmapped > 0 || listening);
 
         /* timeout: nearest layer deadline / panic deadline, else 1 s (to notice config changes) */
         int timeout = 1000; long long t = now_ms();
-        long long dl = grabbed ? lyr_next_deadline(L) : -1;
+        int active = grabbed || (passthrough && nmapped > 0);
+        long long dl = active ? lyr_next_deadline(L) : -1;
         if (dl >= 0) { long long left = dl - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
         if (back_down_at) { long long left = back_down_at + PANIC_MS - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
 
@@ -475,7 +628,7 @@ int main(int argc, char **argv) {
             for (int i = 0; i < n / (ssize_t)sizeof evs[0]; i++) handle(&evs[i]);
         }
         t = now_ms();
-        if (grabbed) run_outs(lyr_on_tick(L, t, outs, NOUT), 1);
+        if (active) run_outs(lyr_on_tick(L, t, outs, NOUT), 1);
         if (back_down_at && t - back_down_at >= PANIC_MS) {
             alog("BACK held 10s -> exiting, remote released");
             release_all();

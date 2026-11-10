@@ -10,6 +10,9 @@ public class EventParserTest {
         T.eq(null, EventParser.resumedPackage("11-04 20:52:09.443 689 757 I am_proc_start: [0,1234,10050,org.xbmc.kodi,activity,x]"), "unrelated");
         T.eq(null, EventParser.resumedPackage("--------- beginning of events"), "banner");
         T.eq(null, EventParser.resumedPackage(null), "null");
+        T.eq("org.xbmc.kodi", EventParser.resumedPackage("I am_set_resumed_activity: [0,org.xbmc.kodi/.Main,resumeTopActivityInnerLocked]"), "Android 8-10 tag");
+        T.eq("com.netflix.ninja", EventParser.resumedPackage("I am_focused_activity: [0,com.netflix.ninja/.MainActivity,appDiedLocked]"), "Android 7 tag");
+        T.eq("com.netflix.ninja", EventParser.resumedPackage("I am_focused_activity: [0,com.netflix.ninja/.MainActivity]"), "Android 5 tag, no reason");
         T.eq(null, EventParser.resumedPackage("I wm_set_resumed_activity: [0,garbage]"), "no slash");
     }
     public void testSelectProfile() {

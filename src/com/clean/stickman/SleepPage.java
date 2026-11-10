@@ -154,7 +154,7 @@ public class SleepPage extends ApplyPage {
     @Override String describe(String kind, String out) {
         if (kind.equals("live")) { showLive(out); return null; }
         if (kind.equals("conf")) return Store.pid(out, "STICKD") != null ? "Saved ✓" : "Saved, but the background automation isn't running: check Status.";
-        if (kind.equals("screenoff")) return "Screen off sent. Press any button to bring it back.";
+        if (kind.equals("screenoff")) return null;  // the black screen is the answer; a message would only show after it
         int c = kind.indexOf(':');
         String k = kind.substring(0, c);
         int i = Integer.parseInt(kind.substring(c + 1));

@@ -77,7 +77,8 @@ public final class EnsureScript {
         s.append(writeConf("stickd.conf", stickdConf));
         // 4. self-grants: logcat for the UI, overlay for the sleep fade
         s.append("pm grant " + PKG + " android.permission.READ_LOGS 2>/dev/null; ");
-        s.append("cmd appops set " + PKG + " SYSTEM_ALERT_WINDOW allow 2>/dev/null; ");
+        // "cmd appops" is Android 7+; the standalone appops command covers older systems
+        s.append("cmd appops set " + PKG + " SYSTEM_ALERT_WINDOW allow 2>/dev/null || appops set " + PKG + " SYSTEM_ALERT_WINDOW allow 2>/dev/null; ");
         // 4b. Doze is reset by every reboot: re-apply it when the owner turned it on
         s.append(Lean.ENSURE_LINE);
         // 5. migration from KeyShift: stop its remapd first (only one process may grab the remote)
@@ -112,6 +113,8 @@ public final class EnsureScript {
         s.append("i=0; while [ $i -lt 40 ] && ! alive stickd; do sleep 0.1; i=$((i+1)); done; fi; ");
         // 10. report
         s.append("R=-; alive remapd && R=$P; S=-; alive stickd && S=$P; echo REMAPD $R STICKD $S");
+        // 11. what remapd made of the remote (found / limited / not found), for the Status page
+        s.append("; " + RemoteState.REPORT);
         return s.toString();
     }
 

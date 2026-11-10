@@ -103,4 +103,12 @@ public final class Commands {
         return "d=" + Spool.DIR + "; mkdir -p $d; t=$(date +%s%N); t=${t%??????}; n=$d/$t-$$-$RANDOM; "
             + "echo " + Originals.q(line) + " > $n.tmp && mv $n.tmp $n.act";
     }
+
+    /**
+     * Media key to the active session. {@code cmd media_session dispatch} is Android 11+; older systems (Fire OS 5-7) have
+     * the standalone {@code media} command with the same verbs.
+     */
+    public static String media(String verb) {
+        return "cmd media_session dispatch " + verb + " 2>/dev/null || media dispatch " + verb;
+    }
 }

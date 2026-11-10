@@ -10,6 +10,8 @@ A no-root power remote and stick manager for Amazon Fire TV.
 
 Tested on a Fire TV Stick 4K Max (Fire OS 8).
 
+**Fire OS 6 and 7 (older sticks): compatibility mode, work in progress.** These versions do not let an app create a virtual remote, so from 1.9.2 Stickman replays the buttons itself instead (the Status page shows "compatibility mode"). 1.9.2 should fix most of what was reported there: button shortcuts, remaps, the sleep timer and the other actions now run. This was tested on a plain Android 7.1 emulator, not on real Fire OS 6/7 hardware, so Amazon-specific behaviour is unverified. If you have one of these sticks, reports are very welcome.
+
 ## Screenshots
 
 | Remote | Tasks |

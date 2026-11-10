@@ -14,7 +14,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
@@ -181,11 +180,21 @@ public final class Stickd {
     }
 
     // ---- thread A: foreground tracking ----
+    /**
+     * Shell: kill logcat followers a previous stickd left behind. stickd is stopped with SIGTERM (no shutdown hook
+     * under app_process), so its children are re-parented to init and only die at their next write.
+     */
+    static final String REAP_FOLLOWERS =
+        "for P in $(pidof logcat); do [ \"$(awk '{print $4}' /proc/$P/stat 2>/dev/null)\" = 1 ] "
+        + "&& grep -qE 'set_resumed_activity|RemapD:I' /proc/$P/cmdline 2>/dev/null && kill $P; done; true";
+
     private void followForeground() {
+        Sh.run(REAP_FOLLOWERS);
         while (true) {
             Process p = null;
             try {
-                p = new ProcessBuilder("/system/bin/logcat", "-b", "events", "-T", "1", "-s", "wm_set_resumed_activity")
+                p = new ProcessBuilder("/system/bin/logcat", "-b", "events", "-T", "1", "-s",
+                    EventParser.RESUMED_TAGS[0], EventParser.RESUMED_TAGS[1], EventParser.RESUMED_TAGS[2])
                     .redirectErrorStream(true).start();
                 p.getOutputStream().close();
                 BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
@@ -287,7 +296,6 @@ public final class Stickd {
     }
 
     private void registerCore() {
-        register(Actions.SCREEN_OFF, a -> Sh.run("am start -a com.amazon.tv.settings.action.SHOW_BLACK_CURTAIN"));
         register(Actions.SCREENSAVER_TOGGLE, a -> {
             boolean on = !"0".equals(Sh.run("settings get secure screensaver_enabled").trim());
             Sh.run(Commands.screensaver(!on));
@@ -299,9 +307,9 @@ public final class Stickd {
             Sh.run("mkdir -p /sdcard/Pictures/Stickman && screencap -p " + path);
             Sh.log("screenshot " + path);
         });
-        register(Actions.PLAY_PAUSE, a -> Sh.run("cmd media_session dispatch play-pause"));
-        register(Actions.NEXT, a -> Sh.run("cmd media_session dispatch next"));
-        register(Actions.PREVIOUS, a -> Sh.run("cmd media_session dispatch previous"));
+        register(Actions.PLAY_PAUSE, a -> Sh.run(Commands.media("play-pause")));
+        register(Actions.NEXT, a -> Sh.run(Commands.media("next")));
+        register(Actions.PREVIOUS, a -> Sh.run(Commands.media("previous")));
         register(Actions.KILL_CURRENT, a -> {
             String pkg = fgPkg;
             if (KillPolicy.isNeverKill(pkg)) {
@@ -325,8 +333,13 @@ public final class Stickd {
 
     // ---- file helpers ----
     static String read(File f) {
-        try { return new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8); }
-        catch (Exception e) { return ""; }
+        // java.nio.file is Android 8+; plain streams work back to Fire OS 5
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096]; int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        } catch (Exception e) { return ""; }
     }
 
     static void writeAtomic(File f, String text) throws Exception {

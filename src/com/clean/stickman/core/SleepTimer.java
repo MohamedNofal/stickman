@@ -8,6 +8,9 @@ public final class SleepTimer {
     public static final int MAX_MIN = 24 * 60;
     public static final String FADE_START = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.FADE_START --ei seconds ";
     public static final String FADE_END = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.FADE_END";
+    /** Screen off: opaque black overlay until any button (FADE_END clears it as well). */
+    public static final String CURTAIN_ON = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.CURTAIN_ON";
+    public static final String CURTAIN_KEY = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.CURTAIN_KEY";
 
     /** Cycles 0->15->30->60->90->0; any other value goes to 15. */
     public static int next(int currentMin) {

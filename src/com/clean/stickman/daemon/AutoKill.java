@@ -125,7 +125,7 @@ final class AutoKill {
     private void autoKill() {
         try {
             List<String> killed = killCandidates();
-            Sh.log("STATUS autokill killed=" + String.join(",", killed));
+            Sh.log("STATUS autokill killed=" + Sh.join(",", killed));
         } catch (Throwable t) {
             Sh.log("autokill error: " + t);
         }
@@ -136,7 +136,7 @@ final class AutoKill {
         try {
             List<String> killed;
             synchronized (killLock) { killed = killCandidatesLocked(true); }
-            Sh.log("STATUS autokill killed=" + String.join(",", killed));
+            Sh.log("STATUS autokill killed=" + Sh.join(",", killed));
         } catch (Throwable t) {
             Sh.log("autokill error: " + t);
         }
@@ -153,7 +153,7 @@ final class AutoKill {
         try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
         long after = memAvailableKb();
         long freed = (before < 0 || after < 0) ? 0 : Math.max(0, (after - before) / 1024);
-        Sh.log("killed: " + String.join(",", killed));
+        Sh.log("killed: " + Sh.join(",", killed));
         Sh.log("STATUS boost freed_mb=" + freed + " killed=" + killed.size());
     }
 
