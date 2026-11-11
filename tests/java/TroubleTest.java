@@ -65,4 +65,19 @@ public class TroubleTest {
         T.yes(!Trouble.askUser("FAIL bad adb length 99", true), "unknown: never a dialog");
         T.yes(!Trouble.askUser("", true), "empty: nothing to ask");
     }
+
+    public void testVpnTaken() {
+        String r = "FAIL " + Trouble.TAKEN_REASON;
+        T.eq(Trouble.VPN_TAKEN, Trouble.kind(r), "vpn taken");
+        T.eq(true, Trouble.askUser(r, false), "always explained");
+        T.eq(true, Trouble.advice(r).contains("ADB debugging is fine"), "not blamed on ADB");
+        T.eq(true, Trouble.shortText(r).length() <= 30, "short line fits");
+    }
+
+    /** Background "not sent" can't know whether the helpers run: it must not promise the buttons work. */
+    public void testOtherVpnAdviceHonestWhenNotStarted() {
+        String a = Trouble.advice("FAIL vpn_busy");
+        T.yes(a.contains("once it is running"), "conditional");
+        T.yes(!a.contains("Your remapped buttons keep working"), "no unconditional promise");
+    }
 }

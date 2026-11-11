@@ -10,7 +10,9 @@ A no-root power remote and stick manager for Amazon Fire TV.
 
 Tested on a Fire TV Stick 4K Max (Fire OS 8).
 
-**Fire OS 6 and 7 (older sticks): compatibility mode, work in progress.** These versions do not let an app create a virtual remote, so from 1.9.2 Stickman replays the buttons itself instead (the Status page shows "compatibility mode"). 1.9.2 should fix most of what was reported there: button shortcuts, remaps, the sleep timer and the other actions now run. This was tested on a plain Android 7.1 emulator, not on real Fire OS 6/7 hardware, so Amazon-specific behaviour is unverified. If you have one of these sticks, reports are very welcome.
+**Fire OS 5, 6 and 7 (older sticks): compatibility mode, work in progress.** These versions do not let an app create a virtual remote, so Stickman replays the buttons itself instead (the Status page shows "compatibility mode"). 1.9.3 fixes the setup on Fire OS 5 and 6, which could not start at all in 1.9.2. This was tested on a plain Android 7.1 emulator, not on real Fire OS 5/6/7 hardware, so Amazon-specific behaviour is unverified. If you have one of these sticks, reports are very welcome.
+
+**Using a VPN app too?** Your remapped buttons keep working with another VPN connected. Stickman only needs its own VPN for a few seconds to start after the stick turns on, or to send a change, and asks before it disconnects yours.
 
 ## Screenshots
 
@@ -23,6 +25,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
 ## Features
 
 - **Remote**: press, double press and hold, different buttons inside one app, presets for every Fire TV remote, and learning for unknown buttons. Any button can open an app, act as another key, or run an action: Boost, sleep timer, screen off, screenshot, media controls, close the current app.
+- **Mouse pointer**: arrows move a pointer, OK clicks, Rewind / Fast-forward scroll, Back leaves. Switch it on from the Remote page or put it on a button. On Fire OS 7 and 8 it is Android's own pointer; on Fire OS 5 and 6 Stickman draws it and taps for it.
 - **Tasks**: a live map of running apps sized by RAM, with End, Always kill and Protect.
 - **Speed**:
   - Boost and auto-close.

@@ -435,7 +435,7 @@ public class TasksPage extends ApplyPage {
             String head, why;
             int color = Theme.MUTED;
             if (!Store.enabled(a)) { head = "Stickman is OFF"; why = "Stickman is OFF: turn it on in Settings to see what's running."; }
-            else if (Bridge.otherVpnActive(a)) { head = "VPN active — not sampling"; why = "Another VPN is on, so Stickman isn't watching the stick."; }
+            else if (Bridge.otherVpnActive(a)) { head = "VPN active — not sampling"; why = com.clean.stickman.core.VpnText.cantRead(Store.remapRunning(a)); }
             else if (now - staleSince > NO_DATA_MS) { head = "NO DATA"; why = NO_DATA_HINT; color = Theme.ACCENT; }
             else { head = "waiting…"; why = "Waiting for the first sample (about 2 s)…"; }
             liveText.setText(head);

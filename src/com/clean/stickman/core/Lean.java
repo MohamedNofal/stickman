@@ -113,7 +113,7 @@ public final class Lean {
     }
 
     public static String dozeOn() {
-        return "mkdir -p " + Originals.DIR + "; echo " + java.util.Base64.getEncoder().encodeToString(dozeScript().getBytes())
+        return "mkdir -p " + Originals.DIR + "; echo " + B64.encode(dozeScript())
             + " | base64 -d > " + DOZE_FILE + " && sh " + DOZE_FILE + "; " + READ;
     }
 
@@ -189,7 +189,7 @@ public final class Lean {
     /** Runs script detached; every line it prints becomes "STATUS <tag> <line>" in logcat; prints started. */
     static String detached(String script, String file, String tag, String started) {
         String f = Originals.DIR + "/" + file;
-        return "mkdir -p " + Originals.DIR + "; echo " + java.util.Base64.getEncoder().encodeToString(script.getBytes())
+        return "mkdir -p " + Originals.DIR + "; echo " + B64.encode(script)
             + " | base64 -d > " + f + " && setsid nohup sh -c 'sh " + f
             + " | while read l; do log -t Stickd -p i \"STATUS " + tag + " $l\"; done' </dev/null >/dev/null 2>&1 & echo " + started;
     }

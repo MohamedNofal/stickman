@@ -307,6 +307,9 @@ public final class Stickd {
             Sh.run("mkdir -p /sdcard/Pictures/Stickman && screencap -p " + path);
             Sh.log("screenshot " + path);
         });
+        // remapd owns the remote and the pointer; a button rule reaches it directly, the app's own switch comes this way
+        register(Actions.MOUSE_TOGGLE, a -> Sh.run("echo toggle > " + com.clean.stickman.core.EnsureScript.DIR + "/mouse.cmd.tmp && mv "
+            + com.clean.stickman.core.EnsureScript.DIR + "/mouse.cmd.tmp " + com.clean.stickman.core.EnsureScript.DIR + "/mouse.cmd"));
         register(Actions.PLAY_PAUSE, a -> Sh.run(Commands.media("play-pause")));
         register(Actions.NEXT, a -> Sh.run(Commands.media("next")));
         register(Actions.PREVIOUS, a -> Sh.run(Commands.media("previous")));

@@ -22,4 +22,12 @@ public class RemoteStateTest {
         T.yes(d.contains("not found yet") && d.contains("gpio-keys, cec_input"), "lists devices");
         T.yes(!RemoteState.describe("REMOTE notfound -").contains("seen"), "no list");
     }
+
+    /** While the injector starts, the report must not claim remapping can't work on this Fire OS. */
+    public void testStartingIsNotLimited() {
+        String d = com.clean.stickman.core.RemoteState.describe("REMAPD 1 STICKD 2\nREMOTE starting qwerty2");
+        T.yes(d.contains("qwerty2"), "names the remote");
+        T.yes(d.contains("starting"), "says it is starting");
+        T.yes(!d.contains("limited") && !d.contains("does not let"), "not the limited text");
+    }
 }

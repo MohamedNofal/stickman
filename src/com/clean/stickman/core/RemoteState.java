@@ -2,7 +2,8 @@ package com.clean.stickman.core;
 
 /**
  * remapd's view of the remote, from the "REMOTE <state>" line of the ensure report (remapd writes the state to
- * remote.state): {@code ok <name>}, {@code inject <name>} (keys replayed by the injector), {@code passthrough <name>: <why>}, {@code notfound <name|name|...>}.
+ * remote.state): {@code ok <name>}, {@code inject <name>} (keys replayed by the injector), {@code starting <name>}
+ * (the injector is still starting), {@code passthrough <name>: <why>}, {@code notfound <name|name|...>}.
  * Fire OS 8 always gives "ok Amazon Fire TV Remote"; the other states are what older Fire OS versions and
  * unknown remotes run into, and the Status page has to say so in plain words.
  */
@@ -30,6 +31,9 @@ public final class RemoteState {
         if (s.startsWith("inject "))
             return "Remote:  " + s.substring(7) + " ✓ (compatibility mode)\n"
                 + "This Fire OS version has no virtual remote for apps, so Stickman replays the buttons itself.";
+        if (s.startsWith("starting "))
+            return "Remote:  " + s.substring(9) + " (starting compatibility mode…)\n"
+                + "Stickman is starting the part that replays your buttons. Press Refresh in a few seconds.";
         if (s.startsWith("passthrough ")) {
             String rest = s.substring(12);
             int c = rest.lastIndexOf(": ");

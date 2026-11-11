@@ -19,14 +19,17 @@ public class BridgeWorker implements Runnable {
         Bridge.busy = true;
         ParcelFileDescriptor tun = null;
         TunReader reader = null;
+        Thread rt = null;
         MiniTcp tcp = null;
         String result = "";
         try {
             tun = svc.establishTun();
             if (tun == null) throw new Exception("VPN not allowed: open Stickman and accept its VPN request");
             tcp = new MiniTcp(new FileInputStream(tun.getFileDescriptor()), new FileOutputStream(tun.getFileDescriptor()), 5555);
-            reader = new TunReader(tcp);
-            Thread rt = new Thread(reader, "tunreader"); rt.setDaemon(true); rt.start();
+            BridgeService.activeTcp = tcp;
+            if (BridgeService.revoked) tcp.abort();   // revoked between establish and here
+            reader = new TunReader(tcp, tun.getFileDescriptor());
+            rt = new Thread(reader, "tunreader"); rt.setDaemon(true); rt.start();
             tcp.connect();
             AdbClient adb = new AdbClient(tcp);
             adb.connect(AdbKey.loadOrCreate(svc.getFilesDir()), 90000);
@@ -37,7 +40,8 @@ public class BridgeWorker implements Runnable {
                 String orig = cmd;
                 if (cmd.equals(Ensure.MARKER)) cmd = Ensure.cmd(svc);
                 try {
-                    result = adb.exec(cmd, 20000).trim();
+                    // the ensure script starts both daemons and runs several pm/am calls: right after boot 20 s is not enough
+                    result = adb.exec(cmd, orig.equals(Ensure.MARKER) ? 60000 : 20000).trim();
                 } catch (Throwable e) {
                     Bridge.notifyResult(orig, String.valueOf(e.getMessage()), false);
                     throw e;
@@ -52,20 +56,30 @@ public class BridgeWorker implements Runnable {
             }
             result = "OK " + result;
         } catch (Throwable e) {
-            result = "FAIL " + e.getMessage();
+            result = "FAIL " + (BridgeService.revoked ? com.clean.stickman.core.Trouble.TAKEN_REASON : e.getMessage());
             synchronized (Bridge.lock) { Bridge.queue.clear(); }   // don't retry forever
             Log.e(TAG, "bridge failed", e);
         } finally {
+            BridgeService.activeTcp = null;
             if (tcp != null) tcp.close();
             if (reader != null) reader.stop = true;
+            // the reader polls with a timeout: let it leave read() first, or the tun interface outlives the close
+            // (once our VPN is revoked nothing ever arrives, and every failed run left one more tunN behind)
+            if (rt != null) try { rt.join(1000); } catch (InterruptedException ignored) {}
             try { if (tun != null) tun.close(); } catch (Exception ignored) {}
         }
         Bridge.lastResult = result;
         Bridge.lastResultAt = System.currentTimeMillis();
         Bridge.busy = false;
         Log.i(TAG, "done: " + result);
+        BootJob.retrySoon(svc);   // no-op once both daemons have been up this boot
         svc.finished();
-        if (Bridge.hasPending()) {
+        if (Bridge.hasPending() && Bridge.otherVpnActive(svc)) {
+            // another VPN (re)connected meanwhile: queued work must not displace it without the user's Continue
+            synchronized (Bridge.lock) { Bridge.queue.clear(); }
+            Bridge.lastResult = Bridge.VPN_BUSY;
+            Bridge.lastResultAt = System.currentTimeMillis();
+        } else if (Bridge.hasPending()) {
             android.content.Intent i = new android.content.Intent(svc, BridgeService.class);
             if (android.os.Build.VERSION.SDK_INT >= 26) svc.startForegroundService(i); else svc.startService(i);
         }

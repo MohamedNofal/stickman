@@ -4,6 +4,12 @@ package com.clean.stickman.core;
 public final class Commands {
     private Commands() {}
 
+    /** Pointer mode on / off: remapd reads and removes the command file (written atomically). */
+    public static String pointer(boolean on) {
+        String f = EnsureScript.DIR + "/mouse.cmd";
+        return "echo " + (on ? "on" : "off") + " > " + f + ".tmp && mv " + f + ".tmp " + f;
+    }
+
 
     public static String screensaver(boolean on) {
         return Originals.setting("secure", "screensaver_enabled", on ? "1" : "0");

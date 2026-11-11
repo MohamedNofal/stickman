@@ -69,7 +69,7 @@ public final class AmazonUninstall {
             if (p.length != 4 || !p[0].equals("UPD") || !Originals.validPkg(p[1]) || !p[2].matches("\\d{1,12}") || !p[3].matches("[01]")) continue;
             r.add(new Update(p[1], Long.parseLong(p[2]), p[3].equals("1")));
         }
-        r.sort((x, y) -> Long.compare(y.kb, x.kb));
+        java.util.Collections.sort(r, (x, y) -> Long.compare(y.kb, x.kb));   // List.sort is API 24
         return r;
     }
 

@@ -43,7 +43,8 @@ public class Bridge {
 
     /** True if some VPN other than ours is up (we would displace it by establishing ours). */
     public static boolean otherVpnActive(Context c) {
-        if (BridgeService.running) return false;
+        // while our bridge runs, the VPN network is ours, unless Android already revoked it for another app
+        if (BridgeService.running && !BridgeService.revoked) return false;
         try {
             ConnectivityManager cm = (ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
             if (cm == null) return false;

@@ -17,6 +17,8 @@ public class BootReceiver extends BroadcastReceiver {
         Log.i("Stickman", "boot broadcast: " + a);
         if (!com.clean.stickman.core.BootActions.accepted(a)) return;
         BootJob.schedule(c);
+        // an update replaced the APK the daemons run from: a failed re-ensure must be retried like a failed boot start
+        if (com.clean.stickman.core.BootActions.MY_PACKAGE_REPLACED.equals(a)) Store.clearEnsured(c);
         if (Store.enabled(c) && com.clean.stickman.core.BootActions.shouldEnsure(a, Store.ensuredThisBoot(c)))
             Bridge.run(c.getApplicationContext(), Ensure.MARKER, true);
     }

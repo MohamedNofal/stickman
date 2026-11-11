@@ -37,7 +37,6 @@ public class MainActivity extends Activity implements Bridge.Listener {
         for (String x : ALL_SECTIONS) if (!com.clean.stickman.core.Edition.hidden(x)) l.add(x);
         return l.toArray(new String[0]);
     }
-    static final String VPN_WARNING = "A VPN (e.g. NordVPN) is connected. Applying will disconnect it. Continue?";
 
     final Page[] pages = new Page[SECTIONS.length];
     final View[] views = new View[SECTIONS.length];
@@ -58,12 +57,22 @@ public class MainActivity extends Activity implements Bridge.Listener {
     long createdAt;
     /** That dialog is shown once per activity (again after the user went to fix it in Developer options). */
     boolean troubleShown;
+    /**
+     * lastResultAt of the failure the trouble dialog last explained. ThemedDialogs live inside this window, so
+     * hasWindowFocus() stays true while one is up: without this, Try again (which re-arms troubleShown) brought the
+     * same dialog straight back on top of the "Disconnect your VPN?" question, and a second Try again stacked a second
+     * question. Each failure is explained once; a new failure (newer lastResultAt) is explained again.
+     */
+    long troubleFor;
+    /** The user turned down the VPN request ("Not now"): don't retry on every return to the app. */
+    boolean vpnDeclined;
     /** The update question / what's-new note was considered for this activity (once). */
     boolean updateChecked;
     /** The stickd update status already looked at (LogTail.statusAt), so each report is considered once. */
     long updateStatusSeen = -1;
     /** The user left for Developer options from the dialog: re-check when they come back. */
     boolean retryOnResume;
+    private boolean resumedBefore;
 
     Page makePage(int i) {
         switch (SECTIONS[i]) {
@@ -85,7 +94,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         super.onCreate(b);
         createdAt = System.currentTimeMillis();
         FadeOverlay.stop();   // clear a sleep-fade overlay left behind
-        hadLogs = checkSelfPermission(android.Manifest.permission.READ_LOGS) == PackageManager.PERMISSION_GRANTED;
+        hadLogs = Store.granted(this, android.Manifest.permission.READ_LOGS);
         BootJob.schedule(this);
 
         LinearLayout root = Theme.row(this);
@@ -132,6 +141,10 @@ public class MainActivity extends Activity implements Bridge.Listener {
         nav[0].requestFocus();
 
         Bridge.setListener(this);
+        // VpnService.prepare() is not a harmless check: once the owner has allowed our VPN, it makes us the prepared
+        // VPN app and Android disconnects any other VPN on the spot. So with another VPN up, just opening Stickman cut
+        // the user's VPN. Leave it alone here; the bridge prepares when the user chooses Continue on a change.
+        if (Bridge.otherVpnActive(this)) { vpnPaused = true; updateStatusLine(); return; }
         Intent consent = VpnService.prepare(this);
         if (consent != null) startActivityForResult(consent, 1);
         else ensureOnOpen();
@@ -140,17 +153,34 @@ public class MainActivity extends Activity implements Bridge.Listener {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         if (req != 1) return;
-        if (res == RESULT_OK) { ensureOnOpen(); return; }
+        if (res == RESULT_OK) { vpnDeclined = false; ensureOnOpen(); return; }
+        vpnDeclined = true;
         // declined: nothing works without it, so say why and ask again (the system dialog is the only way in)
         new ThemedDialog(this).title("Stickman needs the VPN permission")
             .message("Stickman talks to your Fire TV's own debugging service through a tiny private VPN that only "
                 + "carries its own commands. Your normal internet traffic never goes through it.\n\nWithout it, "
                 + "Stickman can't remap buttons or change anything.")
-            .button("Ask again", () -> {
-                Intent c = VpnService.prepare(this);
-                if (c != null) startActivityForResult(c, 1); else ensureOnOpen();
-            })
+            .button("Ask again", this::requestVpnPermission)
             .cancel("Not now").focusButton(0).show();
+    }
+
+    /**
+     * User asked for the VPN permission. prepare() switches the VPN to us once allowed, so with another VPN up this
+     * asks the same question as any change first.
+     */
+    void requestVpnPermission() {
+        Runnable go = () -> {
+            vpnDeclined = false;
+            Intent c = VpnService.prepare(this);
+            if (c != null) startActivityForResult(c, 1); else ensureOnOpen();
+        };
+        if (Bridge.otherVpnActive(this)) {
+            boolean up = Store.remapRunning(this);
+            ThemedDialog.confirm(this, com.clean.stickman.core.VpnText.confirmTitle(up),
+                com.clean.stickman.core.VpnText.confirmMessage(up), "Continue", go);
+        } else {
+            go.run();
+        }
     }
 
     /** Not user-initiated: with another VPN up, skip silently (status line says paused); no dialog on every open. */
@@ -168,6 +198,14 @@ public class MainActivity extends Activity implements Bridge.Listener {
         tail = new LogTail();
         new Thread(tail, "logtail").start();
         if (current >= 0) pages[current].onShow();
+        // Coming back to an activity that was only left with Home: onCreate does not run, so check the daemons here
+        // too (the status line tells the user "reopen Stickman to restart"). Not right after onCreate's own ensure.
+        if (resumedBefore && !retryOnResume && !vpnDeclined && !Bridge.busy
+                && System.currentTimeMillis() - Store.lastEnsureAt(this) > 30_000L) {
+            vpnPaused = false;
+            ensureOnOpen();
+        }
+        resumedBefore = true;
         if (retryOnResume) {
             // back from Developer options: check again, and say again what's wrong if it still fails
             retryOnResume = false;
@@ -410,7 +448,9 @@ public class MainActivity extends Activity implements Bridge.Listener {
             for (String c : cmds) if (c != null) Bridge.run(this, c, false);
         };
         if (Bridge.otherVpnActive(this)) {
-            ThemedDialog.confirm(this, "VPN connected", VPN_WARNING, "Continue", go);
+            boolean up = Store.remapRunning(this);
+            ThemedDialog.confirm(this, com.clean.stickman.core.VpnText.confirmTitle(up),
+                com.clean.stickman.core.VpnText.confirmMessage(up), "Continue", go);
         } else {
             go.run();
         }
@@ -426,7 +466,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         // READ_LOGS is granted (by the shell, during the first ensure) while we're running, but it only takes
         // effect in a fresh process -> restart ourselves once so the live displays work.
         if (!hadLogs && !Bridge.busy
-                && checkSelfPermission(android.Manifest.permission.READ_LOGS) == PackageManager.PERMISSION_GRANTED) {
+                && Store.granted(this, android.Manifest.permission.READ_LOGS)) {
             startActivity(new Intent(this, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
             android.os.Process.killProcess(android.os.Process.myPid());
@@ -459,7 +499,11 @@ public class MainActivity extends Activity implements Bridge.Listener {
         int color = Theme.MUTED;
         if (Bridge.busy) s = Store.lastEnsure(this).isEmpty()
             ? "Connecting…\nIf the TV asks “Allow USB debugging?”, tick Always allow." : "Working…";
-        else if (vpnPaused && Store.enabled(this)) { s = "Paused: another VPN is on"; color = Theme.ACCENT; }
+        else if (vpnPaused && Store.enabled(this)) {
+            boolean up = Store.remapRunning(this);
+            s = com.clean.stickman.core.VpnText.statusLine(up);
+            color = up ? Theme.MUTED : Theme.ACCENT;
+        }
         else if (r.startsWith("FAIL")) { s = Trouble.shortText(r); color = Theme.ACCENT; }
         else if (!Store.enabled(this)) s = "Stickman is OFF: remote works normally";
         else if (LogTail.remoteReleased()) { s = "Remote released (Back held 10 s): reopen Stickman to restart"; color = Theme.ACCENT; }
@@ -478,10 +522,12 @@ public class MainActivity extends Activity implements Bridge.Listener {
      */
     void maybeShowTrouble() {
         if (troubleShown || Bridge.busy || isFinishing() || !hasWindowFocus()) return;
+        if (Bridge.lastResultAt == troubleFor) return;
         String r = Bridge.lastResult;
         if (!r.startsWith("FAIL") || Bridge.lastResultAt < createdAt) return;
         if (!Trouble.askUser(r, Store.lastEnsure(this).isEmpty())) return;
         troubleShown = true;
+        troubleFor = Bridge.lastResultAt;
         showTrouble(r);
     }
 
@@ -490,10 +536,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         ThemedDialog d = new ThemedDialog(this).title(Trouble.title(r)).message(Trouble.advice(r));
         if (k == Trouble.ADB_OFF) d.button("Developer options", this::openDeveloperOptions);
         if (k == Trouble.VPN) {
-            d.button("Allow the VPN", () -> {
-                Intent c = VpnService.prepare(this);
-                if (c != null) startActivityForResult(c, 1); else ensureOnOpen();
-            });
+            d.button("Allow the VPN", this::requestVpnPermission);
         } else {
             d.button("Try again", () -> { troubleShown = false; run(null, Ensure.MARKER); });
         }

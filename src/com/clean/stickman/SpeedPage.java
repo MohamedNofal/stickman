@@ -318,7 +318,7 @@ public class SpeedPage extends ApplyPage {
             .button("Save", () -> {
                 set.clear();
                 for (int i = 0; i < on.length; i++) if (on[i]) set.add(apps.get(i)[1]);
-                if (!white) set.removeIf(Catalog::isProtected);
+                if (!white) for (java.util.Iterator<String> it = set.iterator(); it.hasNext(); ) if (Catalog.isProtected(it.next())) it.remove();   // removeIf is API 24
                 if (white) c.blacklist.removeAll(set); else c.whitelist.removeAll(set);
                 save(c, (white ? "Never close ★: " : "Always kill ⚡: ") + names(set));
             })

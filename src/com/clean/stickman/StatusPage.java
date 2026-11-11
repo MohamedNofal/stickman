@@ -102,10 +102,9 @@ public class StatusPage extends Page {
     }
 
     void refresh() {
-        info.setText("Reading…");
-        refreshedAt = System.currentTimeMillis();
-        // the ensure is idempotent and refreshes the daemon pids in the same bridge session
-        a.run(null, Store.enabled(a) ? Ensure.MARKER : null, DeviceInfo.CMD);
+        // "Reading…" only once it really goes (Cancel on the other-VPN question must not leave it hanging)
+        a.run(() -> { info.setText("Reading…"); refreshedAt = System.currentTimeMillis(); },
+            Store.enabled(a) ? Ensure.MARKER : null, DeviceInfo.CMD);
     }
 
     @Override public void onShow() {
@@ -176,7 +175,14 @@ public class StatusPage extends Page {
     }
 
     @Override public void onResult(String cmd, String output, boolean ok) {
-        if (a == null || !DeviceInfo.CMD.equals(cmd)) return;
+        if (a == null) return;
+        // a later successful start (e.g. Try again in the trouble dialog) must not leave an old failure next to Refresh;
+        // reading again would take the VPN once more, so just offer it
+        if (ok && Ensure.MARKER.equals(cmd) && info.getText().toString().startsWith("Couldn't read"))
+            info.setText(Store.pid(output, "REMAPD") != null
+                ? "Stickman is running. Press Refresh to read the stick's status."
+                : "Press Refresh to read the stick's status.");
+        if (!DeviceInfo.CMD.equals(cmd)) return;
         if (!ok) { info.setText("Couldn't read: " + Trouble.shortText(output)); return; }
         DeviceInfo d = DeviceInfo.parse(output);
         info.setText("Updated " + new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date()));

@@ -163,13 +163,44 @@ final class Updater {
         return c;
     }
 
+    /**
+     * The app's bridge is a VPN that includes the shell user: every time it comes up or goes down (e.g. to deliver
+     * the very "check now" that got us here) Android cuts shell's open connections, ours to GitHub included.
+     * So a failed request is tried again a moment later, when the bridge has settled.
+     */
+    static final int TRIES = 4;
+    static final long RETRY_MS = 2500;
+
     private static String httpText(String url) {
+        for (int i = 0; i < TRIES; i++) {
+            String t = httpTextOnce(url);
+            if (t != null) return t;
+            if (i < TRIES - 1) pause();
+        }
+        return null;
+    }
+
+    private static long httpToFile(String url, File out) {
+        for (int i = 0; i < TRIES; i++) {
+            long n = httpToFileOnce(url, out);
+            if (n >= 0) return n;
+            if (i < TRIES - 1) pause();
+        }
+        return -1;
+    }
+
+    private static void pause() {
+        try { Thread.sleep(RETRY_MS); } catch (InterruptedException ignored) { }
+    }
+
+    private static String httpTextOnce(String url) {
         HttpURLConnection c = null;
         try {
             c = open(url);
             if (c.getResponseCode() != 200) return null;
             try (InputStream in = c.getInputStream()) { return new String(readAll(in), StandardCharsets.UTF_8); }
         } catch (Exception e) {
+            Sh.log("update: request failed: " + e);
             return null;
         } finally {
             if (c != null) c.disconnect();
@@ -177,7 +208,7 @@ final class Updater {
     }
 
     /** Bytes written, or -1. GitHub redirects release downloads to its object store over https. */
-    private static long httpToFile(String url, File out) {
+    private static long httpToFileOnce(String url, File out) {
         HttpURLConnection c = null;
         try {
             c = open(url);

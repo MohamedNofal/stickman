@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
+#include <linux/uhid.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -147,14 +148,20 @@ static void add_rule(int prof, const rmp_rule *r) {
     snprintf(c->action, sizeof c->action, "%s", r->action);
 }
 
+/* buttons with a "Mouse pointer" rule (any layer, any profile): pointer mode never takes them over, so the toggle
+ * can always turn the mode off again, however the mode was turned on */
+static unsigned char mouse_toggle_key[MAXKEY];
+
 static void parse_conf(void) {
     ncrules = 0; nprofs = 0; cfg_double_ms = 250; cfg_hold_ms = 600;
+    memset(mouse_toggle_key, 0, sizeof mouse_toggle_key);
     prof_index("default", 1);
     FILE *f = fopen(conf_path, "r"); if (!f) return;
     char *line = NULL; size_t cap = 0; int cur = 0;
     while (getline(&line, &cap, f) >= 0) {
         rmp_rule r;
         if (!rmp_parse_line(line, &r)) continue;
+        if (r.kind == RMP_RULE && r.code >= 0 && r.code < MAXKEY && strstr(r.action, "mouse_toggle")) mouse_toggle_key[r.code] = 1;
         if (r.kind == RMP_PROFILE) cur = prof_index(r.name, 1);
         else if (r.kind == RMP_SET) {
             if (!strcmp(r.name, "double_ms")) cfg_double_ms = r.value; else cfg_hold_ms = r.value;
@@ -206,6 +213,7 @@ static void compute_effective(void) {
 }
 
 static void release_all(void);
+static void mouse_set(int on);
 
 /* listen file present and touched within LISTEN_MAX_S -> swallow every button; on entry drop anything the clone
  * or the layer state machine still holds (e.g. the OK press that started Listen) so no key sticks or fires later */
@@ -213,7 +221,7 @@ static void check_listen(void) {
     struct stat st;
     int on = stat(LISTEN_PATH, &st) == 0 && time(NULL) - st.st_mtime < LISTEN_MAX_S;
     if (on == listening) return;
-    if (on) release_all();
+    if (on) { release_all(); mouse_set(0); }   /* a held arrow / OK must not keep moving or clicking unseen */
     listening = on;
     alog(on ? "listening: buttons swallowed" : "listening off");
 }
@@ -231,16 +239,29 @@ static void load_conf(void) {
          ncrules, nprofs, active_prof, nmapped, cfg_double_ms, cfg_hold_ms);
 }
 
+static int passthrough;         /* no virtual remote (uinput refused): buttons cannot be swallowed, actions still run */
+
 /* key injector (Fire OS 5-7: no /dev/uinput for shell): a child app_process that injects through InputManager */
 static int ifd = -1, inj_lost;
 static pid_t ipid = -1;
+/* injector still starting (app_process takes 1 s on a fast stick, 10+ s on a slow one): its stdin, its READY pipe */
+static int pend_in = -1, pend_out = -1;
+static long long pend_deadline;
+static char pend_buf[256]; static size_t pend_got;
+
+static int mouse_on;
+static int mouse_pass(int code, int value);
 
 static void emit(int type, int code, int value) {
+    /* a "Mouse pointer" button bypasses pointer mode so its rule can always run; its plain press still does the
+     * pointer's job here (OK clicks at the pointer, an arrow nudges it, Rewind/Fast-forward scroll a notch) */
+    if (mouse_on && type == EV_KEY && code >= 0 && code < MAXKEY && mouse_toggle_key[code] && mouse_pass(code, value)) return;
     if (ufd < 0) {
         /* the injector takes key down/up only and makes its own auto-repeat (the dispatcher repeats real devices only) */
         if (ifd >= 0 && type == EV_KEY && value != 2) {
             char b[32]; int n = snprintf(b, sizeof b, "%d %d\n", code, value);
-            if (write(ifd, b, n) != n && errno != EAGAIN) inj_lost = 1;
+            if (passthrough) return;   /* injector ready but not switched over yet (inj_wait): Android has the keys */
+            if (write(ifd, b, n) != n) inj_lost = 1;   /* incl. EAGAIN: a stalled injector must not eat a key-up */
         }
         return;
     }
@@ -313,6 +334,10 @@ static void act_spool(const char *arg) {
     if (rename(tmp, fin) != 0) { alog("act spool rename: %s", strerror(errno)); unlink(tmp); }
 }
 
+static int mouse_on;
+static int mouse_eat_back;           /* Back left pointer mode: swallow the rest of that press */
+static void mouse_set(int on);
+
 static const char *layer_name[3] = { "tap", "double", "hold" };
 
 static void do_action(int code, int layer) {
@@ -330,7 +355,11 @@ static void do_action(int code, int layer) {
         int k = atoi(arg);
         if (k > 0 && k < MAXKEY) tap(k);
         alog("key %d %s -> key %d", code, ln, k);
-    } else if (!strncmp(a, "act ", 4)) { act_spool(arg); alog("key %d %s -> act %s", code, ln, arg); }
+    } else if (!strcmp(a, "act mouse_toggle")) {
+        alog("key %d %s -> mouse pointer", code, ln);
+        mouse_set(!mouse_on);
+    }
+    else if (!strncmp(a, "act ", 4)) { act_spool(arg); alog("key %d %s -> act %s", code, ln, arg); }
     else if (!strcmp(a, "orig")) { tap(code); alog("key %d %s -> original", code, ln); }
     else alog("key %d %s -> disabled", code, ln);
 }
@@ -353,7 +382,6 @@ static void release_all(void) { run_outs(lyr_reset(L, outs, NOUT), 1); }
 /* ---- which device is the remote, and what state it is in (for the app's Status page) ---- */
 static char remote_name[128];   /* name of the device we opened */
 static int strict_name;         /* argv[2] given (test harness): exact name only */
-static int passthrough;         /* no virtual remote (uinput refused): buttons cannot be swallowed, actions still run */
 
 /* one line in DIR/remote.state, rewritten only when it changes: "ok <name>", "passthrough <name>: <why>",
  * "notfound <name|name|...>" */
@@ -456,14 +484,20 @@ static int make_uinput(int src) {
     return fd;
 }
 
+static int inj_wait;                 /* injector ready, switching over once no button is physically held */
+static int inj_fails;                /* consecutive failed starts / losses, for the retry backoff */
+static long long inj_retry_at;       /* when to start the injector again (0 = no retry pending) */
+
 static void injector_stop(void) {
     if (ifd >= 0) close(ifd);
+    if (pend_in >= 0) close(pend_in);
+    if (pend_out >= 0) close(pend_out);
     if (ipid > 0) kill(ipid, SIGKILL);
-    ifd = -1; ipid = -1; inj_lost = 0;
+    ifd = -1; ipid = -1; inj_lost = 0; pend_in = pend_out = -1; pend_got = 0; inj_wait = 0;
 }
 
-/* Start the injector from the installed APK (path in DIR/apk, written by the ensure script) and wait for its
- * READY line. Returns 0 when keys can be replayed through it. */
+/* Start the injector from the installed APK (path in DIR/apk, written by the ensure script). It is not waited
+ * for: until its READY line arrives (injector_poll) remapd runs listen-only, so no button is ever held back. */
 static int make_injector(int src) {
     if (getenv("REMAPD_TEST_NO_INJECT")) return -1;   /* env: dev test of passthrough */
     char apk[512] = "";
@@ -488,23 +522,251 @@ static int make_injector(int src) {
         _exit(127);
     }
     close(in[0]); close(out[1]);
-    char buf[512]; size_t got = 0; int ready = 0; long long end = now_ms() + 15000;
-    while (!ready && now_ms() < end) {
-        struct pollfd pp = { .fd = out[0], .events = POLLIN };
-        if (poll(&pp, 1, 500) <= 0) continue;
-        ssize_t n = read(out[0], buf + got, sizeof buf - 1 - got);
-        if (n <= 0) break;
-        got += n; buf[got] = 0;
-        if (strstr(buf, "READY")) ready = 1;
-        if (got > sizeof buf - 64) got = 0;
-    }
-    close(out[0]);
-    if (!ready) { alog("injector did not start"); close(in[1]); kill(p, SIGKILL); return -1; }
-    fcntl(in[1], F_SETFD, FD_CLOEXEC);
+    fcntl(in[1], F_SETFD, FD_CLOEXEC); fcntl(out[0], F_SETFD, FD_CLOEXEC);
     fcntl(in[1], F_SETFL, fcntl(in[1], F_GETFL) | O_NONBLOCK);
-    ifd = in[1]; ipid = p; inj_lost = 0;
-    alog("key injector started pid %d", p);
+    fcntl(out[0], F_SETFL, fcntl(out[0], F_GETFL) | O_NONBLOCK);
+    pend_in = in[1]; pend_out = out[0]; ipid = p; pend_got = 0; pend_deadline = now_ms() + 90000;
+    alog("key injector starting pid %d", p);
     return 0;
+}
+
+
+static int any_key_held(void) {
+    for (int c = 0; c < MAXKEY; c++) if (key_t0[c]) return 1;
+    return 0;
+}
+
+static void injector_failed(const char *why) {
+    inj_fails++;
+    inj_retry_at = inj_fails <= 5 ? now_ms() + 5000LL * inj_fails : 0;
+    alog("key injector %s (%d); %s", why, inj_fails, inj_retry_at ? "retrying soon" : "giving up until the remote reconnects");
+}
+
+/* 1 when the pending injector just became ready, -1 when it failed (stopped), 0 otherwise */
+static int injector_poll(void) {
+    if (pend_out < 0) return 0;
+    ssize_t n = read(pend_out, pend_buf + pend_got, sizeof pend_buf - 1 - pend_got);
+    if (n > 0) {
+        pend_got += n; pend_buf[pend_got] = 0;
+        if (strstr(pend_buf, "READY")) {
+            close(pend_out); pend_out = -1;
+            ifd = pend_in; pend_in = -1; inj_lost = 0;
+            alog("key injector ready");
+            return 1;
+        }
+        if (pend_got > sizeof pend_buf - 64) pend_got = 0;
+        return 0;
+    }
+    if (n == 0 || (n < 0 && errno != EAGAIN) || now_ms() > pend_deadline || kill(ipid, 0) < 0) {
+        alog("key injector did not start");
+        injector_stop();
+        return -1;
+    }
+    return 0;
+}
+
+
+/* ---- mouse pointer mode -------------------------------------------------------------------------------------
+ * A virtual mouse the d-pad drives: Android draws its own pointer for any mouse device, so no overlay is needed.
+ * Arrows move (accelerating while held), OK is the left button, Rewind / Fast-forward scroll. Every other button
+ * keeps its job, including the one that toggles the mode. The device is made through /dev/uinput (shell may open it
+ * from Android 10: Fire OS 8) or, where that is closed, /dev/uhid as a HID mouse (open to shell on Android 9:
+ * Fire OS 7). It only exists while the mode is on, so the pointer disappears when the mode is left. Needs the grab:
+ * in listen-only mode the arrows would also move the focus, so the mode is refused there. */
+#define MOUSE_UINPUT 1
+#define MOUSE_UHID 2
+#define MOUSE_DRAWN 3   /* no virtual mouse possible (Fire OS 5-7 without uhid): the injector draws and taps */
+#define MOUSE_CMD DIR_PATH "mouse.cmd"   /* "on" / "off" / "toggle", written by the app; consumed here */
+static int mfd = -1, mkind;
+static long long m_dir_at[4];            /* up, down, left, right: when the arrow went down, 0 = up */
+static long long m_last, m_wheel_at, m_wake_at;
+static int m_wheel, m_btn;
+static double m_fx, m_fy;
+
+static const unsigned char MOUSE_RD[] = {
+    0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x09, 0x01, 0xA1, 0x00, 0x05, 0x09, 0x19, 0x01, 0x29, 0x03,
+    0x15, 0x00, 0x25, 0x01, 0x95, 0x03, 0x75, 0x01, 0x81, 0x02, 0x95, 0x01, 0x75, 0x05, 0x81, 0x03,
+    0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38, 0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03,
+    0x81, 0x06, 0xC0, 0xC0 };
+
+static int mouse_open(void) {
+    /* env / marker file: dev test of the HID route on a system that has both */
+    int no_ui = getenv("REMAPD_TEST_NO_UINPUT") || getenv("REMAPD_TEST_MOUSE_UHID") || access(DIR_PATH "mouse.uhid", F_OK) == 0;
+    int fd = no_ui ? -1 : open("/dev/uinput", O_WRONLY | O_CLOEXEC | O_NONBLOCK);
+    if (fd >= 0) {
+        ioctl(fd, UI_SET_EVBIT, EV_KEY); ioctl(fd, UI_SET_EVBIT, EV_REL); ioctl(fd, UI_SET_EVBIT, EV_SYN);
+        ioctl(fd, UI_SET_KEYBIT, BTN_LEFT); ioctl(fd, UI_SET_KEYBIT, BTN_RIGHT); ioctl(fd, UI_SET_KEYBIT, BTN_MIDDLE);
+        ioctl(fd, UI_SET_RELBIT, REL_X); ioctl(fd, UI_SET_RELBIT, REL_Y); ioctl(fd, UI_SET_RELBIT, REL_WHEEL);
+        struct uinput_user_dev u; memset(&u, 0, sizeof u);
+        snprintf(u.name, sizeof u.name, "Stickman Pointer");
+        u.id.bustype = BUS_VIRTUAL; u.id.vendor = 0x1209; u.id.product = 0x5350; u.id.version = 1;
+        if (write(fd, &u, sizeof u) == sizeof u && ioctl(fd, UI_DEV_CREATE) == 0) { mkind = MOUSE_UINPUT; return fd; }
+        close(fd);
+    }
+    fd = open("/dev/uhid", O_RDWR | O_CLOEXEC | O_NONBLOCK);
+    if (fd >= 0) {
+        struct uhid_event e; memset(&e, 0, sizeof e);
+        e.type = UHID_CREATE2;
+        snprintf((char *)e.u.create2.name, sizeof e.u.create2.name, "Stickman Pointer");
+        memcpy(e.u.create2.rd_data, MOUSE_RD, sizeof MOUSE_RD);
+        e.u.create2.rd_size = sizeof MOUSE_RD;
+        e.u.create2.bus = BUS_USB; e.u.create2.vendor = 0x1209; e.u.create2.product = 0x5350; e.u.create2.version = 1;
+        if (write(fd, &e, sizeof e) == sizeof e) { mkind = MOUSE_UHID; return fd; }
+        close(fd);
+    }
+    return -1;
+}
+
+/* a "P ..." line for the injector's drawn pointer; a write failure is a lost injector like any other */
+static void mouse_drawn(const char *line) {
+    if (ifd < 0) return;
+    int n = (int)strlen(line);
+    if (write(ifd, line, n) != n) inj_lost = 1;
+}
+
+static void mouse_send(int dx, int dy, int wheel) {
+    if (mkind == MOUSE_DRAWN && mouse_on) {
+        char b[64]; snprintf(b, sizeof b, "P %d %d %d %d\n", dx, dy, wheel, m_btn ? 1 : 0);
+        mouse_drawn(b);
+        return;
+    }
+    if (mfd < 0) return;
+    if (dx > 127) dx = 127; if (dx < -127) dx = -127;
+    if (dy > 127) dy = 127; if (dy < -127) dy = -127;
+    if (mkind == MOUSE_UINPUT) {
+        struct input_event ev[5]; int n = 0; memset(ev, 0, sizeof ev);
+        ev[n].type = EV_KEY; ev[n].code = BTN_LEFT; ev[n].value = m_btn; n++;
+        if (dx) { ev[n].type = EV_REL; ev[n].code = REL_X; ev[n].value = dx; n++; }
+        if (dy) { ev[n].type = EV_REL; ev[n].code = REL_Y; ev[n].value = dy; n++; }
+        if (wheel) { ev[n].type = EV_REL; ev[n].code = REL_WHEEL; ev[n].value = wheel; n++; }
+        ev[n].type = EV_SYN; n++;
+        if (write(mfd, ev, n * sizeof ev[0]) < 0) {}
+    } else {
+        struct uhid_event e; memset(&e, 0, sizeof e);
+        e.type = UHID_INPUT2; e.u.input2.size = 4;
+        e.u.input2.data[0] = m_btn ? 1 : 0;
+        e.u.input2.data[1] = (unsigned char)(signed char)dx;
+        e.u.input2.data[2] = (unsigned char)(signed char)dy;
+        e.u.input2.data[3] = (unsigned char)(signed char)wheel;
+        if (write(mfd, &e, sizeof e) < 0) {}
+        struct uhid_event in; while (read(mfd, &in, sizeof in) > 0) {}   /* kernel -> us (start/open/close): not needed */
+    }
+}
+
+static void mouse_set(int on) {
+    on = !!on;
+    if (on == mouse_on) return;
+    if (on) {
+        if (passthrough || rfd < 0) { alog("STATUS mouse unavailable: buttons cannot be held back in listen-only mode"); return; }
+        mfd = mouse_open();
+        if (mfd < 0 && ifd >= 0 && !getenv("REMAPD_TEST_NO_DRAWN")) {
+            /* no virtual mouse for shell here (Fire OS 5-7): the injector draws the pointer and taps for it */
+            mkind = MOUSE_DRAWN;
+            mouse_drawn("P on\n");
+        } else if (mfd < 0) { alog("STATUS mouse unavailable: %s", strerror(errno)); return; }
+        memset(m_dir_at, 0, sizeof m_dir_at); m_wheel = m_btn = 0; m_fx = m_fy = 0;
+        m_wake_at = now_ms() + 500;   /* Android shows the pointer on the first movement, once the device is registered */
+        mouse_on = 1;
+        release_all();                /* an arrow or OK still held belongs to the old mode */
+        alog("STATUS mouse on (%s)", mkind == MOUSE_UINPUT ? "uinput" : mkind == MOUSE_UHID ? "uhid" : "drawn");
+    } else {
+        if (m_btn) { m_btn = 0; mouse_send(0, 0, 0); }
+        if (mkind == MOUSE_DRAWN) {
+            mouse_drawn("P off\n");
+            mouse_on = 0; mkind = 0;
+            alog("STATUS mouse off");
+            return;
+        }
+        if (mkind == MOUSE_UINPUT) ioctl(mfd, UI_DEV_DESTROY);
+        else { struct uhid_event e; memset(&e, 0, sizeof e); e.type = UHID_DESTROY; if (write(mfd, &e, sizeof e) < 0) {} }
+        close(mfd); mfd = -1; mouse_on = 0;
+        alog("STATUS mouse off");
+    }
+}
+
+/* the app's switch: a one-line command file, consumed */
+static void mouse_check_cmd(void) {
+    FILE *f = fopen(MOUSE_CMD, "r");
+    if (!f) return;
+    char w[16] = ""; if (fscanf(f, "%15s", w) != 1) w[0] = 0;
+    fclose(f); unlink(MOUSE_CMD);
+    if (!strcmp(w, "on")) mouse_set(1);
+    else if (!strcmp(w, "off")) mouse_set(0);
+    else if (!strcmp(w, "toggle")) mouse_set(!mouse_on);
+}
+
+/* 1 when the key belongs to the pointer in mouse mode (and was handled), 0 to let it through */
+static int mouse_key(int code, int value) {
+    int d = code == KEY_UP ? 0 : code == KEY_DOWN ? 1 : code == KEY_LEFT ? 2 : code == KEY_RIGHT ? 3 : -1;
+    long long t = now_ms();
+    if (d >= 0) {
+        if (value == 1) {
+            if (!m_dir_at[0] && !m_dir_at[1] && !m_dir_at[2] && !m_dir_at[3]) m_last = t;
+            m_dir_at[d] = t;
+            mouse_send(d == 2 ? -3 : d == 3 ? 3 : 0, d == 0 ? -3 : d == 1 ? 3 : 0, 0);   /* a tap is a small, exact step */
+        } else if (value == 0) m_dir_at[d] = 0;
+        return 1;
+    }
+    if (code == KEY_KPENTER || code == KEY_ENTER || code == KEY_SELECT) {   /* OK: Fire TV remotes send KPENTER */
+        if (value == 1 || value == 0) { m_btn = value; mouse_send(0, 0, 0); }
+        return 1;
+    }
+    if (code == KEY_REWIND || code == KEY_FASTFORWARD) {
+        int w = code == KEY_REWIND ? 1 : -1;
+        if (value == 1) { m_wheel = w; m_wheel_at = t + 350; mouse_send(0, 0, w); }
+        else if (value == 0 && m_wheel == w) m_wheel = 0;
+        return 1;
+    }
+    return 0;
+}
+
+/* a toggle button's plain press in pointer mode (see emit): one click / step / notch, no hold behaviour */
+static int mouse_pass(int code, int value) {
+    int d = code == KEY_UP ? 0 : code == KEY_DOWN ? 1 : code == KEY_LEFT ? 2 : code == KEY_RIGHT ? 3 : -1;
+    if (d >= 0) {
+        if (value == 1) mouse_send(d == 2 ? -12 : d == 3 ? 12 : 0, d == 0 ? -12 : d == 1 ? 12 : 0, 0);
+        return 1;
+    }
+    if (code == KEY_KPENTER || code == KEY_ENTER || code == KEY_SELECT) {
+        if (value == 1 || value == 0) { m_btn = value; mouse_send(0, 0, 0); }
+        return 1;
+    }
+    if (code == KEY_REWIND || code == KEY_FASTFORWARD) {
+        if (value == 1) mouse_send(0, 0, code == KEY_REWIND ? 1 : -1);
+        return 1;
+    }
+    return 0;
+}
+
+/* ms until the pointer needs the loop again, or -1 */
+static int mouse_timeout(void) {
+    if (!mouse_on) return -1;
+    if (m_dir_at[0] || m_dir_at[1] || m_dir_at[2] || m_dir_at[3]) return 16;
+    if (m_wheel || m_wake_at) return 40;
+    return -1;
+}
+
+static void mouse_tick(void) {
+    if (!mouse_on) return;
+    long long t = now_ms();
+    if (m_wake_at && t >= m_wake_at) { m_wake_at = 0; mouse_send(1, 0, 0); mouse_send(-1, 0, 0); }
+    if (m_wheel && t >= m_wheel_at) { m_wheel_at = t + 110; mouse_send(0, 0, m_wheel); }
+    double dt = (t - m_last) / 1000.0;
+    if (dt <= 0) return;
+    if (dt > 0.1) dt = 0.1;
+    m_last = t;
+    double vx = 0, vy = 0;
+    for (int d = 0; d < 4; d++) {
+        if (!m_dir_at[d]) continue;
+        double held = (t - m_dir_at[d]) / 1000.0;
+        if (held < 0.18) continue;                      /* the tap step above stands alone first */
+        double k = (held - 0.18) / 1.0; if (k > 1) k = 1;
+        double v = 140 + 1100 * k * k;                  /* counts per second: slow start for aiming, then fast */
+        if (d == 0) vy -= v; else if (d == 1) vy += v; else if (d == 2) vx -= v; else vx += v;
+    }
+    m_fx += vx * dt; m_fy += vy * dt;
+    int dx = (int)m_fx, dy = (int)m_fy;
+    if (dx || dy) { m_fx -= dx; m_fy -= dy; mouse_send(dx, dy, 0); }
 }
 
 static void set_grab(int on) {
@@ -522,6 +784,13 @@ static void handle(struct input_event *ev) {
         if (ev->value == 0 && key_t0[c]) { alog("UP %d after %lldms", c, now_ms() - key_t0[c]); key_t0[c] = 0; }
         if (c == PANIC_KEY) back_down_at = ev->value ? (ev->value == 1 ? now_ms() : back_down_at) : 0;
         if (listening) return;   /* logged above, nothing passed on */
+        if (mouse_on && grabbed) {
+            /* Back always leaves pointer mode (eaten, press to release), so there is a way out even when the toggle
+             * sits on a button pointer mode itself uses; the toggle's own button keeps reaching its rules */
+            if (c == PANIC_KEY && ev->value == 1) { alog("Back -> mouse pointer off"); mouse_set(0); mouse_eat_back = 1; return; }
+            if (!mouse_toggle_key[c] && mouse_key(c, ev->value)) return;
+        }
+        if (c == PANIC_KEY && mouse_eat_back) { if (ev->value == 0) mouse_eat_back = 0; return; }
         if (grabbed || (passthrough && nmapped > 0)) {
             /* in passthrough Android already saw the key itself: PASS outputs go nowhere (no clone), actions run.
              * a lone PASS rides on this event's own SYN (zero-change passthrough); when several
@@ -535,9 +804,12 @@ static void handle(struct input_event *ev) {
 }
 
 static void device_lost(const char *why) {
+    memset(key_t0, 0, sizeof key_t0);   /* the presses of the lost device never get their UP */
+    inj_wait = 0;
     alog("%s", why);
     release_all();
-    close(rfd); rfd = -1; grabbed = 0; passthrough = 0;
+    mouse_set(0);
+    close(rfd); rfd = -1; grabbed = 0; passthrough = 0; back_down_at = 0;
 }
 
 /* pid in PID_PATH if it names a live process whose comm is exactly "remapd" (and isn't us), else 0 */
@@ -593,10 +865,32 @@ int main(int argc, char **argv) {
              * 5-7: AOSP only opens /dev/uinput to the shell user from Android 10 (ueventd "0660 uhid uhid"); before
              * that it is system:net_bt_stack / system:bluetooth. (Android 9 does open /dev/uhid to shell: a HID
              * clone there would give full remapping on Fire OS 7. Not done yet.) */
-            if (ufd < 0 && ifd < 0) make_injector(rfd);   /* Fire OS 5-7: replay keys through InputManager instead */
+            /* Fire OS 5-7: replay keys through InputManager instead; a failed start retries like a lost injector */
+            if (ufd < 0 && ifd < 0 && pend_out < 0 && !inj_retry_at && make_injector(rfd) < 0) injector_failed("could not be started");
             passthrough = ufd < 0 && ifd < 0;
-            if (passthrough) set_state("passthrough %s: %s", remote_name, strerror(uinput_err));
+            /* the injector takes a few seconds to start (much longer on a slow box): say so, not "limited", or
+             * the ensure report catches the gap and the Status page claims remapping can't work here */
+            if (passthrough && pend_out >= 0) set_state("starting %s", remote_name);
+            else if (passthrough) set_state("passthrough %s: %s", remote_name, strerror(uinput_err));
             else set_state(ufd >= 0 ? "ok %s" : "inject %s", remote_name);
+        }
+        {
+            int ip = injector_poll();
+            if (ip > 0) inj_wait = 1;
+            else if (ip < 0) { injector_failed("did not start"); set_state("passthrough %s: key injector did not start", remote_name); }
+        }
+        /* switch to the injector only with no button held: Android saw that press's DOWN itself and must also get
+         * its UP, which a grab taken mid-press would swallow (the key would then stay down) */
+        if (inj_wait && ifd >= 0 && !any_key_held()) {
+            inj_wait = 0; inj_fails = 0;
+            release_all();
+            passthrough = 0;
+            set_state("inject %s", remote_name);
+        }
+        if (rfd >= 0 && ufd < 0 && ifd < 0 && pend_out < 0 && inj_retry_at && now_ms() >= inj_retry_at) {
+            inj_retry_at = 0;
+            if (make_injector(rfd) == 0) set_state("starting %s", remote_name);
+            else injector_failed("could not be started");
         }
         if (ifd >= 0 && (inj_lost || kill(ipid, 0) < 0)) {
             /* never hold the remote with nothing to replay its keys: let go and fall back to listen-only */
@@ -604,9 +898,12 @@ int main(int argc, char **argv) {
             if (grabbed) { ioctl(rfd, EVIOCGRAB, 0); grabbed = 0; }
             injector_stop();
             passthrough = 1;
+            injector_failed("stopped");
             set_state("passthrough %s: key injector stopped", remote_name);
         }
-        set_grab(nmapped > 0 || listening);
+        mouse_check_cmd();
+        if (mouse_on && passthrough) mouse_set(0);
+        set_grab(nmapped > 0 || listening || mouse_on);
 
         /* timeout: nearest layer deadline / panic deadline, else 1 s (to notice config changes) */
         int timeout = 1000; long long t = now_ms();
@@ -616,6 +913,8 @@ int main(int argc, char **argv) {
         if (back_down_at) { long long left = back_down_at + PANIC_MS - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
 
         struct pollfd p[2] = { { .fd = rfd, .events = POLLIN }, { .fd = dino, .events = POLLIN } };
+        if (pend_out >= 0 && timeout > 200) timeout = 200;   /* injector starting: look for its READY soon */
+        { int mt = mouse_timeout(); if (mt >= 0 && mt < timeout) timeout = mt; }
         int r = poll(p, dino >= 0 ? 2 : 1, timeout);
         if (r > 0 && dino >= 0 && (p[1].revents & POLLIN)) { char drain[1024]; while (read(dino, drain, sizeof drain) > 0) {} }
         if (r > 0 && p[0].revents) {
@@ -628,9 +927,11 @@ int main(int argc, char **argv) {
             for (int i = 0; i < n / (ssize_t)sizeof evs[0]; i++) handle(&evs[i]);
         }
         t = now_ms();
+        mouse_tick();
         if (active) run_outs(lyr_on_tick(L, t, outs, NOUT), 1);
         if (back_down_at && t - back_down_at >= PANIC_MS) {
             alog("BACK held 10s -> exiting, remote released");
+            mouse_set(0);
             release_all();
             if (rfd >= 0) ioctl(rfd, EVIOCGRAB, 0);
             unlink(pid_path);

@@ -11,6 +11,8 @@ public final class Actions {
     public static final String SCREEN_OFF = "screen_off";
     public static final String SCREENSAVER_TOGGLE = "screensaver_toggle";
     public static final String SCREENSHOT = "screenshot";
+    /** Mouse pointer mode: handled by remapd itself (it owns the remote); stickd only relays the app's own switch. */
+    public static final String MOUSE_TOGGLE = "mouse_toggle";
     public static final String PLAY_PAUSE = "play_pause";
     public static final String NEXT = "next";
     public static final String PREVIOUS = "previous";
@@ -30,7 +32,7 @@ public final class Actions {
 
     /** Every action id, in menu order. */
     public static final String[] ALL = {
-        BOOST, SLEEP_NOW, SLEEP_TIMER, SLEEP_TIMER_SET, SCREEN_OFF, SCREENSAVER_TOGGLE, SCREENSHOT,
+        BOOST, SLEEP_NOW, SLEEP_TIMER, SLEEP_TIMER_SET, SCREEN_OFF, SCREENSAVER_TOGGLE, SCREENSHOT, MOUSE_TOGGLE,
         PLAY_PAUSE, NEXT, PREVIOUS, KILL_CURRENT, OPEN_SCREEN, DNS_CHECK, RELOAD,
         TASKS_START, TASKS_STOP, END, END_ALL, TRIM
     };
@@ -58,6 +60,7 @@ public final class Actions {
             case SCREEN_OFF: return "Screen off";
             case SCREENSAVER_TOGGLE: return "Toggle screensaver";
             case SCREENSHOT: return "Screenshot";
+            case MOUSE_TOGGLE: return "Mouse pointer";
             case PLAY_PAUSE: return "Play/pause";
             case NEXT: return "Next";
             case PREVIOUS: return "Previous";
@@ -86,6 +89,7 @@ public final class Actions {
             case SCREEN_OFF: return "black screen, sound keeps playing";
             case SCREENSAVER_TOGGLE: return "turns the screensaver on or off";
             case SCREENSHOT: return "saves a picture to Pictures/Stickman";
+            case MOUSE_TOGGLE: return "arrows move a pointer, OK clicks, Back leaves";
             case PLAY_PAUSE: return "whatever is playing";
             case NEXT: return "skips to the next track";
             case PREVIOUS: return "back to the previous track";

@@ -14,6 +14,19 @@ import android.os.ParcelFileDescriptor;
  */
 public class BridgeService extends VpnService {
     static volatile boolean running;
+    /** Android took our VPN away during this run (another VPN app was prepared/connected). Reset per tun. */
+    static volatile boolean revoked;
+    /** The worker's connection while a run is active, so a revoke can fail it at once instead of after a timeout. */
+    static volatile MiniTcp activeTcp;
+
+    @Override
+    public void onRevoke() {
+        revoked = true;
+        android.util.Log.w("Stickman", "VPN revoked: another VPN app took over");
+        MiniTcp t = activeTcp;
+        if (t != null) t.abort();
+        super.onRevoke();
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -34,6 +47,7 @@ public class BridgeService extends VpnService {
     ParcelFileDescriptor establishTun() throws Exception {
         // After a reboot no VPN is "prepared"; once the owner accepted the VPN request (ACTIVATE_VPN) this silently makes us
         // the prepared VPN app (returns null). Needed when started from boot/job, not just the UI.
+        revoked = false;
         Intent consent = VpnService.prepare(this);
         if (consent != null) throw new Exception("VPN permission missing: open Stickman and accept its VPN request");
         Builder b = new Builder();

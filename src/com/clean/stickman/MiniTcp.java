@@ -179,6 +179,11 @@ public class MiniTcp {
         }
     }
 
+    /** Fail every waiter now ("connection reset"): our VPN was revoked, so nothing will ever arrive. */
+    public void abort() {
+        synchronized (lock) { rst = true; lock.notifyAll(); }
+    }
+
     public void close() {
         try {
             int seq; synchronized (lock) { seq = sndNxt; sndNxt += 1; }

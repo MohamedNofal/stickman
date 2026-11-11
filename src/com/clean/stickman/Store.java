@@ -160,9 +160,30 @@ public final class Store {
 
     public static void setOtaFrozen(Context c, boolean on) { prefs(c).edit().putBoolean("ota.frozen", on).apply(); }
 
+    /** Context.checkSelfPermission is API 23; this works from API 1 (Fire OS 5 is API 22). */
+    static boolean granted(Context c, String perm) {
+        return c.checkPermission(perm, android.os.Process.myPid(), android.os.Process.myUid())
+            == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
     // ---- last ensure ("REMAPD <pid|-> STICKD <pid|->") ----
     static void setLastEnsure(Context c, String out) {
-        prefs(c).edit().putString("lastEnsure", out).putLong("lastEnsureAt", System.currentTimeMillis()).apply();
+        prefs(c).edit().putString("lastEnsure", out).putLong("lastEnsureAt", System.currentTimeMillis())
+            .putString("lastEnsureBoot", bootId()).apply();
+    }
+
+    /**
+     * The remapper was started since the stick last turned on, so remapped buttons work right now (they need no VPN).
+     * Looser than {@link #ensuredThisBoot}, which also waits for stickd.
+     */
+    static boolean remapRunning(Context c) {
+        if (LogTail.remoteReleased()) return false;   // Back held 10 s: remapd let go of the remote and quit
+        String le = lastEnsure(c);
+        String remote = com.clean.stickman.core.RemoteState.of(le);
+        // remapd alive but without a remote (notfound) or listen-only (passthrough) is not "buttons work"
+        boolean remoteOk = remote != null && (remote.startsWith("ok ") || remote.startsWith("inject ") || remote.startsWith("starting "));
+        return remoteOk && (ensuredThisBoot(c)
+            || bootId().equals(prefs(c).getString("lastEnsureBoot", "")) && pid(le, "REMAPD") != null);
     }
 
     static String lastEnsure(Context c) { return prefs(c).getString("lastEnsure", ""); }
@@ -189,4 +210,17 @@ public final class Store {
     static void markEnsured(Context c) { prefs(c).edit().putString("ensuredBootId", bootId()).apply(); }
 
     static boolean ensuredThisBoot(Context c) { return bootId().equals(prefs(c).getString("ensuredBootId", "")); }
+
+    /** After an app update the daemons must restart from the new APK: this boot counts as not ensured again. */
+    static void clearEnsured(Context c) { prefs(c).edit().remove("ensuredBootId").remove("bootRetryId").apply(); }
+
+    /** Quick start-at-boot retries already scheduled this boot; the count starts over on a new boot. */
+    static int bootRetries(Context c) {
+        SharedPreferences p = prefs(c);
+        return bootId().equals(p.getString("bootRetryId", "")) ? p.getInt("bootRetryN", 0) : 0;
+    }
+
+    static void setBootRetries(Context c, int n) {
+        prefs(c).edit().putString("bootRetryId", bootId()).putInt("bootRetryN", n).apply();
+    }
 }

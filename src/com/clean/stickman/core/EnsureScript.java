@@ -48,7 +48,7 @@ public final class EnsureScript {
     }
 
     private static String b64(String s) {
-        return java.util.Base64.getEncoder().encodeToString((s == null ? "" : s).getBytes(StandardCharsets.UTF_8));
+        return B64.encode(s);
     }
 
     /** Writes NAME atomically from base64 only when the content differs; sets CH=1 on change. */

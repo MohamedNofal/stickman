@@ -22,6 +22,14 @@ public final class Trouble {
     public static final int DROPPED = 5;
     /** Another VPN app is connected: nothing was applied (Bridge.VPN_BUSY). */
     public static final int OTHER_VPN = 6;
+    /**
+     * Our VPN was taken away while connecting: another VPN app reconnected straight away (always-on / auto-connect, or a
+     * VPN "monitor"). Without this the failure looked like "ADB debugging is off", and Try again looped through the
+     * "another VPN is on" question forever (issue #4).
+     */
+    public static final int VPN_TAKEN = 7;
+    /** Reason the bridge reports when Android revoked our VPN during the run. */
+    public static final String TAKEN_REASON = "vpn_taken";
 
     /** The reason without the "FAIL" prefix, trimmed; "" for null. */
     public static String reason(String r) {
@@ -35,6 +43,7 @@ public final class Trouble {
         String s = reason(r).toLowerCase(java.util.Locale.ROOT);
         if (s.isEmpty()) return OTHER;
         if (s.equals("vpn_busy")) return OTHER_VPN;
+        if (s.equals(TAKEN_REASON)) return VPN_TAKEN;
         if (s.contains("vpn permission missing") || s.contains("vpn not allowed")) return VPN;
         if (s.contains("no syn-ack") || s.contains("rst during connect") || s.contains("adbd refused")) return ADB_OFF;
         if (s.contains("auth rejected")) return NOT_ALLOWED;
@@ -52,6 +61,7 @@ public final class Trouble {
             case TIMEOUT: return "The stick didn't answer";
             case DROPPED: return "Lost the connection to the stick";
             case OTHER_VPN: return "Another VPN is on: not applied";
+            case VPN_TAKEN: return "Another VPN app took over";
             default: {
                 String s = reason(r);
                 return "Problem: " + (s.isEmpty() ? "unknown error" : s);
@@ -68,6 +78,7 @@ public final class Trouble {
             case TIMEOUT: return "The stick didn't answer";
             case DROPPED: return "The connection dropped";
             case OTHER_VPN: return "Another VPN is on";
+            case VPN_TAKEN: return "Another VPN app keeps taking over";
             default: return "Something went wrong";
         }
     }
@@ -92,7 +103,17 @@ public final class Trouble {
                 return "The connection to the stick dropped. This also happens when “Allow USB debugging?” is declined. "
                     + "Try again and allow it if the stick asks.";
             case OTHER_VPN:
-                return "Another VPN app is connected, so nothing was applied. Disconnect it, or try again later.";
+                return "Another VPN app is connected, so this wasn't sent to the stick. Stickman only needs the VPN for "
+                    + "a few seconds, to start after the stick turns on or to send a change; once it is running, your "
+                    + "remapped buttons keep working with the other VPN on. Press Refresh and choose Continue, then "
+                    + "reconnect your VPN afterwards.";
+            case VPN_TAKEN:
+                return "Stickman started its connection, but another VPN app took the VPN back straight away, so nothing "
+                    + "was applied. ADB debugging is fine.\n\n"
+                    + "This happens with VPN apps set to connect automatically or always on, and with apps that watch "
+                    + "for VPNs. Turn that option off, or disconnect or uninstall the app, then try again. Once Stickman "
+                    + "is running, the other VPN can be used again: Stickman only needs the VPN for a few seconds when "
+                    + "it starts or applies a change.";
             default: {
                 String s = reason(r);
                 return "Something went wrong" + (s.isEmpty() ? "." : ": " + s + ".")
@@ -108,7 +129,7 @@ public final class Trouble {
      */
     public static boolean askUser(String r, boolean neverConnected) {
         int k = kind(r);
-        if (k == VPN || k == ADB_OFF || k == NOT_ALLOWED) return true;
+        if (k == VPN || k == ADB_OFF || k == NOT_ALLOWED || k == VPN_TAKEN) return true;
         return neverConnected && (k == TIMEOUT || k == DROPPED);
     }
 }

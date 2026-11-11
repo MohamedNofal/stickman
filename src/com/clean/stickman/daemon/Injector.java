@@ -18,6 +18,7 @@ import java.util.Map;
  * Started by remapd: app_process /system/bin com.clean.stickman.daemon.Injector VENDOR PRODUCT VERSION NAME
  * (ids in hex). Prints READY once injection is set up; exits on stdin EOF (remapd gone) or when the system
  * keeps refusing events, so remapd can release the remote instead of leaving it dead.
+ * Lines starting with "P" drive the drawn pointer instead (see SoftPointer).
  */
 public final class Injector {
     static final int REPEAT_DELAY_MS = 500, REPEAT_EVERY_MS = 50, MAX_FAILS = 5;
@@ -33,6 +34,8 @@ public final class Injector {
     private final Map<Integer, String> layout = new HashMap<>(), generic = new HashMap<>();
     private final Map<Integer, Long> downAt = new HashMap<>();
     private int fails;
+    /** Drawn pointer (remapd's "P ..." lines) for systems without a virtual mouse; made on first use. */
+    private SoftPointer pointer;
     private volatile int repeatCode = -1;
     private volatile long repeatGen;
 
@@ -98,7 +101,8 @@ public final class Injector {
         if (++fails >= MAX_FAILS) { Sh.log("injector: system refuses key events, giving up"); System.exit(3); }
     }
 
-    private void onLine(int linux, int value) {
+    /** Synchronized with the repeat loop's check-and-send, so no repeat DOWN can follow this key's UP. */
+    private synchronized void onLine(int linux, int value) {
         if (value == 1) {
             long t = now();
             downAt.put(linux, t);
@@ -118,8 +122,11 @@ public final class Injector {
         Thread t = new Thread(() -> {
             try {
                 Thread.sleep(REPEAT_DELAY_MS);
-                for (int n = 1; repeatGen == gen && repeatCode == linux; n++) {
-                    send(linux, ACTION_DOWN, down, n);
+                for (int n = 1; ; n++) {
+                    synchronized (Injector.this) {
+                        if (repeatGen != gen || repeatCode != linux) break;
+                        send(linux, ACTION_DOWN, down, n);
+                    }
                     Thread.sleep(REPEAT_EVERY_MS);
                 }
             } catch (InterruptedException ignored) { }
@@ -136,6 +143,11 @@ public final class Injector {
             BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
             for (String l; (l = in.readLine()) != null; ) {
                 String[] t = l.trim().split(" ");
+                if (t.length > 0 && t[0].equals("P")) {
+                    if (j.pointer == null) j.pointer = new SoftPointer(j.im, j.inject, j.uptime);
+                    j.pointer.onLine(t);
+                    continue;
+                }
                 if (t.length != 2) continue;
                 try { j.onLine(Integer.parseInt(t[0]), Integer.parseInt(t[1])); } catch (NumberFormatException ignored) { }
             }

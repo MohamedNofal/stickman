@@ -55,7 +55,7 @@ public final class BgTime {
             if (e.getValue()[0] < MIN_PCT || !starvable(p)) continue;
             r.add(new Entry(p, e.getValue()[0], e.getValue()[1]));
         }
-        r.sort((x, y) -> y.pct != x.pct ? Integer.compare(y.pct, x.pct) : Integer.compare(y.avgMb, x.avgMb));
+        java.util.Collections.sort(r, (x, y) -> y.pct != x.pct ? Integer.compare(y.pct, x.pct) : Integer.compare(y.avgMb, x.avgMb));
         return r;
     }
 

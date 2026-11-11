@@ -9,7 +9,9 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Keys;
+import com.clean.stickman.core.PointerText;
 import com.clean.stickman.core.Listen;
 import com.clean.stickman.core.ListenDecision;
 import com.clean.stickman.core.Trouble;
@@ -28,6 +30,11 @@ import java.util.List;
  * chooser, and "did it work?" feedback once a saved change has reached the remote.
  */
 public class RemotePage extends Page implements RemoteView.Listener, RemoteView.Info {
+    private Button pointerBtn;
+    private TextView pointerInfo;
+    /** When the switch was pressed (0 = no request pending). */
+    private long pointerAsked;
+
     static final long LISTEN_TIMEOUT_MS = 20000;
     /** Ignore the KEY line of the OK press that switched listening on. */
     static final long LISTEN_GRACE_MS = 400;
@@ -93,6 +100,17 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         listenInfo = Theme.text(a, IDLE, 13, Theme.MUTED);
         lc.addView(listenInfo);
         side.addView(lc);
+
+        LinearLayout mp = Theme.card(a);
+        mp.addView(Theme.heading(a, "Mouse pointer"));
+        pointerBtn = Theme.button(a, PointerText.button(null));
+        pointerBtn.setId(View.generateViewId());
+        pointerBtn.setOnClickListener(v -> togglePointer());
+        mp.addView(pointerBtn);
+        pointerInfo = Theme.text(a, PointerText.state(null), 13, Theme.MUTED);
+        mp.addView(pointerInfo);
+        mp.addView(Theme.text(a, PointerText.HOW, 13, Theme.MUTED));
+        side.addView(mp);
 
         extrasCard = Theme.card(a);
         extrasCard.addView(Theme.heading(a, "Your other buttons"));
@@ -409,7 +427,27 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
     }
 
     /** Nothing is running or queued a while after the save (e.g. the other-VPN question got No): say so, no toast. */
+    /** The switch sends on/off (not toggle), so a stale label can't flip it the wrong way twice. */
+    void togglePointer() {
+        boolean on = !PointerText.isOn(LogTail.status("mouse"));
+        pointerAsked = System.currentTimeMillis();
+        pointerInfo.setText(on ? "Turning it on…" : "Turning it off…");
+        a.run(null, Commands.pointer(on));
+    }
+
+    /** Label and state from remapd's latest "STATUS mouse" line; "Turning…" stays until a newer line arrives. */
+    void updatePointer() {
+        if (pointerBtn == null) return;
+        String st = LogTail.status("mouse");
+        long at = LogTail.statusAt("mouse");
+        pointerBtn.setText(PointerText.button(st));
+        if (pointerAsked != 0 && at < pointerAsked && System.currentTimeMillis() - pointerAsked < 20_000) return;
+        pointerAsked = 0;
+        pointerInfo.setText(PointerText.state(st));
+    }
+
     @Override public void onTick() {
+        updatePointer();
         if (applyName == null || applyStalled || System.currentTimeMillis() - applyAt < APPLY_STALL_MS) return;
         if (Bridge.busy || Bridge.hasPending()) { applyIdleTicks = 0; return; }
         if (++applyIdleTicks < 2) return;
@@ -438,7 +476,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
             listenInfo.setTextColor(Theme.ACCENT);
             return false;
         }
-        if (a.checkSelfPermission(android.Manifest.permission.READ_LOGS) != PackageManager.PERMISSION_GRANTED) {
+        if (!Store.granted(a, android.Manifest.permission.READ_LOGS)) {
             listenInfo.setText("Stickman can't see button presses yet. Reopen it once it shows “Running ✓”.");
             listenInfo.setTextColor(Theme.ACCENT);
             return false;

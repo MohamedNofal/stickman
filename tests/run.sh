@@ -14,4 +14,5 @@ for f in native/test_*.c; do
   gcc -O0 -Wall -o "build/$n" "$f" native/layers.c
   "build/$n"
 done
+tools/api22check.sh
 echo "ALL TESTS OK"

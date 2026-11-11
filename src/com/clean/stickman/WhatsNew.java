@@ -167,7 +167,12 @@ final class WhatsNew {
 
     /** The developer test source (Update.TEST_FILE, world-readable when present), or null. */
     static String[] testSource() {
-        try { return Update.testSource(new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(Update.TEST_FILE)), StandardCharsets.UTF_8)); }
+        try (java.io.FileInputStream in = new java.io.FileInputStream(Update.TEST_FILE)) {   // java.nio.file is API 26
+            java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            for (int n; (n = in.read(buf)) > 0; ) o.write(buf, 0, n);
+            return Update.testSource(new String(o.toByteArray(), StandardCharsets.UTF_8));
+        }
         catch (Throwable t) { return null; }
     }
 
