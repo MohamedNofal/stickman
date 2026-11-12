@@ -193,7 +193,7 @@ final class TaskSampler {
         }
         if (refresh) {
             Set<String> pl = MediaState.playingPackages(src.sh("dumpsys media_session"));
-            Set<String> ca = cachedPackages(LruParser.parse(src.sh("dumpsys activity lru")));
+            Set<String> ca = cachedPackages(LruParser.read(src::sh));
             Set<String> la = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
             synchronized (this) { playing = pl; cached = ca; launchable = la; }
         }
@@ -392,9 +392,15 @@ final class TaskSampler {
     /** end &lt;pkg&gt;: fresh fg / media / launchable, then EndPolicy; force-stop only when allowed. */
     void end(String arg) {
         String pkg = arg == null ? "" : arg.trim();
+        boolean force = pkg.endsWith(" force");   // the user confirmed ending an app Stickman normally spares
+        if (force) pkg = pkg.substring(0, pkg.length() - 6).trim();
         Set<String> media = MediaState.protectedPackages(src.sh("dumpsys media_session"));
         Set<String> launch = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
-        String why = EndPolicy.check(pkg, fg.get(), media, conf().whitelist, launch);
+        String why = EndPolicy.check(pkg, fg.get(), media, conf().whitelist, launch, force);
+        if (EndPolicy.GUARDED.equals(why)) why = KillPolicy.isNeverKill(pkg) ? "never" : "system";
+        // a forced end of something without a launcher entry: only a real package can be force-stopped
+        // (tiles like "android.process.media" are process names shared by several packages)
+        if (why == null && force && !launch.contains(pkg) && !src.sh("pm path " + pkg).contains("package:")) why = "system";
         String shown = pkg.matches("[A-Za-z0-9_.]+") ? pkg : "?";
         if (why != null) {
             Sh.log("STATUS end " + shown + " refused=" + why);
@@ -423,10 +429,14 @@ final class TaskSampler {
         Set<String> media = MediaState.protectedPackages(src.sh("dumpsys media_session"));
         Set<String> launch = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
         Set<String> running = new LinkedHashSet<>();
-        for (LruParser.Proc p : LruParser.parse(src.sh("dumpsys activity lru"))) if (p.pkg != null) running.add(p.pkg);
+        java.util.List<LruParser.Proc> procs = LruParser.read(src::sh);
+        for (LruParser.Proc p : procs) if (p.pkg != null) running.add(p.pkg);
+        // an app with a visible window or a foreground service (a download, a VPN) is doing something: it stays
+        Set<String> busy = KillPolicy.busyPackages(procs);
         Set<String> white = conf().whitelist;
         int n = 0;
         for (String pkg : running) {
+            if (busy.contains(pkg)) continue;
             if (EndPolicy.check(pkg, fg.get(), media, white, launch) != null) continue;  // fg re-read per app
             if (src.sh("am force-stop " + pkg + " && echo KILLED").contains("KILLED")) n++;  // confirmed kills only
         }

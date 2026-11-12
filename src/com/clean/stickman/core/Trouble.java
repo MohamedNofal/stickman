@@ -92,7 +92,9 @@ public final class Trouble {
             case ADB_OFF:
                 return "Stickman can't reach the stick's debugging service, which usually means ADB debugging is off.\n\n"
                     + "Settings → My Fire TV → Developer options → ADB debugging: On. "
-                    + "(If Developer options is missing: in About, press OK on the device name 7 times.)";
+                    + "(If Developer options is missing: in About, press OK on the device name 7 times.)\n\n"
+                    + "Already on? Then something blocks the connection inside the stick: switch off any firewall or "
+                    + "ad-blocking app, restart the stick and try again.";
             case NOT_ALLOWED:
                 return "The stick didn't allow Stickman to use its debugging service.\n\n"
                     + "Try again and, when the stick asks “Allow USB debugging?”, tick Always allow and choose OK.";

@@ -57,6 +57,11 @@ public class BootJob extends JobService {
         if (Store.enabled(this) && !Store.ensuredThisBoot(this)) {
             Log.i("Stickman", "BootJob: new boot -> ensuring daemons");
             Bridge.run(this, Ensure.MARKER, true);
+        } else {
+            // started this boot, but still there? (adbd restarts kill the daemons). The job stays alive until answered.
+            final JobParameters p = params;
+            Watchdog.check(this, "periodic", () -> jobFinished(p, false));
+            return true;
         }
         return false;
     }

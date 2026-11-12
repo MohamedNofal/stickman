@@ -99,6 +99,9 @@ public final class Stickd {
         Thread w = new Thread(this::watchApk, "stickd-watchdog");
         w.setDaemon(true);
         w.start();
+        Thread lv = new Thread(this::serveLiveness, "stickd-live");
+        lv.setDaemon(true);
+        lv.start();
         Thread a = new Thread(this::followForeground, "stickd-fg");
         Thread b = new Thread(this::readSpool, "stickd-act");
         a.start(); b.start();
@@ -119,6 +122,27 @@ public final class Stickd {
         if (cmdline == null) return false;
         int z = cmdline.indexOf('\0');
         return (z < 0 ? cmdline : cmdline.substring(0, z)).equals(name);
+    }
+
+    // ---- liveness (see core/Liveness) ----
+    private void serveLiveness() {
+        for (;;) {
+            try (java.net.ServerSocket ss = new java.net.ServerSocket()) {
+                ss.setReuseAddress(true);
+                ss.bind(new java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), com.clean.stickman.core.Liveness.PORT), 4);
+                for (;;) {
+                    try (java.net.Socket s = ss.accept()) {
+                        String pid = read(file("remapd.pid")).trim();
+                        boolean alive = pid.matches("\\d+") && read(new File("/proc/" + pid + "/cmdline")).contains("remapd");
+                        String st = com.clean.stickman.core.Liveness.remapdState(pid, alive, file("released").exists());
+                        s.getOutputStream().write((com.clean.stickman.core.Liveness.answer(VERSION, st) + "\n").getBytes("US-ASCII"));
+                    } catch (Exception ignored) { }
+                }
+            } catch (Exception e) {
+                // port taken (an older stickd still exiting): try again
+                try { Thread.sleep(5000); } catch (InterruptedException ie) { return; }
+            }
+        }
     }
 
     // ---- uninstall watchdog ----

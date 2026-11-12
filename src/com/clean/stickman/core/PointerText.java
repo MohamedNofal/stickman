@@ -32,5 +32,5 @@ public final class PointerText {
     }
 
     public static final String HOW = "Arrows move it, OK clicks, Rewind and Fast-forward scroll, Back turns it off. "
-        + "To use it without opening Stickman, put Mouse pointer on a button: choose a button, then Something else.";
+        + "To use it without opening Stickman, put Mouse pointer on a button: choose a button, then Press, Double press or Hold, then Something else.";
 }

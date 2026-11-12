@@ -40,7 +40,7 @@ public final class EnsureScript {
     private static final String ALIVE_FN =
         "alive() { P=$(cat " + DIR + "/$1.pid 2>/dev/null); [ -n \"$P\" ] && "
         + "{ [ \"$(cat /proc/$P/comm 2>/dev/null)\" = \"$1\" ] || "
-        + "[ \"$(tr '\\000' '\\n' < /proc/$P/cmdline 2>/dev/null | head -n 1)\" = \"$1\" ]; }; }; ";
+        + "[ \"$(cat /proc/$P/cmdline 2>/dev/null | tr '\\000' '\\n' | head -n 1)\" = \"$1\" ]; }; }; ";
 
     private static String path(String p) {
         if (p == null || !p.matches("/[A-Za-z0-9._~=+/-]+")) throw new IllegalArgumentException("bad path: " + p);

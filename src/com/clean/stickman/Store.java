@@ -160,6 +160,21 @@ public final class Store {
 
     public static void setOtaFrozen(Context c, boolean on) { prefs(c).edit().putBoolean("ota.frozen", on).apply(); }
 
+    /** adbd answered only through the wide VPN (it is not the shell user on this stick): start with it next time. */
+    static boolean wideVpn(Context c) { return prefs(c).getBoolean("wideVpn", false); }
+
+    static void setWideVpn(Context c, boolean on) { prefs(c).edit().putBoolean("wideVpn", on).apply(); }
+
+    /** When the watchdog last started an ensure in this boot (wall clock ms), or 0: its rate limit across app restarts. */
+    static long watchdogAt(Context c) {
+        SharedPreferences p = prefs(c);
+        return bootId().equals(p.getString("watchdogBoot", "")) ? p.getLong("watchdogAt", 0) : 0;
+    }
+
+    static void setWatchdogAt(Context c, long t) {
+        prefs(c).edit().putString("watchdogBoot", bootId()).putLong("watchdogAt", t).apply();
+    }
+
     /** Context.checkSelfPermission is API 23; this works from API 1 (Fire OS 5 is API 22). */
     static boolean granted(Context c, String perm) {
         return c.checkPermission(perm, android.os.Process.myPid(), android.os.Process.myUid())

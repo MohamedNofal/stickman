@@ -113,7 +113,7 @@ final class AutoKill {
     void trimAll(String why) {
         synchronized (killLock) {
             long before = memAvailableKb();
-            List<String> targets = Trim.targets(LruParser.parse(sh.run(Trim.LRU_CMD)), d.foreground());
+            List<String> targets = Trim.targets(LruParser.read(sh::run), d.foreground());
             for (String p : targets) sh.run(Trim.cmd(p));
             try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
             long after = memAvailableKb();
@@ -164,7 +164,7 @@ final class AutoKill {
 
     List<String> killCandidatesLocked(boolean blacklistOnly) {
         StickdConf c = d.conf();
-        List<LruParser.Proc> procs = LruParser.parse(sh.run("dumpsys activity lru"));
+        List<LruParser.Proc> procs = LruParser.read(sh::run);
         String fg = d.foreground();
         java.util.Set<String> launchable = KillPolicy.parseLaunchable(sh.run(KillPolicy.LAUNCHABLE_CMD));
         if (launchable.isEmpty()) Sh.log("autokill: no launchable apps listed; nothing killed");

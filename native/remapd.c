@@ -531,8 +531,17 @@ static int make_injector(int src) {
 }
 
 
+/* Is a button physically down right now? Asked from the device itself (EVIOCGKEY), not from our own bookkeeping:
+ * a key-up lost to dropped events must not block the switch to the injector for ever, and a long real hold must
+ * still block it. */
 static int any_key_held(void) {
-    for (int c = 0; c < MAXKEY; c++) if (key_t0[c]) return 1;
+    unsigned char b[(KEY_MAX + 8) / 8]; memset(b, 0, sizeof b);
+    if (rfd < 0 || ioctl(rfd, EVIOCGKEY(sizeof b), b) < 0) {
+        for (int c = 0; c < MAXKEY; c++) if (key_t0[c]) return 1;
+        return 0;
+    }
+    for (size_t i = 0; i < sizeof b; i++) if (b[i]) return 1;
+    memset(key_t0, 0, sizeof key_t0);   /* nothing is down: forget any stale press */
     return 0;
 }
 
@@ -837,6 +846,7 @@ int main(int argc, char **argv) {
     int other = other_instance();   /* before grabbing anything: only one process may own the remote */
     if (other) { alog("remapd already running pid %d", other); return 0; }
     signal(SIGCHLD, SIG_IGN); signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
+    unlink(DIR_PATH "released");   /* running again: a past Back-hold exit no longer counts */
     L = lyr_new(250, 600);
     if (!L) return 1;
     FILE *pf = fopen(pid_path, "w");
@@ -935,6 +945,8 @@ int main(int argc, char **argv) {
             release_all();
             if (rfd >= 0) ioctl(rfd, EVIOCGRAB, 0);
             unlink(pid_path);
+            /* left on purpose: the watchdog (stickd's liveness answer) must not start remapd again by itself */
+            { int f = open(DIR_PATH "released", O_WRONLY | O_CREAT | O_TRUNC, 0666); if (f >= 0) close(f); }
             return 0;
         }
     }

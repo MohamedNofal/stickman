@@ -44,20 +44,43 @@ public class BridgeService extends VpnService {
         return START_NOT_STICKY;
     }
 
-    ParcelFileDescriptor establishTun() throws Exception {
+    /**
+     * wide = no allowed-apps list, so the VPN's one route (the fake peer) applies to every uid. Needed where adbd does
+     * not run as the shell user (rooted / unlocked sticks, where it stays root): its replies are routed by the uid
+     * of its socket, and uid 0 belongs to no package that could be put on the allowed list. Normal traffic still does
+     * not enter the tun (only 10.99.0.2 is routed), but every app sees a VPN for those seconds, so it is the fallback.
+     */
+    ParcelFileDescriptor establishTun(boolean wide) throws Exception { return establishTun(wide, true); }
+
+    /**
+     * prepare = false for the wide retry inside one bridge run: prepare() would silently take the VPN back from an
+     * app that took over in between, and the revoked flag of this run must survive. Without it, establish() simply
+     * returns null when we are no longer the prepared VPN app.
+     */
+    ParcelFileDescriptor establishTun(boolean wide, boolean prepare) throws Exception {
         // After a reboot no VPN is "prepared"; once the owner accepted the VPN request (ACTIVATE_VPN) this silently makes us
         // the prepared VPN app (returns null). Needed when started from boot/job, not just the UI.
-        revoked = false;
-        Intent consent = VpnService.prepare(this);
-        if (consent != null) throw new Exception("VPN permission missing: open Stickman and accept its VPN request");
+        if (prepare) {
+            revoked = false;
+            Intent consent = VpnService.prepare(this);
+            if (consent != null) throw new Exception("VPN permission missing: open Stickman and accept its VPN request");
+        }
         Builder b = new Builder();
         b.setSession("Stickman");
         b.addAddress("10.99.0.1", 32);
         b.addRoute("10.99.0.2", 32);
         b.setMtu(1500);
         b.setBlocking(true);
-        b.addAllowedApplication(getPackageName());
-        b.addAllowedApplication("com.android.shell");
+        if (!wide) {
+            b.addAllowedApplication(getPackageName());
+            b.addAllowedApplication("com.android.shell");
+        } else {
+            // every app is "in" this VPN for a few seconds: keep it harmless for them. Without these, IPv6 would be
+            // blocked for all apps (no v6 address here) and Android 11 closes their open connections (secure VPN).
+            b.allowFamily(android.system.OsConstants.AF_INET6);
+            b.allowBypass();
+            if (Build.VERSION.SDK_INT >= 29) b.setMetered(false);   // or other apps' downloads pause as "metered"
+        }
         return b.establish();
     }
 

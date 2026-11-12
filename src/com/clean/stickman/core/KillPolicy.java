@@ -37,6 +37,30 @@ public final class KillPolicy {
     private static final String[] KILL_ADJ = {"cch", "prev", "svcb", "svcl"};
     private static final Set<String> KILL_STATE = new HashSet<>(Arrays.asList("CEM", "CAC", "LAST"));
 
+    /**
+     * Never ended, not even when the user insists: Stickman itself (both editions), the system, Bluetooth (the remote
+     * would drop) and anything that is not a plain package name. The rest of the never-kill list is only spared by the
+     * automatic paths (End all, auto-close, Boost); the Tasks page may end those after an "Are you sure?".
+     */
+    public static boolean isHardNever(String pkg) {
+        if (pkg == null || !pkg.matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")) return true;
+        return pkg.equals("com.clean.stickman") || pkg.equals("com.clean.stickman.tv") || pkg.equals("system")
+            || pkg.equals("android") || pkg.startsWith("com.android.bluetooth");
+    }
+
+    /**
+     * Packages with a process doing something right now (persistent, visible, perceptible, foreground service,
+     * backup...): closing the package would cut that off. Used by auto-kill, Boost and End all.
+     */
+    public static Set<String> busyPackages(List<LruParser.Proc> procs) {
+        Set<String> keep = new HashSet<>();
+        for (LruParser.Proc p : procs) {
+            String adjClass = p.adj.replaceAll("[^A-Za-z].*$", "");
+            if (PROTECTED_CLASS.contains(adjClass) || PROTECTED_CLASS.contains(p.state)) keep.add(p.pkg);
+        }
+        return keep;
+    }
+
     public static boolean isNeverKill(String pkg) {
         if (pkg == null || NEVER_KILL.contains(pkg)) return true;
         for (String p : NEVER_KILL_PREFIX) if (pkg.startsWith(p)) return true;

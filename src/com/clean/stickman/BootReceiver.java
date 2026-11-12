@@ -15,6 +15,12 @@ public class BootReceiver extends BroadcastReceiver {
     public void onReceive(Context c, Intent i) {
         String a = i == null ? null : i.getAction();
         Log.i("Stickman", "boot broadcast: " + a);
+        // the remote (or any Bluetooth device) reconnected, typically after standby: a cheap moment to check the daemons
+        if ("android.bluetooth.device.action.ACL_CONNECTED".equals(a)) {
+            final PendingResult pr = goAsync();   // keep the process until the check (2-4 s at most) is done
+            Watchdog.check(c, "bluetooth", pr::finish);
+            return;
+        }
         if (!com.clean.stickman.core.BootActions.accepted(a)) return;
         BootJob.schedule(c);
         // an update replaced the APK the daemons run from: a failed re-ensure must be retried like a failed boot start

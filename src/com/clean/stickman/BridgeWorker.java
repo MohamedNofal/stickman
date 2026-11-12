@@ -23,16 +23,41 @@ public class BridgeWorker implements Runnable {
         MiniTcp tcp = null;
         String result = "";
         try {
-            tun = svc.establishTun();
-            if (tun == null) throw new Exception("VPN not allowed: open Stickman and accept its VPN request");
-            tcp = new MiniTcp(new FileInputStream(tun.getFileDescriptor()), new FileOutputStream(tun.getFileDescriptor()), 5555);
-            BridgeService.activeTcp = tcp;
-            if (BridgeService.revoked) tcp.abort();   // revoked between establish and here
-            reader = new TunReader(tcp, tun.getFileDescriptor());
-            rt = new Thread(reader, "tunreader"); rt.setDaemon(true); rt.start();
-            tcp.connect();
+            boolean wide = Store.wideVpn(svc), wideUsed = false;
+            boolean first = true;
+            for (;;) {
+                // the wide retry never prepares again: another VPN that took over meanwhile keeps the VPN
+                if (!first && BridgeService.revoked) throw new java.io.IOException("vpn taken before the retry");
+                tun = svc.establishTun(wide, first);
+                first = false;
+                if (tun == null) throw new Exception(BridgeService.revoked ? "vpn taken"
+                    : "VPN not allowed: open Stickman and accept its VPN request");
+                tcp = new MiniTcp(new FileInputStream(tun.getFileDescriptor()), new FileOutputStream(tun.getFileDescriptor()), 5555);
+                BridgeService.activeTcp = tcp;
+                if (BridgeService.revoked) tcp.abort();   // revoked between establish and here
+                reader = new TunReader(tcp, tun.getFileDescriptor());
+                rt = new Thread(reader, "tunreader"); rt.setDaemon(true); rt.start();
+                try {
+                    tcp.connect();
+                    wideUsed = wide;
+                    break;
+                } catch (java.io.IOException e) {
+                    // Silence (not a refusal) means something listens on 5555 but its answer never came back through
+                    // our VPN: adbd runs as another uid than shell (see establishTun). Try once more for every uid.
+                    if (wide || BridgeService.revoked || !String.valueOf(e.getMessage()).startsWith("no SYN-ACK")) throw e;
+                    Log.i(TAG, "bridge: no answer from adbd, retrying with the wide VPN");
+                    reader.stop = true;
+                    try { rt.join(1000); } catch (InterruptedException ignored) {}
+                    try { tun.close(); } catch (Exception ignored) {}
+                    tun = null; tcp = null; reader = null; rt = null;
+                    BridgeService.activeTcp = null;
+                    wide = true;
+                }
+            }
             AdbClient adb = new AdbClient(tcp);
             adb.connect(AdbKey.loadOrCreate(svc.getFilesDir()), 90000);
+            // remembered only once adb really answered through it (a firewall could also explain the silence)
+            if (wideUsed && !Store.wideVpn(svc)) { Store.setWideVpn(svc, true); Log.i(TAG, "bridge: this stick needs the wide VPN; using it from now on"); }
             if (!Store.hasRemap(svc))
                 Store.importRemap(svc, adb.exec(IMPORT_CMD, 10000));
             String cmd;

@@ -520,7 +520,7 @@ public class TasksPage extends ApplyPage {
             if ("fg".equals(x.state)) fg = x.pkg;
             else if ("play".equals(x.state)) play.add(x.pkg);
         }
-        return EndPolicy.check(pkg, fg, play, c.whitelist, launchable);
+        return EndPolicy.check(pkg, fg, play, c.whitelist, launchable, false);
     }
 
     void showDialog(final String pkg, boolean system) {
@@ -529,16 +529,26 @@ public class TasksPage extends ApplyPage {
         TaskDialog.Options o = new TaskDialog.Options();
         o.detailsOnly = system || (x != null && "sys".equals(x.state));
         o.endBlocked = endBlocked(pkg, c);
+        // on Stickman's own never-kill list: End stays available, behind an "Are you sure?"
+        final boolean guarded = EndPolicy.GUARDED.equals(o.endBlocked);
+        if (guarded) {
+            o.endBlocked = null; o.guarded = true;
+            if (o.detailsOnly) { o.detailsOnly = false; o.canAlwaysKill = false; o.canProtect = false; }   // system: End only
+        }
         o.protectedPkg = c.whitelist.contains(pkg);
         o.alwaysKill = c.blacklist.contains(pkg);
         boolean never = KillPolicy.isNeverKill(pkg) || EndPolicy.SELF.equals(pkg);
-        o.canAlwaysKill = !never && !com.clean.stickman.core.Catalog.isProtected(pkg);
-        o.canProtect = !never;
+        boolean sysTile = system || (x != null && "sys".equals(x.state));
+        o.canAlwaysKill = !never && !sysTile && !com.clean.stickman.core.Catalog.isProtected(pkg);
+        o.canProtect = !never && !sysTile;
         o.canOpen = launchIntent(pkg) != null;
         final TaskDialog[] self = new TaskDialog[1];
         // the dismiss listener runs later (posted): only clear the field if it still points at this dialog
         self[0] = new TaskDialog(a, label(pkg), pkg, x, hist.get(pkg), o, new TaskDialog.Actions() {
-            public void end(String p) { endApp(p); }
+            public void end(String p) {
+                if (!guarded) { endApp(p, false); return; }
+                ThemedDialog.confirm(a, "Are you sure?", EndPolicy.guardedWarning(label(p)), "End app", () -> endApp(p, true));
+            }
             public void alwaysKill(String p, boolean on) { setAlwaysKill(p, on); }
             public void protect(String p, boolean on) { setProtect(p, on); }
             public void open(String p) { openApp(p); }
@@ -546,12 +556,12 @@ public class TasksPage extends ApplyPage {
         dialog = self[0];
     }
 
-    void endApp(String pkg) {
+    void endApp(String pkg, boolean force) {
         if (!stickdOn()) return;
         endAt = 0;   // armed only once the command is really sent (not if the VPN warning is cancelled)
         endPkg = pkg;
         endLabel = label(pkg);
-        send(Commands.act(Actions.END, pkg), "end", "Ending " + endLabel + "…", () -> endAt = System.currentTimeMillis());
+        send(Commands.act(Actions.END, force ? pkg + " force" : pkg), "end", "Ending " + endLabel + "…", () -> endAt = System.currentTimeMillis());
     }
 
     void setAlwaysKill(final String pkg, boolean on) {

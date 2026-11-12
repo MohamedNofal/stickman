@@ -35,6 +35,8 @@ public class TaskDialog {
         boolean detailsOnly;
         /** Non-null: End app is disabled and the reason is shown ("protected", "playing", ...). */
         String endBlocked;
+        /** Stickman spares this app by itself; End asks "Are you sure?" first. */
+        boolean guarded;
         boolean alwaysKill, protectedPkg, canAlwaysKill = true, canProtect = true, canOpen = true;
     }
 
@@ -63,6 +65,11 @@ public class TaskDialog {
         v.addView(trend);
         if (o.endBlocked != null && !o.detailsOnly) {
             TextView why = Theme.text(c, "Can't end: " + reasonText(o.endBlocked), 14, Theme.ACCENT);
+            why.setPadding(0, Theme.dp(c, 6), 0, 0);
+            v.addView(why);
+        } else if (o.guarded && !o.detailsOnly) {
+            TextView why = Theme.text(c, "Stickman never closes this one by itself (End all, auto-close and Boost skip it). "
+                + "You can still end it here.", 14, Theme.MUTED);
             why.setPadding(0, Theme.dp(c, 6), 0, 0);
             v.addView(why);
         }
