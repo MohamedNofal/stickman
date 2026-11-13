@@ -9,13 +9,12 @@ import java.util.regex.Pattern;
 
 /**
  * "Who runs in the background": per-package share of the last hours spent running, from
- * {@code dumpsys procstats --hours N} ("* pkg / uid / vN:" followed by "TOTAL: 73% (min-avg-max PSS ...)"). Pure.
+ * {@code dumpsys procstats --hours N} (command: cmd.SpeedCmds.BG_TIME) ("* pkg / uid / vN:" followed by "TOTAL: 73% (min-avg-max PSS ...)"). Pure.
  */
 public final class BgTime {
     private BgTime() {}
 
-    public static final int HOURS = 3;
-    public static final String CMD = "dumpsys procstats --hours " + HOURS;
+    public static final int HOURS = com.clean.stickman.core.cmd.SpeedCmds.BG_HOURS;
     /** Below this share an app isn't worth listing. */
     public static final int MIN_PCT = 5;
 
