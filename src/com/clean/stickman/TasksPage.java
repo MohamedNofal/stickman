@@ -1,5 +1,6 @@
 package com.clean.stickman;
 
+import com.clean.stickman.core.cmd.RemoteCmds;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Canvas;
@@ -15,7 +16,6 @@ import android.widget.TextView;
 
 import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Catalog;
-import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.EndPolicy;
 import com.clean.stickman.core.KillPolicy;
 import com.clean.stickman.core.OwnProfile;
@@ -226,7 +226,7 @@ public class TasksPage extends ApplyPage {
     /** tasks_start / tasks_stop: quiet (no result line), never displacing another VPN, only when stickd is meant to run. */
     void sendTasks(String id) {
         if (!Store.enabled(a) || Bridge.otherVpnActive(a)) return;
-        Bridge.run(a, Commands.act(id, null), false);
+        Bridge.run(a, RemoteCmds.act(id, null), false);
     }
 
     void togglePause() {
@@ -567,7 +567,7 @@ public class TasksPage extends ApplyPage {
         endPkg = pkg;
         endForced = force;
         endLabel = label(pkg);
-        send(Commands.act(Actions.END, force ? pkg + " force" : pkg), "end", "Ending " + endLabel + "…", () -> endAt = System.currentTimeMillis());
+        send(RemoteCmds.act(Actions.END, force ? pkg + " force" : pkg), "end", "Ending " + endLabel + "…", () -> endAt = System.currentTimeMillis());
     }
 
     void setAlwaysKill(final String pkg, boolean on) {
@@ -635,7 +635,7 @@ public class TasksPage extends ApplyPage {
         ThemedDialog.confirm(a, "End all?", "Close " + n + (n == 1 ? " app" : " apps")
             + "? Protected, playing and the app in front stay.", "End all", () -> {
                 endAllAt = 0;   // armed only once the command is really sent
-                send(Commands.act(Actions.END_ALL, null), "end_all", "Closing apps…", () -> endAllAt = System.currentTimeMillis());
+                send(RemoteCmds.act(Actions.END_ALL, null), "end_all", "Closing apps…", () -> endAllAt = System.currentTimeMillis());
             });
     }
 

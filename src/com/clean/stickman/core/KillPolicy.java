@@ -75,13 +75,8 @@ public final class KillPolicy {
         return false;
     }
 
-    /**
-     * Shell command listing user-launchable activities (TV and phone launcher entries); parse it with
-     * {@link #parseLaunchable}.
-     */
-    public static final String LAUNCHABLE_CMD =
-        "cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LEANBACK_LAUNCHER; "
-        + "cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER";
+    /** Delegates to core.cmd.StatusCmds.launchable() (daemon/AutoKill, daemon/TaskSampler); parse with {@link #parseLaunchable}. */
+    public static final String LAUNCHABLE_CMD = com.clean.stickman.core.cmd.StatusCmds.launchable();
 
     private static final java.util.regex.Pattern COMPONENT =
         java.util.regex.Pattern.compile("^\\s*([A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+)/[A-Za-z0-9_.$]+\\s*$");

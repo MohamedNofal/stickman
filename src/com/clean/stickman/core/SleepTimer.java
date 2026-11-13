@@ -1,16 +1,19 @@
 package com.clean.stickman.core;
 
-/** Sleep-timer arithmetic and the fade broadcast commands (pure; stickd runs them). */
+import com.clean.stickman.core.cmd.SleepCmds;
+
+/** Sleep-timer arithmetic (pure). The fade broadcasts are in core.cmd.SleepCmds. */
 public final class SleepTimer {
     private SleepTimer() {}
 
     public static final long FADE_MS = 60_000;
     public static final int MAX_MIN = 24 * 60;
-    public static final String FADE_START = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.FADE_START --ei seconds ";
-    public static final String FADE_END = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.FADE_END";
-    /** Screen off: opaque black overlay until any button (FADE_END clears it as well). */
-    public static final String CURTAIN_ON = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.CURTAIN_ON";
-    public static final String CURTAIN_KEY = "am broadcast -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.CURTAIN_KEY";
+    /** Delegates to SleepCmds.fadeEnd (daemon/Sleep). */
+    public static final String FADE_END = SleepCmds.fadeEnd();
+    /** Delegates to SleepCmds.curtainOn (daemon/Sleep). */
+    public static final String CURTAIN_ON = SleepCmds.curtainOn();
+    /** Delegates to SleepCmds.curtainKey (daemon/Sleep). */
+    public static final String CURTAIN_KEY = SleepCmds.curtainKey();
 
     /** Cycles 0->15->30->60->90->0; any other value goes to 15. */
     public static int next(int currentMin) {
@@ -35,5 +38,6 @@ public final class SleepTimer {
         return n > MAX_MIN ? -1 : n;
     }
 
-    public static String fadeStart(int seconds) { return FADE_START + seconds; }
+    /** Delegates to SleepCmds.fadeStart (daemon/Sleep). */
+    public static String fadeStart(int seconds) { return SleepCmds.fadeStart(seconds); }
 }

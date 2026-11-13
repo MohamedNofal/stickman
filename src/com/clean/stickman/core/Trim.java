@@ -16,7 +16,6 @@ import java.util.Set;
 public final class Trim {
     private Trim() {}
 
-    public static final String LRU_CMD = "dumpsys activity lru";
     /** Never trimmed: the system itself and Stickman's own processes (the proxy must not drop its buffers). */
     static final Set<String> SKIP = new HashSet<>(Arrays.asList("system", "android", "com.clean.stickman", "com.clean.netfilter"));
 
@@ -32,8 +31,8 @@ public final class Trim {
         return new ArrayList<>(out);
     }
 
-    /** am refuses (non-zero) when the process is gone or already trimmed: keep it quiet. */
-    public static String cmd(String process) { return "am send-trim-memory " + process + " COMPLETE >/dev/null 2>&1; true"; }
+    /** Delegates to core.cmd.StatusCmds.trimMemory (daemon/AutoKill). */
+    public static String cmd(String process) { return com.clean.stickman.core.cmd.StatusCmds.trimMemory(process); }
 
     /** {freed MB, trimmed count} from a "STATUS trim freed_mb=N trimmed=M" line, or null. */
     public static long[] parseStatus(String s) {

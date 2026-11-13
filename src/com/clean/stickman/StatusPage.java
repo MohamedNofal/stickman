@@ -1,5 +1,6 @@
 package com.clean.stickman;
 
+import com.clean.stickman.core.cmd.StatusCmds;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -49,7 +50,7 @@ public class StatusPage extends Page {
         start = Theme.card(a);
         start.addView(Theme.heading(a, "Start here"));
         start.addView(Theme.text(a, "1.  Remote → Listen, then press the button on your remote you want to change.\n"
-            + "2.  Speed → Boost when the stick feels slow, then Use recommended settings to keep it that way.\n"
+            + "2.  Speed → Boost when the stick feels slow, then Use recommended settings" + " to keep it that way.\n"
             + (com.clean.stickman.core.Edition.STORE ? "3.  Sleep → a sleep timer, or keep the TV awake while a video plays.\n\n"
                 : "3.  Debloat → Disable all switches off Amazon's extras; undo under Disabled by Stickman.\n\n")
             + "You can close Stickman afterwards: your buttons keep working.", 15, Theme.TEXT));
@@ -104,7 +105,7 @@ public class StatusPage extends Page {
     void refresh() {
         // "Reading…" only once it really goes (Cancel on the other-VPN question must not leave it hanging)
         a.run(() -> { info.setText("Reading…"); refreshedAt = System.currentTimeMillis(); },
-            Store.enabled(a) ? Ensure.MARKER : null, DeviceInfo.CMD);
+            Store.enabled(a) ? Ensure.MARKER : null, StatusCmds.deviceInfo());
     }
 
     @Override public void onShow() {
@@ -182,7 +183,7 @@ public class StatusPage extends Page {
             info.setText(Store.pid(output, "REMAPD") != null
                 ? "Stickman is running. Press Refresh to read the stick's status."
                 : "Press Refresh to read the stick's status.");
-        if (!DeviceInfo.CMD.equals(cmd)) return;
+        if (!StatusCmds.deviceInfo().equals(cmd)) return;
         if (!ok) { info.setText("Couldn't read: " + Trouble.shortText(output)); return; }
         DeviceInfo d = DeviceInfo.parse(output);
         info.setText("Updated " + new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date()));

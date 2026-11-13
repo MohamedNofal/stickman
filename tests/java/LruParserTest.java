@@ -63,7 +63,7 @@ public class LruParserTest {
         String a9 = "    Proc # 3: vis   F/ /BFGS trm: 0 4315:com.android.launcher3/u0a32 (service)\n";
         T.eq("BFGS", LruParser.parse(a9).get(0).state, "Android 9 states are already the modern names");
         // read(): falls back to the processes dump when the lru command is unknown
-        java.util.List<LruParser.Proc> r = LruParser.read(cmd -> cmd.equals(LruParser.CMD) ? "Unknown command: lru\nBad activity command" : a7);
+        java.util.List<LruParser.Proc> r = LruParser.read(cmd -> cmd.equals(com.clean.stickman.core.cmd.StatusCmds.lru()) ? "Unknown command: lru\nBad activity command" : a7);
         T.eq(4, r.size(), "fallback used");
         T.eq(1, LruParser.read(cmd -> "  #25: fg     TPSL --- 22837:com.wolf.firelauncher/u0a248 act:activities|recents\n").size(), "modern output: no fallback");
     }

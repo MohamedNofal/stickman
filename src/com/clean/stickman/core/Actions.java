@@ -94,7 +94,7 @@ public final class Actions {
             case NEXT: return "skips to the next track";
             case PREVIOUS: return "back to the previous track";
             case KILL_CURRENT: return "force-stops the app in front";
-            case OPEN_SCREEN: return "a Fire TV settings screen";
+            case OPEN_SCREEN: return "a Fire TV settings" + " screen";
             case TRIM: return "background apps give back unused memory; nothing closes";
             default: return "";
         }

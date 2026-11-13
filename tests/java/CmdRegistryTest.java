@@ -16,9 +16,6 @@ public class CmdRegistryTest {
     /** Files that still build shell commands outside core/cmd. Migration removes entries; nothing may be added. */
     static final Set<String> NOT_MIGRATED = new HashSet<>(Arrays.asList(
         // group A
-        "core/Commands.java", "core/EnsureScript.java", "core/DeviceInfo.java", "core/KillPolicy.java", "core/Trim.java",
-        "core/LruParser.java", "StatusPage.java", "ShortcutsPage.java", "SleepPage.java", "WhatsNew.java", "SettingsPage.java", "core/Actions.java", "core/LiveValues.java",
-        "core/SleepTimer.java",
         // group B
         "core/Lean.java", "core/Originals.java", "core/Starve.java", "core/Ota.java", "core/AmazonUninstall.java",
         "core/BgTime.java", "core/BootStart.java", "core/DnsGuard.java", "core/Debloat.java", "core/Telemetry.java",

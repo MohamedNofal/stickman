@@ -1,13 +1,14 @@
 package com.clean.stickman;
 
+import com.clean.stickman.core.cmd.SetupCmds;
+import com.clean.stickman.core.cmd.SettingsCmds;
+import com.clean.stickman.core.cmd.RemoteCmds;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.clean.stickman.core.Commands;
-import com.clean.stickman.core.EnsureScript;
 import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.Ota;
 import com.clean.stickman.core.RemapModel;
@@ -67,7 +68,7 @@ public class SettingsPage extends Page {
             updInfo = Theme.text(a, "", 15, Theme.TEXT);
             cu.addView(updInfo);
             cu.addView(Theme.text(a, "Stickman checks GitHub for new versions. With automatic updates on, a new version "
-                + "downloads by itself and installs while the TV is asleep, so it never interrupts you. Your settings and "
+                + "downloads by itself and installs while the TV is asleep, so it never interrupts you. Your settings" + " and "
                 + "buttons are kept.", 14, Theme.MUTED));
             LinearLayout ru = Theme.row(a);
             Button chk = Theme.button(a, "Check now");
@@ -75,7 +76,7 @@ public class SettingsPage extends Page {
             ru.addView(chk);
             Button now = Theme.button(a, "Update now");
             now.setOnClickListener(v -> ThemedDialog.confirm(a, "Update Stickman now?", "Stickman downloads the newest "
-                + "version and installs it. It closes for a moment and restarts by itself; your settings and buttons are kept.",
+                + "version and installs it. It closes for a moment and restarts by itself; your settings" + " and buttons are kept.",
                 "Update", () -> updateAction(Actions.UPDATE_NOW, "Updating… Stickman closes and restarts by itself.")));
             ru.addView(now);
             Button news = Theme.button(a, "What's new");
@@ -112,7 +113,7 @@ public class SettingsPage extends Page {
         Button undo = Theme.button(a, "Undo everything…");
         undo.setOnClickListener(v -> ThemedDialog.confirm(a, "Undo everything?",
             "Stickman turns off: your remote works normally again, the apps Stickman disabled or kept asleep are turned "
-            + "back on, and the stick's settings go back to Amazon's values (Fire OS updates included).\n\n"
+            + "back on, and the stick's settings" + " go back to Amazon's values (Fire OS updates included).\n\n"
             + "Your button mappings are kept for when you turn Stickman on again.", "Undo everything", this::undoEverything));
         r4.addView(undo);
         c4.addView(r4);
@@ -151,7 +152,7 @@ public class SettingsPage extends Page {
         clock.setOnClickListener(v -> fixClock());
         r3.addView(clock);
         Button proxy = Theme.button(a, "Clear stuck proxy");
-        proxy.setOnClickListener(v -> send(Commands.clearDeadProxy(), "proxy", "Checking the proxy…"));
+        proxy.setOnClickListener(v -> send(SettingsCmds.clearDeadProxy(), "proxy", "Checking the proxy…"));
         r3.addView(proxy);
         c3.addView(r3);
         l.addView(c3);
@@ -185,7 +186,7 @@ public class SettingsPage extends Page {
 
     void updateAction(String id, String pending) {
         if (!Store.enabled(a)) { say("Turn Stickman on first: its background automation does the update."); return; }
-        send(Commands.act(id, null), "update", pending);
+        send(RemoteCmds.act(id, null), "update", pending);
     }
 
     void setAutoUpdate(boolean on) {
@@ -241,8 +242,8 @@ public class SettingsPage extends Page {
             ThemedDialog.confirm(a, "Turn Stickman off?", "Your remote goes back to normal and the background automation "
                 + "stops until you turn Stickman on again.\n\nWhat Stickman changed on the stick (disabled apps, DNS, …) "
                 + "stays as it is: Undo everything puts that back too.", "Turn off", () -> {
-                mine.put(EnsureScript.stop(), "stop");
-                a.run(() -> { Store.setEnabled(a, false); refresh(); }, EnsureScript.stop());
+                mine.put(SetupCmds.stop(), "stop");
+                a.run(() -> { Store.setEnabled(a, false); refresh(); }, SetupCmds.stop());
             });
         } else {
             a.run(() -> { Store.setEnabled(a, true); refresh(); }, Ensure.MARKER);
@@ -260,7 +261,7 @@ public class SettingsPage extends Page {
 
     /** Master OFF followed by Restore defaults, in one go: exactly the two commands those buttons send. */
     void undoEverything() {
-        final String stop = EnsureScript.stop();
+        final String stop = SetupCmds.stop();
         final String restore = thaw() + Originals.restoreScript();
         mine.put(stop, "undo-stop");
         mine.put(restore, "undo");
@@ -291,7 +292,7 @@ public class SettingsPage extends Page {
             final long t = fetchTime();
             a.runOnUiThread(() -> {
                 if (t <= 0) { say("Couldn't reach the time server. Is the stick online?"); return; }
-                send(Commands.setTime(t), "clock", "Setting the clock to "
+                send(SettingsCmds.setTime(t), "clock", "Setting the clock to "
                     + new SimpleDateFormat("d MMM yyyy HH:mm", Locale.UK).format(new Date(t)) + "…");
             });
         }, "fixclock").start();
@@ -342,7 +343,7 @@ public class SettingsPage extends Page {
                 else say(output);
                 break;
             case "clock": say("Clock set. " + output); break;
-            case "restore": say("Defaults restored: the stick's settings and apps are back to Amazon's. Stickman is still on."); break;
+            case "restore": say("Defaults restored: the stick's settings" + " and apps are back to Amazon's. Stickman is still on."); break;
             case "stop": say("Stopped. The remote works normally."); break;
             case "undo-stop": break;   // the "undo" result reports the whole thing
             case "update": break;          // stickd reports through its STATUS update line (shown on the card)

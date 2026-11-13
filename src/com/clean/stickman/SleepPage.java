@@ -1,11 +1,12 @@
 package com.clean.stickman;
 
+import com.clean.stickman.core.cmd.SleepCmds;
+import com.clean.stickman.core.cmd.RemoteCmds;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.clean.stickman.core.Actions;
-import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.LiveValues;
 import com.clean.stickman.core.StickdConf;
 
@@ -34,7 +35,7 @@ public class SleepPage extends ApplyPage {
         LinearLayout t = card(l, "Sleep timer", "Pauses what's playing and puts the stick to sleep, with a gentle fade in the last minute.");
         timer = choices(t, new String[] { "Off", "15 min", "30 min", "60 min", "90 min" }, i -> {
             if (!stickdOn()) return;
-            send(Commands.act(Actions.SLEEP_TIMER_SET, Integer.toString(TIMER_MIN[i])), "timer:" + i,
+            send(RemoteCmds.act(Actions.SLEEP_TIMER_SET, Integer.toString(TIMER_MIN[i])), "timer:" + i,
                 i == 0 ? "Turning the sleep timer off…" : "Setting the sleep timer…");
         });
         timerInfo = Theme.autoHide(Theme.text(a, "", 14, Theme.TEXT));
@@ -42,10 +43,10 @@ public class SleepPage extends ApplyPage {
 
         LinearLayout so = card(l, "Screen off", "Blacks out the screen while audio keeps playing. Any button brings it back.");
         button(so, "Screen off now", v -> {
-            if (stickdOn()) send(Commands.act(Actions.SCREEN_OFF, null), "screenoff", "Turning the screen off…");
+            if (stickdOn()) send(RemoteCmds.act(Actions.SCREEN_OFF, null), "screenoff", "Turning the screen off…");
         });
 
-        LinearLayout m = card(l, "Stay awake while media plays", "Stops the stick sleeping or starting the screensaver mid-film.");
+        LinearLayout m = card(l, "Stay awake while media" + " plays", "Stops the stick sleeping or starting the screensaver mid-film.");
         media = choices(m, new String[] { "On", "Off" }, i -> {
             StickdConf c = StickdConf.parse(Store.stickdText(a));
             if (c.stayAwakeMedia == (i == 0)) return;
@@ -56,19 +57,19 @@ public class SleepPage extends ApplyPage {
 
         LinearLayout ss = card(l, "Screensaver", "Shows the screensaver when nothing has been pressed for a while.");
         saver = choices(ss, new String[] { "On", "Off" }, i ->
-            send(Commands.screensaver(i == 0), "saver:" + i, "Setting the screensaver…"));
+            send(SleepCmds.screensaver(i == 0), "saver:" + i, "Setting the screensaver…"));
         saverNow = now(ss);
 
         LinearLayout st = card(l, "Sleep after", "How long the stick stays idle before it goes to sleep (the screensaver "
             + "may run first). Fire OS 8 may override this.");
         sleep = choices(st, SLEEP_LABELS, i ->
-            send(Commands.sleepTimeout(SLEEP_MS[i]), "sleep:" + i, "Setting sleep time…"));
+            send(SleepCmds.sleepTimeout(SLEEP_MS[i]), "sleep:" + i, "Setting sleep time…"));
         sleepNow = now(st);
 
         LinearLayout ot = card(l, "Screen off after", "How long without a button press before the screensaver or a dark "
             + "screen starts. Fire OS 8 may override this.");
         off = choices(ot, OFF_LABELS, i ->
-            send(Commands.screenOffTimeout(OFF_MS[i]), "off:" + i, "Setting screen-off time…"));
+            send(SleepCmds.screenOffTimeout(OFF_MS[i]), "off:" + i, "Setting screen-off time…"));
         offNow = now(ot);
 
         LinearLayout hc = card(l, "TV control (HDMI-CEC)", "Lets the stick turn your TV on and switch it to this input, "
@@ -107,7 +108,7 @@ public class SleepPage extends ApplyPage {
     void readLive() {
         if (Bridge.otherVpnActive(a) || Bridge.busy && readAt != 0) return;
         readAt = System.currentTimeMillis();
-        String cmd = LiveValues.SLEEP_READ + "; " + com.clean.stickman.core.Starve.HDMI_READ;
+        String cmd = SleepCmds.read() + "; " + com.clean.stickman.core.Starve.HDMI_READ;
         mine.put(cmd, "live");
         Bridge.run(a, cmd, false);
     }
