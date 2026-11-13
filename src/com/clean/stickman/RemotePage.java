@@ -1,5 +1,6 @@
 package com.clean.stickman;
 
+import com.clean.stickman.core.cmd.RemoteCmds;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.os.Handler;
@@ -9,7 +10,6 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Keys;
 import com.clean.stickman.core.PointerText;
 import com.clean.stickman.core.Listen;
@@ -432,7 +432,7 @@ public class RemotePage extends Page implements RemoteView.Listener, RemoteView.
         boolean on = !PointerText.isOn(LogTail.status("mouse"));
         pointerAsked = System.currentTimeMillis();
         pointerInfo.setText(on ? "Turning it on…" : "Turning it off…");
-        a.run(null, Commands.pointer(on));
+        a.run(null, RemoteCmds.pointer(on));
     }
 
     /** Label and state from remapd's latest "STATUS mouse" line; "Turning…" stays until a newer line arrives. */

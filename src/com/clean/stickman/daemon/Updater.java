@@ -4,6 +4,8 @@ import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Edition;
 import com.clean.stickman.core.EnsureScript;
 import com.clean.stickman.core.Update;
+import com.clean.stickman.core.cmd.AutoKillCmds;
+import com.clean.stickman.core.cmd.UpdaterCmds;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -59,12 +61,12 @@ final class Updater {
 
     /** The TV is asleep (or dozing) and nothing is playing: an install can't interrupt anyone. */
     private boolean tvIdle() {
-        if (!AutoKill.isAsleep(Sh.run("dumpsys power | grep -m1 mWakefulness="))) return false;
-        return Sh.run("dumpsys media_session | grep -c 'state=PlaybackState {state=3'").trim().equals("0");
+        if (!AutoKill.isAsleep(Sh.run(AutoKillCmds.wakefulness()))) return false;
+        return Sh.run(UpdaterCmds.playingCount()).trim().equals("0");
     }
 
     private String installed() {
-        String v = Update.installedVersion(Sh.run("dumpsys package " + EnsureScript.PKG + " | grep -m1 versionName="));
+        String v = Update.installedVersion(Sh.run(UpdaterCmds.installedVersion(EnsureScript.PKG)));
         current = v;
         return v;
     }
@@ -139,14 +141,14 @@ final class Updater {
     private void installApk(Update.Release r, String why) {
         log("installing", r.version, why);
         // pm verifies the signature against the installed app; a mismatch fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE
-        String out = Sh.run("pm install -r " + Update.FILE + " 2>&1", 180_000);
+        String out = Sh.run(UpdaterCmds.install(Update.FILE), 180_000);
         ready = null;
         new File(Update.FILE).delete();
         if (out.contains("Success")) {
             current = r.version;
             log("installed", r.version, null);
             // the user just pressed Update now: bring Stickman back (it shows what's new); a sleep install stays quiet
-            if ("now".equals(why)) Sh.run("am start -n " + EnsureScript.PKG + "/com.clean.stickman.MainActivity >/dev/null 2>&1");
+            if ("now".equals(why)) Sh.run(UpdaterCmds.relaunch(EnsureScript.PKG));
         } else {
             log("error", r.version, "install refused: " + out.trim());
         }

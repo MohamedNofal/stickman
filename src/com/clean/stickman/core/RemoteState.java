@@ -10,9 +10,6 @@ package com.clean.stickman.core;
 public final class RemoteState {
     private RemoteState() {}
 
-    /** Shell appended to the ensure script: prints the REMOTE line when remapd has written its state. */
-    public static final String REPORT = "[ -f remote.state ] && echo \"REMOTE $(cat remote.state)\"";
-
     /** The state after "REMOTE ", or null when the report has none. */
     public static String of(String ensureOut) {
         if (ensureOut == null) return null;

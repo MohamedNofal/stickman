@@ -4,13 +4,11 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Parses the Status page's one-shot bridge command output into display values. */
+/**
+ * Parses the output of the Status page's one-shot bridge command (core.cmd.StatusCmds.deviceInfo) into display
+ * values; every line is recognised by pattern, so missing pieces just stay empty.
+ */
 public final class DeviceInfo {
-    /** Run as shell; every line is recognised by pattern, so missing pieces just stay empty. */
-    public static final String CMD =
-        "grep -E 'MemTotal|MemAvailable' /proc/meminfo; dumpsys thermalservice | grep -m3 -i 'mValue'; "
-        + "df -h /data | tail -1; dumpsys wifi | grep -m1 'RSSI'; "
-        + "ip -4 addr show wlan0 2>/dev/null | grep -m1 'inet '; getprop ro.build.version.name";
 
     private static final Pattern MEM = Pattern.compile("^(MemTotal|MemAvailable):\\s+(\\d+)\\s*kB");
     private static final Pattern TEMP = Pattern.compile("mValue=(-?[0-9.]+)(?:.*?mType=(-?\\d+))?", Pattern.CASE_INSENSITIVE);

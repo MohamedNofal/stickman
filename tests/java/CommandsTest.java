@@ -1,3 +1,5 @@
+import com.clean.stickman.core.cmd.SettingsCmds;
+import com.clean.stickman.core.cmd.SleepCmds;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Catalog;
 
@@ -14,12 +16,12 @@ public class CommandsTest {
         T.yes(on.contains("hostname") && on.contains("private_dns_specifier dns.adguard-dns.com") && on.contains("dns_check"), on);
     }
     public void testClearDeadProxyKeepsListening() {
-        String c = Commands.clearDeadProxy();
+        String c = SettingsCmds.clearDeadProxy();
         T.yes(c.contains("/proc/net/tcp") && c.contains("tcp6") && c.contains("0A"), c);
         T.yes(c.contains("PROXY kept") && c.contains("PROXY cleared") && c.contains("PROXY none"), c);
     }
     public void testClearDeadProxyFailsClosed() {
-        String c = Commands.clearDeadProxy();
+        String c = SettingsCmds.clearDeadProxy();
         T.yes(c.contains("*[!0-9]*") && c.contains("[ -z \"$hex\" ]"), "guards non-numeric/empty port: " + c);
         T.yes(c.indexOf("[ -z \"$hex\" ]") < c.indexOf("PROXY cleared"), "guard precedes clear");
     }
@@ -41,10 +43,10 @@ public class CommandsTest {
     public void testScreensaverAndActAndTime() {
         T.yes(Commands.screensaver(false).contains("screensaver_enabled 0"), "ss");
         T.yes(Commands.act("open_screen", "x.Y").contains("echo 'open_screen x.Y' > $n.tmp && mv $n.tmp $n.act"), "act");
-        String t = Commands.setTime(1700000000000L);
+        String t = SettingsCmds.setTime(1700000000000L);
         T.yes(t.contains("cmd alarm set-time 1700000000000") && t.contains("ntp_server time.google.com") && t.contains("auto_time 1"), t);
         T.yes(Commands.animation(0.5f).contains("window_animation_scale 0.5"), "anim");
-        T.yes(Commands.sleepTimeout(900000).contains("sleep_timeout 900000"), "sleep");
+        T.yes(SleepCmds.sleepTimeout(900000).contains("sleep_timeout 900000"), "sleep");
     }
     public void testCatalog() {
         T.yes(Catalog.NEVER_DISABLE.contains("com.amazon.tv.launcher"), "nd");

@@ -3,36 +3,24 @@ package com.clean.stickman.core;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.clean.stickman.core.cmd.OtaCmds;
+
 /**
  * Freezes Fire OS system updates. Fire OS refuses to disable its OTA packages ("Cannot disable a protected
  * package"), but shell may suspend them and disable the forced-updater companion, so updates stop being
- * downloaded and installed. The state is re-applied by the boot ensure script.
+ * downloaded and installed. The state is re-applied by the boot ensure script. Commands: {@link OtaCmds}.
  */
 public final class Ota {
     private Ota() {}
 
     /** OTA packages, in the order they are frozen. All three are present on the Fire TV 4K Max. */
-    public static final String[] PACKAGES = {
-        "com.amazon.device.software.ota",
-        "com.amazon.device.software.ota.override",
-        "com.amazon.tv.forcedotaupdater.v2",
-    };
+    public static final String[] PACKAGES = OtaCmds.PACKAGES;
 
     /** Printed before each package's state line by {@link #stateCmd()}. */
-    public static final String MARK = "---stickman-ota---";
+    public static final String MARK = OtaCmds.MARK;
 
-    /**
-     * Shell: for every package print {@link #MARK} + its name, then the first "User 0:" line of dumpsys with the
-     * spaces stripped (so "suspended=true" / "enabled=3" can be matched without parsing the whole dump).
-     */
-    public static String stateCmd() {
-        StringBuilder s = new StringBuilder();
-        for (String p : PACKAGES) {
-            s.append("echo ").append(MARK).append(' ').append(p).append("; ");
-            s.append("dumpsys package ").append(p).append(" 2>/dev/null | grep -m1 'User 0:' | tr -d ' '; ");
-        }
-        return s.toString();
-    }
+    /** {@link OtaCmds#state}: per package the MARK line and its first "User 0:" dumpsys line, spaces stripped. */
+    public static String stateCmd() { return OtaCmds.state(); }
 
     /**
      * True when every package is frozen: suspended, or disabled-user (pm reports enabled=3). False when any is
@@ -63,33 +51,16 @@ public final class Ota {
         return states;
     }
 
-    /** Suspends every OTA package and disables the forced updater; prints OTA_FROZEN when announce. */
-    public static String freezeScript() { return freezeScript(true); }
+    /** Suspends every OTA package and disables the forced updater; prints OTA_FROZEN. */
+    public static String freezeScript() { return OtaCmds.freeze(true); }
 
-    public static String freezeScript(boolean announce) {
-        StringBuilder s = new StringBuilder();
-        for (String p : PACKAGES) {
-            // suspend works on Fire OS protected packages; disable-user only succeeds on the companion
-            s.append("pm suspend --user 0 ").append(p).append(" >/dev/null 2>&1; ");
-            s.append("pm disable-user --user 0 ").append(p).append(" >/dev/null 2>&1; ");
-        }
-        if (announce) s.append("echo OTA_FROZEN");
-        return s.toString();
-    }
+    public static String freezeScript(boolean announce) { return OtaCmds.freeze(announce); }
 
     /** Unsuspends and re-enables every OTA package; prints OTA_THAWED. */
-    public static String thawScript() {
-        StringBuilder s = new StringBuilder();
-        for (String p : PACKAGES) {
-            s.append("pm unsuspend --user 0 ").append(p).append(" >/dev/null 2>&1; ");
-            s.append("pm enable ").append(p).append(" >/dev/null 2>&1; ");
-        }
-        s.append("echo OTA_THAWED");
-        return s.toString();
-    }
+    public static String thawScript() { return OtaCmds.thaw(); }
 
     /** Line for the boot ensure script: re-freeze when the owner froze OTA, empty otherwise. */
     public static String ensureLine(boolean frozen) {
-        return frozen ? freezeScript(false) : "";
+        return frozen ? OtaCmds.freeze(false) : "";
     }
 }

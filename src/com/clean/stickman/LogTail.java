@@ -36,7 +36,7 @@ public class LogTail implements Runnable {
     public void run() {
         while (!stop) {
             try {
-                proc = Runtime.getRuntime().exec(new String[] { "logcat", "-v", "time", "-T", "100", "RemapD:I", "Stickd:I", "*:S" });
+                proc = Runtime.getRuntime().exec(com.clean.stickman.core.cmd.RemoteCmds.logTail());
                 BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream()));
                 synchronized (status) { status.clear(); }   // -T 100 replays recent history
                 String l;

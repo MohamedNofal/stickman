@@ -1,4 +1,3 @@
-import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.PointerText;
 
 public class PointerTextTest {
@@ -15,7 +14,7 @@ public class PointerTextTest {
 
     public void testCommand() {
         T.eq("echo on > /data/local/tmp/stickman/mouse.cmd.tmp && mv /data/local/tmp/stickman/mouse.cmd.tmp /data/local/tmp/stickman/mouse.cmd",
-            Commands.pointer(true), "atomic on");
-        T.yes(Commands.pointer(false).startsWith("echo off "), "off");
+            com.clean.stickman.core.cmd.RemoteCmds.pointer(true), "atomic on");
+        T.yes(com.clean.stickman.core.cmd.RemoteCmds.pointer(false).startsWith("echo off "), "off");
     }
 }

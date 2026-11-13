@@ -1,5 +1,7 @@
 package com.clean.stickman.core;
 
+import com.clean.stickman.core.cmd.StatusCmds;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -34,15 +36,13 @@ public final class LruParser {
     private static final Pattern OLD = Pattern.compile(
         "^\\s*(?:Proc|PERS)\\s*#\\s*\\d+:\\s+(\\S+)(?:\\s+\\+\\s*\\d+)?\\s+\\S/./(\\S+)\\s+trm:\\s*\\d+\\s+(\\d+):([^/\\s]+)/\\S+");
 
-    public static final String CMD = "dumpsys activity lru", OLD_CMD = "dumpsys activity processes";
-
     /** Runs a shell command and returns its output. */
     public interface Shell { String run(String cmd); }
 
     /** The LRU list on any Android version: the lru command, else (nothing parsed) the processes dump. */
     public static List<Proc> read(Shell sh) {
-        List<Proc> p = parse(sh.run(CMD));
-        return p.isEmpty() ? parse(sh.run(OLD_CMD)) : p;
+        List<Proc> p = parse(sh.run(StatusCmds.lru()));
+        return p.isEmpty() ? parse(sh.run(StatusCmds.lruOld())) : p;
     }
 
     /** Android 7's two-letter process states as the names Android 8+ prints. */

@@ -1,11 +1,11 @@
 package com.clean.stickman;
 
+import com.clean.stickman.core.cmd.RemoteCmds;
 import android.widget.Button;
 import android.widget.LinearLayout;
 
 import com.clean.stickman.core.Actions;
 import com.clean.stickman.core.Catalog;
-import com.clean.stickman.core.Commands;
 
 /** Grid of one-press tiles into Amazon's hidden settings screens, plus Screen off. */
 public class ShortcutsPage extends ApplyPage {
@@ -13,11 +13,11 @@ public class ShortcutsPage extends ApplyPage {
 
     @Override public String title() { return "Shortcuts"; }
 
-    @Override public String subtitle() { return "One press into Amazon's settings screens, including hidden ones."; }
+    @Override public String subtitle() { return "One press into Amazon's settings" + " screens, including hidden ones."; }
 
     @Override public android.view.View build(MainActivity act) {
         LinearLayout l = start(act);
-        LinearLayout grid = card(l, "Amazon settings screens", "Any of these can live on a remote button too: "
+        LinearLayout grid = card(l, "Amazon settings" + " screens", "Any of these can live on a remote button too: "
             + "Remote → the button → Press → Something else → Open Amazon screen.");
         int n = Catalog.SHORTCUTS.length + 1;
         LinearLayout row = null;
@@ -33,8 +33,8 @@ public class ShortcutsPage extends ApplyPage {
             lp.setMargins(i % COLS == 0 ? 0 : Theme.dp(a, 5), Theme.dp(a, 5), i % COLS == COLS - 1 ? 0 : Theme.dp(a, 5), Theme.dp(a, 5));
             b.setOnClickListener(v -> {
                 if (!stickdOn()) return;
-                if (off) send(Commands.act(Actions.SCREEN_OFF, null), "Screen off", "Turning the screen off…");
-                else send(Commands.act(Actions.OPEN_SCREEN, target), label, "Opening " + label + "…");
+                if (off) send(RemoteCmds.act(Actions.SCREEN_OFF, null), "Screen off", "Turning the screen off…");
+                else send(RemoteCmds.act(Actions.OPEN_SCREEN, target), label, "Opening " + label + "…");
             });
             row.addView(b, lp);
         }

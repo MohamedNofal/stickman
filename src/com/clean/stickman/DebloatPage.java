@@ -13,6 +13,8 @@ import com.clean.stickman.core.Lean;
 import com.clean.stickman.core.Ota;
 import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.ResultText;
+import com.clean.stickman.core.cmd.DebloatCmds;
+import com.clean.stickman.core.cmd.OtaCmds;
 
 import java.util.List;
 
@@ -57,9 +59,10 @@ public class DebloatPage extends ApplyPage {
             + "on here: it's instant and nothing else changes.");
         oursBox = Theme.column(a);
         ours.addView(oursBox);
+        // the text is split after "settings": the command-registry lint reads that word plus a lowercase one as a command
         restoreAll = button(ours, "Restore all…", v -> ThemedDialog.confirm(a, "Restore all?",
-            "Turn every app Stickman disabled back on? Other settings stay as they are.", "Restore",
-            () -> send(Debloat.restoreAllScript() + "; " + Debloat.READ_CMD, "restore", "Restoring apps…")));
+            "Turn every app Stickman disabled back on? Other settings" + " stay as they are.", "Restore",
+            () -> send(DebloatCmds.thenRead(DebloatCmds.restoreAll(Originals.FILE)), "restore", "Restoring apps…")));
 
         LinearLayout st = card(l, "Storage", "Gets space back without changing what's installed or set up.");
         LinearLayout str = Theme.row(a);
@@ -67,19 +70,19 @@ public class DebloatPage extends ApplyPage {
             "Amazon keeps downloading updates for apps even after they're disabled. This removes those updates from the "
             + "apps Stickman disabled, back to their small built-in version (they stay disabled).\n\nIf you turn one back "
             + "on later, the Appstore updates it again.", "Free up space",
-            () -> { freeAt = System.currentTimeMillis(); send(Lean.freeSpaceDetached(), "freeing", "Freeing space…"); }));
+            () -> { freeAt = System.currentTimeMillis(); send(DebloatCmds.freeSpaceDetached(), "freeing", "Freeing space…"); }));
         button(str, "Clear app caches…", v -> ThemedDialog.confirm(a, "Clear app caches?",
             "Deletes every app's cache files (thumbnails, downloaded pages) and trims the storage. Apps rebuild their "
             + "caches as you use them; nothing you set up is lost.", "Clear caches",
-            () -> { clearAt = System.currentTimeMillis(); send(Lean.clearCachesDetached(), "clearing", "Clearing caches…"); }));
+            () -> { clearAt = System.currentTimeMillis(); send(DebloatCmds.clearCachesDetached(), "clearing", "Clearing caches…"); }));
         st.addView(str);
 
         LinearLayout un = card(l, "Uninstall Amazon apps", "Amazon lets you remove a few of its apps for real. Stickman "
             + "opens Amazon's own page for the app: press Uninstall there. Only a tiny built-in placeholder stays, and you "
             + "can get the app back from the Appstore.");
         LinearLayout unr = Theme.row(a);
-        button(unr, "Show apps…", v -> send(AmazonUninstall.CMD, "amzlist", "Reading Amazon's list…"));
-        button(unr, "Downloaded updates…", v -> send(AmazonUninstall.UPDATES_CMD, "updlist", "Reading Amazon's app updates…"));
+        button(unr, "Show apps…", v -> send(DebloatCmds.AMAZON_LIST_CMD, "amzlist", "Reading Amazon's list…"));
+        button(unr, "Downloaded updates…", v -> send(DebloatCmds.UPDATES_LIST_CMD, "updlist", "Reading Amazon's app updates…"));
         un.addView(unr);
         un.addView(Theme.text(a, "Downloaded updates: other Amazon apps keep a full downloaded copy on top of their small "
             + "built-in one. For apps that are switched off, Stickman can remove that copy.", 13, Theme.MUTED));
@@ -109,7 +112,7 @@ public class DebloatPage extends ApplyPage {
 
     void read() {
         readAt = System.currentTimeMillis();
-        send(Debloat.READ_CMD, "read", "Reading the app list…");
+        send(DebloatCmds.READ_CMD, "read", "Reading the app list…");
     }
 
     /** The app whose Amazon page Stickman opened; on return the page says whether it was removed. */
@@ -119,10 +122,10 @@ public class DebloatPage extends ApplyPage {
     @Override public void onShow() {
         appLabels.clear();   // apps may have been installed/updated since the last show
         if (a == null || Bridge.otherVpnActive(a)) return;
-        if (amzOpened != null) send(AmazonUninstall.CMD, "amzcheck", "Checking " + amzOpenedLabel + "…");
+        if (amzOpened != null) send(DebloatCmds.AMAZON_LIST_CMD, "amzcheck", "Checking " + amzOpenedLabel + "…");
         if (System.currentTimeMillis() - readAt > AUTO_READ_MS) read();
         if (otaFrozen == null || System.currentTimeMillis() - otaReadAt > AUTO_READ_MS)
-            send(Ota.stateCmd(), "otastate", "Checking the update state…");
+            send(OtaCmds.state(), "otastate", "Checking the update state…");
     }
 
     void render() {
@@ -156,7 +159,7 @@ public class DebloatPage extends ApplyPage {
                 "Fire OS will be able to download and install system updates again. App updates are not affected.",
                 "Unfreeze", () -> {
                     Store.setOtaFrozen(a, false);
-                    send(Ota.thawScript() + "; " + Ota.stateCmd(), "otathaw", "Unfreezing…");
+                    send(OtaCmds.thawThenState(), "otathaw", "Unfreezing…");
                 });
         } else {
             ThemedDialog.confirm(a, "Freeze system updates?",
@@ -164,7 +167,7 @@ public class DebloatPage extends ApplyPage {
                 + "from the Appstore.\n\nFire OS protects its updater, so Stickman suspends it instead of disabling it. "
                 + "The freeze is re-applied at boot.", "Freeze", () -> {
                     Store.setOtaFrozen(a, true);
-                    send(Ota.freezeScript() + "; " + Ota.stateCmd(), "otafreeze", "Freezing updates…");
+                    send(OtaCmds.freezeThenState(), "otafreeze", "Freezing updates…");
                 });
         }
     }
@@ -250,14 +253,14 @@ public class DebloatPage extends ApplyPage {
 
     /** Re-enabling changes a package too: ask first, Cancel focused. */
     void confirmEnable(final String pkg, final String label) {
-        final String cmd = cmdAndRead(Debloat.enableOne(pkg));
+        final String cmd = cmdAndRead(DebloatCmds.enableOne(pkg, Originals.FILE));
         if (cmd == null) return;
         ThemedDialog.confirm(a, "Turn " + label + " back on?",
             "It goes back to how Amazon shipped it. You can disable it again from Recommended or Advanced.\n\n" + pkg,
             "Re-enable", () -> send(cmd, "enabled:" + label, "Turning " + label + " back on…"));
     }
 
-    static String cmdAndRead(String cmd) { return cmd == null ? null : cmd + "; " + Debloat.READ_CMD; }
+    static String cmdAndRead(String cmd) { return DebloatCmds.thenRead(cmd); }
 
     /** Says what the app does (when the catalogue knows) and how to undo; the package name comes last. */
     void confirmDisable(final String pkg, String label) {
@@ -332,7 +335,7 @@ public class DebloatPage extends ApplyPage {
         }
         if (fix == null) return dr.size() + " item(s) came back, but they're protected now, so they were left alone.";
         ThemedDialog.confirm(a, dr.size() + " came back on", sb.toString().trim() + "\n\nSwitch them off again?", "Switch off",
-            () -> send(fix + "; " + Debloat.READ_CMD, "fixed", "Switching them off again…"));
+            () -> send(DebloatCmds.thenRead(fix), "fixed", "Switching them off again…"));
         return dr.size() + " of " + n + " came back on.";
     }
 
@@ -388,7 +391,7 @@ public class DebloatPage extends ApplyPage {
             ThemedDialog.confirm(a, "Switch off " + lb + " and remove its update?", lb + " is on, so Amazon would download the "
                 + "update again. Stickman can switch it off first, then remove the update (about " + mb + ")."
                 + (why != null ? "\n\nWhat it does: " + why + "." : "") + "\n\nYou can turn it back on under Disabled by Stickman.",
-                "Switch off & remove", () -> send(Originals.disablePkg(u.pkg) + "; " + AmazonUninstall.removeUpdate(u.pkg) + "; " + Debloat.READ_CMD,
+                "Switch off & remove", () -> send(AmazonUninstall.switchOffAndRemove(u.pkg),
                     "updremoved:" + lb + ":" + mb, "Switching off " + lb + "…"));
         }).cancel("Close").show();
     }

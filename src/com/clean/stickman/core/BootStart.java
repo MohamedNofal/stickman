@@ -4,11 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
 
-/** Apps that start at boot (BOOT_COMPLETED receivers), for the "Starts at boot" picker. Pure. */
+/** Apps that start at boot (BOOT_COMPLETED receivers), for the "Starts at boot" picker (command: cmd.SpeedCmds.BOOT_RECEIVERS). Pure. */
 public final class BootStart {
     private BootStart() {}
-
-    public static final String CMD = "cmd package query-receivers --components -a android.intent.action.BOOT_COMPLETED";
 
     /**
      * Packages with a boot receiver that Keep asleep / Starve may touch: valid names, not Android's own, not

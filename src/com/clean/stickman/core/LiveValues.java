@@ -4,17 +4,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Read-only "what is it set to now" commands for the Sleep and Speed pages, and the pure mapping from the
- * printed values to the index of the matching choice chip (-1 = no chip matches / unknown).
+ * The pure mapping from the values printed by the Sleep and Speed pages' read commands (core.cmd.SleepCmds.read,
+ * SettingsCmds.animationRead) to the index of the matching choice chip (-1 = no chip matches / unknown).
  */
 public final class LiveValues {
     private LiveValues() {}
 
-    /** One line: "SAVER &lt;v&gt; SLEEP &lt;v&gt; OFF &lt;v&gt;" (each value may be "null"). */
-    public static final String SLEEP_READ = "echo SAVER $(settings get secure screensaver_enabled)"
-        + " SLEEP $(settings get secure sleep_timeout) OFF $(settings get system screen_off_timeout)";
-    /** One line: "ANIM &lt;window_animation_scale&gt;". */
-    public static final String ANIM_READ = "echo ANIM $(settings get global window_animation_scale)";
+    /** Delegates to core.cmd.SettingsCmds.animationRead (SpeedPage). */
+    public static final String ANIM_READ = com.clean.stickman.core.cmd.SettingsCmds.animationRead();
 
     /** Value printed after KEY (last occurrence); null when missing or "null". */
     public static String value(String out, String key) {

@@ -9,6 +9,7 @@ import android.widget.TextView;
 import com.clean.stickman.core.Catalog;
 import com.clean.stickman.core.Commands;
 import com.clean.stickman.core.Telemetry;
+import com.clean.stickman.core.cmd.PrivacyCmds;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -23,8 +24,6 @@ import java.util.regex.Pattern;
 public class PrivacyPage extends ApplyPage {
     static final long AUTO_READ_MS = 30000;
     /** Prints one line "DNS <mode> <specifier> ADS <limit_ad_tracking> QUIET <n> LOC <location_mode>". */
-    static final String READ = "echo DNS $(settings get global private_dns_mode) $(settings get global private_dns_specifier)"
-        + " ADS $(settings get secure limit_ad_tracking) QUIET " + Telemetry.COUNT_EXPR + " LOC $(settings get secure location_mode)";
     static final Pattern STATE = Pattern.compile("DNS (\\S+) (\\S+) ADS (\\S+)(?: QUIET (\\d+))?(?: LOC (\\S+))?");
 
     Button[] presets, ads, quiet, loc;
@@ -65,27 +64,27 @@ public class PrivacyPage extends ApplyPage {
         LinearLayout p = card(l, "Limit ads & tracking", "Turns off the advertising ID, interest-based ads, device and "
             + "app usage data, marketing metrics and autoplaying featured videos.");
         ads = choices(p, new String[] { "On", "Off" }, i ->
-            send(Commands.privacy(i == 0) + "; " + READ, "ads:" + i, "Applying…"));
+            send(PrivacyCmds.thenRead(Commands.privacy(i == 0)), "ads:" + i, "Applying…"));
 
         LinearLayout q = card(l, "Amazon's reporting apps", "Fire OS won't let these eight be disabled: "
             + Telemetry.summary() + ". Quiet stops all of them running in the background and takes app-usage access "
             + "from the statistics one. Nothing you use depends on them; Restore defaults puts them back. Amazon's "
             + "built-in Minerva services can't be stopped this way: only an ad-blocking DNS reaches those.");
         quiet = choices(q, new String[] { "Quiet", "Let them run" }, i ->
-            send(Telemetry.quiet(i == 0) + "; " + READ, "quiet:" + i,
+            send(PrivacyCmds.thenRead(Telemetry.quiet(i == 0)), "quiet:" + i,
                 i == 0 ? "Quieting Amazon's reporting apps…" : "Letting them run again…"));
 
         LinearLayout lc = card(l, "Location", "The stick looks up a Wi-Fi based location for weather, ads and "
             + "regional content. Off stops those lookups; everything else keeps working.");
         loc = choices(lc, new String[] { "On", "Off" }, i ->
-            send(Commands.location(i == 0) + "; " + READ, "loc:" + i, i == 0 ? "Turning location on…" : "Turning location off…"));
+            send(PrivacyCmds.thenRead(Commands.location(i == 0)), "loc:" + i, i == 0 ? "Turning location on…" : "Turning location off…"));
 
         return Theme.scroll(a, l);
     }
 
     void read() {
         readAt = System.currentTimeMillis();
-        send(READ, "read", "Reading…");
+        send(PrivacyCmds.READ_CMD, "read", "Reading…");
     }
 
     void choose(int i) {
@@ -108,7 +107,7 @@ public class PrivacyPage extends ApplyPage {
     void apply(String host, String label) {
         String cmd = Commands.privateDns(host);
         if (cmd == null) { say("Invalid DNS host: nothing changed."); return; }
-        send(cmd + "; " + READ, "dns:" + label, host == null ? "Turning private DNS off…" : "Switching to " + label + "…");
+        send(PrivacyCmds.thenRead(cmd), "dns:" + label, host == null ? "Turning private DNS off…" : "Switching to " + label + "…");
     }
 
     @Override public void onShow() {

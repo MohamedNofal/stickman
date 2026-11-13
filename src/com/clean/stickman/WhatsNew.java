@@ -139,7 +139,7 @@ final class WhatsNew {
             col.addView(s, new android.widget.LinearLayout.LayoutParams(-1, Theme.dp(a, 260)));
         }
         col.addView(Theme.text(a, "\nYou have " + installed + ". Install " + latest + " now? Stickman closes for a moment and "
-            + "restarts by itself; your settings and buttons are kept.\n\n\u201cAlways\u201d also installs future versions "
+            + "restarts by itself; your settings" + " and buttons are kept.\n\n\u201cAlways\u201d also installs future versions "
             + "automatically while the TV is asleep.", 15, Theme.TEXT));
         new ThemedDialog(a).wide().title("Stickman " + latest + " is available").view(col)
             .button("Update now", () -> update(a, false))
@@ -161,7 +161,7 @@ final class WhatsNew {
             Store.saveStickdText(a, c.serialize());
         }
         android.widget.Toast.makeText(a, "Updating\u2026 Stickman closes and restarts by itself.", android.widget.Toast.LENGTH_LONG).show();
-        String act = com.clean.stickman.core.Commands.act(com.clean.stickman.core.Actions.UPDATE_NOW, null);
+        String act = com.clean.stickman.core.cmd.RemoteCmds.act(com.clean.stickman.core.Actions.UPDATE_NOW, null);
         if (always) a.run(null, Ensure.MARKER, act); else a.run(null, act);
     }
 

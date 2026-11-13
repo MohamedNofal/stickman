@@ -9,8 +9,6 @@ import java.io.FileOutputStream;
 /** VPN up -> userspace TCP to adbd -> adb auth -> run queued shell commands -> VPN down. */
 public class BridgeWorker implements Runnable {
     static final String TAG = "Stickman";
-    /** First run: rules from KeyShift (v1) and/or an earlier Stickman (v2); echo keeps a missing final newline apart. */
-    static final String IMPORT_CMD = "cat /data/local/tmp/remap/remap.conf 2>/dev/null; echo; cat /data/local/tmp/stickman/remap.conf 2>/dev/null";
     final BridgeService svc;
 
     public BridgeWorker(BridgeService svc) { this.svc = svc; }
@@ -59,11 +57,12 @@ public class BridgeWorker implements Runnable {
             // remembered only once adb really answered through it (a firewall could also explain the silence)
             if (wideUsed && !Store.wideVpn(svc)) { Store.setWideVpn(svc, true); Log.i(TAG, "bridge: this stick needs the wide VPN; using it from now on"); }
             if (!Store.hasRemap(svc))
-                Store.importRemap(svc, adb.exec(IMPORT_CMD, 10000));
+                Store.importRemap(svc, adb.exec(com.clean.stickman.core.cmd.SetupCmds.pathPrefix() + com.clean.stickman.core.cmd.SetupCmds.importRemap(), 10000));
             String cmd;
             while ((cmd = Bridge.take()) != null) {
                 String orig = cmd;
                 if (cmd.equals(Ensure.MARKER)) cmd = Ensure.cmd(svc);
+                else cmd = com.clean.stickman.core.cmd.SetupCmds.pathPrefix() + cmd;   // Stickman's own tools on Fire OS 5
                 try {
                     // the ensure script starts both daemons and runs several pm/am calls: right after boot 20 s is not enough
                     result = adb.exec(cmd, orig.equals(Ensure.MARKER) ? 60000 : 20000).trim();

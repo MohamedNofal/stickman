@@ -10,7 +10,7 @@ A no-root power remote and stick manager for Amazon Fire TV.
 
 Tested on a Fire TV Stick 4K Max (Fire OS 8).
 
-**Fire OS 5, 6 and 7 (older sticks): compatibility mode, work in progress.** These versions do not let an app create a virtual remote, so Stickman replays the buttons itself instead (the Status page shows "compatibility mode"). 1.9.3 fixed the setup on Fire OS 5 and 6, and 1.9.4 makes End all, auto-close and Trim work there. This was tested on a plain Android 7.1 emulator, not on real Fire OS 5/6/7 hardware, so Amazon-specific behaviour is unverified. If you have one of these sticks, reports are very welcome.
+**Fire OS 5, 6 and 7 (older sticks): compatibility mode, work in progress.** These versions do not let an app create a virtual remote, so Stickman replays the buttons itself instead (the Status page shows "compatibility mode"). Fire OS 5 also lacks the basic command-line tools Stickman's setup needs, so from 1.9.5 the app brings its own (toybox). Tested on plain Android 5.1, 7.1 and 9 emulators, not on real Fire OS 5/6/7 hardware, so Amazon-specific behaviour is unverified; on Fire OS 5 the connection to the stick itself is untested. Several Speed, Debloat and Privacy features need newer Fire OS versions and do nothing on older ones. If you have one of these sticks, reports are very welcome.
 
 **Using a VPN app too?** Your remapped buttons keep working with another VPN connected. Stickman only needs its own VPN for a few seconds to start after the stick turns on, or to send a change, and asks before it disconnects yours.
 
