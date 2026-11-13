@@ -62,7 +62,7 @@ public final class Sh {
     public static void log(String msg) {
         System.out.println(msg);
         try {
-            Process p = new ProcessBuilder("/system/bin/log", "-t", TAG, msg).redirectErrorStream(true).start();
+            Process p = new ProcessBuilder(com.clean.stickman.core.cmd.DaemonCmds.log(TAG, msg)).redirectErrorStream(true).start();
             p.getOutputStream().close();
             new Drain(p.getInputStream()).run();
             waitFor(p, 5000);

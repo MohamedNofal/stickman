@@ -1,5 +1,7 @@
 package com.clean.stickman.daemon;
 
+import com.clean.stickman.core.cmd.PointerCmds;
+
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
@@ -24,7 +26,6 @@ final class SoftPointer {
     static final int ACTION_DOWN = 0, ACTION_UP = 1, ACTION_MOVE = 2, ACTION_HOVER_MOVE = 7, ACTION_SCROLL = 8;
     static final int ACTION_HOVER_ENTER = 9, ACTION_HOVER_EXIT = 10;
     static final int SOURCE_TOUCHSCREEN = 0x1002, SOURCE_MOUSE = 0x2002, TOOL_TYPE_MOUSE = 3, AXIS_VSCROLL = 9;
-    static final String OVERLAY = "com.clean.stickman/.FadeReceiver";
 
     private final Object im;
     private final Method inject, uptime;
@@ -128,8 +129,7 @@ final class SoftPointer {
     /** Show / remove the app's cursor overlay. In the background: am broadcast can take seconds, and this runs on the
      * injector's input loop, which must keep replaying keys meanwhile. */
     private void overlay(boolean show) {
-        final String cmd = "am broadcast -f 32 -n " + OVERLAY + " -a com.clean.stickman.POINTER_" + (show ? "ON --es token " + token : "OFF")
-            + " >/dev/null 2>&1";
+        final String cmd = PointerCmds.overlay(show, token);
         Thread t = new Thread(() -> Sh.run(cmd), "pointer-overlay");
         t.setDaemon(true);
         t.start();

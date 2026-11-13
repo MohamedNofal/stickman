@@ -8,6 +8,8 @@ import com.clean.stickman.core.MediaState;
 import com.clean.stickman.core.ProcStats;
 import com.clean.stickman.core.StickdConf;
 import com.clean.stickman.core.TaskSnapshot;
+import com.clean.stickman.core.cmd.DaemonCmds;
+import com.clean.stickman.core.cmd.TaskCmds;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -145,8 +147,8 @@ final class TaskSampler {
     private void loop(int g) {
         // R7: a bigger main ring so the feed does not evict other STATUS lines as fast. Failures are ignored.
         // Only ever grows it: a device whose buffer is already >= 1M (or unparsable output) is left alone.
-        if (logBufGrown.compareAndSet(false, true) && mainBufBelow1M(src.sh("logcat -g 2>/dev/null")))
-            src.sh("logcat -G 1M >/dev/null 2>&1; true");
+        if (logBufGrown.compareAndSet(false, true) && mainBufBelow1M(src.sh(TaskCmds.logBufGet())))
+            src.sh(TaskCmds.logBufGrow());
         while (true) {
             long t0 = clock.now();
             int r;
@@ -192,7 +194,7 @@ final class TaskSampler {
             if (refresh) inputsAt = now;
         }
         if (refresh) {
-            Set<String> pl = MediaState.playingPackages(src.sh("dumpsys media_session"));
+            Set<String> pl = MediaState.playingPackages(src.sh(DaemonCmds.mediaSessions()));
             Set<String> ca = cachedPackages(LruParser.read(src::sh));
             Set<String> la = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
             synchronized (this) { playing = pl; cached = ca; launchable = la; }
@@ -222,7 +224,7 @@ final class TaskSampler {
     private List<String> sample() {
         if (ncpu < 0) ncpu = countCpus(src.read("/proc/cpuinfo"));
         if (pageKb < 0) {
-            String ps = src.sh("getconf PAGESIZE").trim();
+            String ps = src.sh(TaskCmds.pageSize()).trim();
             long b = ps.matches("\\d+") ? Long.parseLong(ps) : 4096;
             pageKb = (int) Math.max(1, b / 1024);
         }
@@ -394,19 +396,19 @@ final class TaskSampler {
         String pkg = arg == null ? "" : arg.trim();
         boolean force = pkg.endsWith(" force");   // the user confirmed ending an app Stickman normally spares
         if (force) pkg = pkg.substring(0, pkg.length() - 6).trim();
-        Set<String> media = MediaState.protectedPackages(src.sh("dumpsys media_session"));
+        Set<String> media = MediaState.protectedPackages(src.sh(DaemonCmds.mediaSessions()));
         Set<String> launch = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
         String why = EndPolicy.check(pkg, fg.get(), media, conf().whitelist, launch, force);
         if (EndPolicy.GUARDED.equals(why)) why = KillPolicy.isNeverKill(pkg) ? "never" : "system";
         // a forced end of something without a launcher entry: only a real package can be force-stopped
         // (tiles like "android.process.media" are process names shared by several packages)
-        if (why == null && force && !launch.contains(pkg) && !src.sh("pm path " + pkg).contains("package:")) why = "system";
+        if (why == null && force && !launch.contains(pkg) && !src.sh(TaskCmds.endPmPath(pkg)).contains("package:")) why = "system";
         String shown = pkg.matches("[A-Za-z0-9_.]+") ? pkg : "?";
         if (why != null) {
             Sh.log("STATUS end " + shown + " refused=" + why);
             return;
         }
-        src.sh("am force-stop " + pkg);
+        src.sh(TaskCmds.end(pkg));
         invalidateInputs();
         Sh.log("STATUS end " + pkg + " ok");
     }
@@ -426,7 +428,7 @@ final class TaskSampler {
 
     /** end_all: every running launchable app EndPolicy allows (not fg / playing / protected), force-stopped. */
     int endAll() {
-        Set<String> media = MediaState.protectedPackages(src.sh("dumpsys media_session"));
+        Set<String> media = MediaState.protectedPackages(src.sh(DaemonCmds.mediaSessions()));
         Set<String> launch = KillPolicy.parseLaunchable(src.sh(KillPolicy.LAUNCHABLE_CMD));
         Set<String> running = new LinkedHashSet<>();
         java.util.List<LruParser.Proc> procs = LruParser.read(src::sh);
@@ -438,7 +440,7 @@ final class TaskSampler {
         for (String pkg : running) {
             if (busy.contains(pkg)) continue;
             if (EndPolicy.check(pkg, fg.get(), media, white, launch) != null) continue;  // fg re-read per app
-            if (src.sh("am force-stop " + pkg + " && echo KILLED").contains("KILLED")) n++;  // confirmed kills only
+            if (src.sh(TaskCmds.endAllOne(pkg)).contains("KILLED")) n++;  // confirmed kills only
         }
         invalidateInputs();
         return n;

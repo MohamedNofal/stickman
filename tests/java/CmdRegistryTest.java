@@ -22,10 +22,7 @@ public class CmdRegistryTest {
         // group B
         "core/Lean.java", "core/Originals.java", "core/Starve.java", "core/Ota.java", "core/AmazonUninstall.java",
         "core/BgTime.java", "core/BootStart.java", "core/DnsGuard.java", "core/Debloat.java", "core/Telemetry.java",
-        "SpeedPage.java", "PrivacyPage.java", "DebloatPage.java",
-        // group C
-        "daemon/Stickd.java", "daemon/Sleep.java", "daemon/AutoKill.java", "daemon/TaskSampler.java", "daemon/Updater.java",
-        "daemon/SoftPointer.java"));
+        "SpeedPage.java", "PrivacyPage.java", "DebloatPage.java"));
 
     /** A string literal that starts a system tool: the mark of a shell command built in place. */
     static final Pattern SHELLISH = Pattern.compile(

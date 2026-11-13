@@ -6,6 +6,8 @@ import com.clean.stickman.core.LruParser;
 import com.clean.stickman.core.MediaState;
 import com.clean.stickman.core.StickdConf;
 import com.clean.stickman.core.Trim;
+import com.clean.stickman.core.cmd.AutoKillCmds;
+import com.clean.stickman.core.cmd.DaemonCmds;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -91,7 +93,7 @@ final class AutoKill {
                 trimSafe("interval");
             }
             if (c.trimOnSleep) {
-                boolean asleep = isAsleep(sh.run("dumpsys power | grep -m1 mWakefulness="));
+                boolean asleep = isAsleep(sh.run(AutoKillCmds.wakefulness()));
                 if (asleep && !wasAsleep) trimSafe("sleep");
                 wasAsleep = asleep;
             } else wasAsleep = false;
@@ -149,7 +151,7 @@ final class AutoKill {
     void boost() {
         long before = memAvailableKb();
         List<String> killed = killCandidates();
-        Sh.run("pm trim-caches 999G", 30_000);
+        Sh.run(AutoKillCmds.trimCaches(), 30_000);
         try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
         long after = memAvailableKb();
         long freed = (before < 0 || after < 0) ? 0 : Math.max(0, (after - before) / 1024);
@@ -169,16 +171,16 @@ final class AutoKill {
         java.util.Set<String> launchable = KillPolicy.parseLaunchable(sh.run(KillPolicy.LAUNCHABLE_CMD));
         if (launchable.isEmpty()) Sh.log("autokill: no launchable apps listed; nothing killed");
         List<String> cands = KillPolicy.candidates(procs, fg, c.whitelist,
-            MediaState.protectedPackages(sh.run("dumpsys media_session")), launchable);
+            MediaState.protectedPackages(sh.run(DaemonCmds.mediaSessions())), launchable);
         List<String> killed = new ArrayList<>();
         for (String pkg : cands) {
             if (blacklistOnly && !c.blacklist.contains(pkg)) continue;
             if (pkg.equals(d.foreground())) continue;  // user switched to it meanwhile
             // Gentle first (boost, on-leave and interval alike). Trim fails harmlessly when the process is
             // already trimmed or named differently: keep it quiet.
-            sh.run("am send-trim-memory " + pkg + " COMPLETE >/dev/null 2>&1; true");
+            sh.run(AutoKillCmds.trimApp(pkg));
             // am kill refuses Amazon-protected packages (non-zero exit); only count real kills.
-            String r = sh.run((c.blacklist.contains(pkg) ? "am force-stop " : "am kill ") + pkg + " && echo KILLED");
+            String r = sh.run(AutoKillCmds.kill(pkg, c.blacklist.contains(pkg)));
             if (r.contains("KILLED")) killed.add(pkg);
         }
         return killed;
