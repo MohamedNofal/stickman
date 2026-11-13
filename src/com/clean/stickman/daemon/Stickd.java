@@ -8,6 +8,7 @@ import com.clean.stickman.core.Originals;
 import com.clean.stickman.core.RemapModel;
 import com.clean.stickman.core.Spool;
 import com.clean.stickman.core.StickdConf;
+import com.clean.stickman.core.cmd.DaemonCmds;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -93,7 +94,7 @@ public final class Stickd {
         new Updater(this).install();
 
         // The events buffer may hold no resume line yet: seed the foreground from dumpsys.
-        String seed = EventParser.dumpsysResumed(Sh.run("dumpsys activity activities | grep -m1 mResumedActivity"));
+        String seed = EventParser.dumpsysResumed(Sh.run(DaemonCmds.fgSeed()));
         if (seed != null) onForeground(seed);
 
         Thread w = new Thread(this::watchApk, "stickd-watchdog");
@@ -154,7 +155,7 @@ public final class Stickd {
     boolean apkGone() {
         String apk = read(file("apk")).trim();
         if (!apk.isEmpty() && new File(apk).exists()) return false;
-        String now = pmPath(Sh.run("pm path " + com.clean.stickman.core.EnsureScript.PKG + " 2>/dev/null"));
+        String now = pmPath(Sh.run(DaemonCmds.watchdogPmPath(com.clean.stickman.core.EnsureScript.PKG)));
         if (now == null) return true;
         if (!now.equals(apk)) Sh.log("watchdog: Stickman APK replaced (" + now + "); waiting for the app to re-run ensure");
         return false;
@@ -191,9 +192,9 @@ public final class Stickd {
     void shutdownForUninstall() {
         Sh.log("watchdog: Stickman is uninstalled; stopping remapd and stickd");
         String rp = read(file("remapd.pid")).trim();
-        if (isProc(rp, "remapd")) Sh.run("kill " + rp);
+        if (isProc(rp, "remapd")) Sh.run(DaemonCmds.killRemapd(rp));
         file("remapd.pid").delete();
-        Sh.run(com.clean.stickman.core.EnsureScript.RELEASE_STAYON_FADE + "true");
+        Sh.run(DaemonCmds.uninstallRelease(com.clean.stickman.core.EnsureScript.RELEASE_STAYON_FADE));
         file("stickd.pid").delete();
         System.exit(0);
     }
@@ -204,21 +205,13 @@ public final class Stickd {
     }
 
     // ---- thread A: foreground tracking ----
-    /**
-     * Shell: kill logcat followers a previous stickd left behind. stickd is stopped with SIGTERM (no shutdown hook
-     * under app_process), so its children are re-parented to init and only die at their next write.
-     */
-    static final String REAP_FOLLOWERS =
-        "for P in $(pidof logcat); do [ \"$(cut -d' ' -f4 /proc/$P/stat 2>/dev/null)\" = 1 ] "
-        + "&& grep -qE 'set_resumed_activity|RemapD:I' /proc/$P/cmdline 2>/dev/null && kill $P; done; true";
-
     private void followForeground() {
-        Sh.run(REAP_FOLLOWERS);
+        Sh.run(DaemonCmds.reapFollowers());  // logcat followers a previous stickd left behind
         while (true) {
             Process p = null;
             try {
-                p = new ProcessBuilder("/system/bin/logcat", "-b", "events", "-T", "1", "-s",
-                    EventParser.RESUMED_TAGS[0], EventParser.RESUMED_TAGS[1], EventParser.RESUMED_TAGS[2])
+                p = new ProcessBuilder(DaemonCmds.fgFollow(
+                    EventParser.RESUMED_TAGS[0], EventParser.RESUMED_TAGS[1], EventParser.RESUMED_TAGS[2]))
                     .redirectErrorStream(true).start();
                 p.getOutputStream().close();
                 BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
@@ -228,7 +221,7 @@ public final class Stickd {
                     if (pkg != null) onForeground(pkg);
                 }
             } catch (Exception e) {
-                Sh.log("logcat follow error: " + e);
+                Sh.log("foreground follower error: " + e);
             } finally {
                 if (p != null) p.destroy();
             }
@@ -321,19 +314,18 @@ public final class Stickd {
 
     private void registerCore() {
         register(Actions.SCREENSAVER_TOGGLE, a -> {
-            boolean on = !"0".equals(Sh.run("settings get secure screensaver_enabled").trim());
+            boolean on = !"0".equals(Sh.run(DaemonCmds.screensaverGet()).trim());
             Sh.run(Commands.screensaver(!on));
             Sh.log("screensaver " + (on ? "off" : "on"));
         });
         register(Actions.SCREENSHOT, a -> {
             String path = "/sdcard/Pictures/Stickman/shot_"
                 + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
-            Sh.run("mkdir -p /sdcard/Pictures/Stickman && screencap -p " + path);
+            Sh.run(DaemonCmds.screenshot(path));
             Sh.log("screenshot " + path);
         });
         // remapd owns the remote and the pointer; a button rule reaches it directly, the app's own switch comes this way
-        register(Actions.MOUSE_TOGGLE, a -> Sh.run("echo toggle > " + com.clean.stickman.core.EnsureScript.DIR + "/mouse.cmd.tmp && mv "
-            + com.clean.stickman.core.EnsureScript.DIR + "/mouse.cmd.tmp " + com.clean.stickman.core.EnsureScript.DIR + "/mouse.cmd"));
+        register(Actions.MOUSE_TOGGLE, a -> Sh.run(DaemonCmds.mouseToggle(com.clean.stickman.core.EnsureScript.DIR)));
         register(Actions.PLAY_PAUSE, a -> Sh.run(Commands.media("play-pause")));
         register(Actions.NEXT, a -> Sh.run(Commands.media("next")));
         register(Actions.PREVIOUS, a -> Sh.run(Commands.media("previous")));
@@ -343,14 +335,14 @@ public final class Stickd {
                 Sh.log("kill_current skipped: " + pkg);
                 return;
             }
-            Sh.run("am force-stop " + pkg);
+            Sh.run(DaemonCmds.killCurrent(pkg));
             Sh.log("kill_current " + pkg);
         });
         register(Actions.OPEN_SCREEN, a -> {
             if (!SCREEN_ARG.matcher(a).matches()) { Sh.log("open_screen bad arg: " + a); return; }
-            Sh.run((a.indexOf('/') >= 0 ? "am start -n " : "am start -a ") + Originals.q(a));
+            Sh.run(DaemonCmds.openScreen(a.indexOf('/') >= 0, Originals.q(a)));
         });
-        register(Actions.SLEEP_NOW, a -> Sh.run("input keyevent KEYCODE_SLEEP"));
+        register(Actions.SLEEP_NOW, a -> Sh.run(DaemonCmds.sleepKey()));
         register(Actions.RELOAD, a -> {
             loadConfs();
             String p = applyProfile();

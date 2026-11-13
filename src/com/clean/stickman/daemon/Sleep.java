@@ -8,6 +8,8 @@ import com.clean.stickman.core.EventParser;
 import com.clean.stickman.core.MediaState;
 import com.clean.stickman.core.SleepSchedule;
 import com.clean.stickman.core.SleepTimer;
+import com.clean.stickman.core.cmd.DaemonCmds;
+import com.clean.stickman.core.cmd.SleepDaemonCmds;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -100,7 +102,7 @@ final class Sleep {
         if (!sched.end(gen)) return;
         stopKeyWatcher();
         Sh.run(Commands.media("pause"));
-        Sh.run("input keyevent KEYCODE_SLEEP");
+        Sh.run(DaemonCmds.sleepKey());
         Sh.run(SleepTimer.FADE_END);
         Sh.log("STATUS sleep_timer off");
     }
@@ -140,7 +142,7 @@ final class Sleep {
         final long since = System.currentTimeMillis();
         final Process p;
         try {
-            p = new ProcessBuilder("/system/bin/logcat", "-v", "epoch", "-T", "1", "-s", "RemapD:I")
+            p = new ProcessBuilder(SleepDaemonCmds.keyWatch())
                 .redirectErrorStream(true).start();
             p.getOutputStream().close();
         } catch (Exception e) {
@@ -177,10 +179,10 @@ final class Sleep {
     private void stayAwakeTick() {
         try {
             boolean owned = d.file(STAYON_MARKER).exists();
-            boolean want = d.conf().stayAwakeMedia && MediaState.isPlaying(Sh.run("dumpsys media_session"));
+            boolean want = d.conf().stayAwakeMedia && MediaState.isPlaying(Sh.run(DaemonCmds.mediaSessions()));
             if (want && !owned) {
                 // Only claim it when it is currently off; if the user already has stay-on, leave it alone.
-                String cur = Sh.run("settings get global stay_on_while_plugged_in").trim();
+                String cur = Sh.run(SleepDaemonCmds.stayOnGet()).trim();
                 if (cur.isEmpty() || "0".equals(cur) || "null".equals(cur)) stayOn(true);
             } else if (!want && owned) {
                 stayOn(false);
@@ -194,9 +196,9 @@ final class Sleep {
         File m = d.file(STAYON_MARKER);
         if (on) {
             try { Stickd.writeAtomic(m, "1\n"); } catch (Exception e) { Sh.log("stayon marker: " + e); return; }
-            Sh.run("svc power stayon true");
+            Sh.run(SleepDaemonCmds.stayOn(true));
         } else {
-            Sh.run("svc power stayon false");
+            Sh.run(SleepDaemonCmds.stayOn(false));
             m.delete();
         }
         Sh.log("stay-awake " + (on ? "on" : "off"));
@@ -215,7 +217,7 @@ final class Sleep {
                 @Override public void run() {
                     try {
                         synchronized (Sleep.this) { if (gen != dnsGen) return; }
-                        probes[i] = Sh.run("(" + DnsGuard.PROBE + ") >/dev/null 2>&1 && echo PROBE_OK").contains("PROBE_OK");
+                        probes[i] = Sh.run(SleepDaemonCmds.dnsProbe(DnsGuard.PROBE)).contains("PROBE_OK");
                         i++;
                         if (i < probes.length) {
                             long wait = Math.max(0, t0 + DnsGuard.PROBE_AT_MS[i] - System.currentTimeMillis());

@@ -14,16 +14,14 @@ public class CmdRegistryTest {
     static final int[] APIS = { 22, 25, 28, 30 };
 
     /** Files that still build shell commands outside core/cmd. Migration removes entries; nothing may be added. */
-    static final Set<String> NOT_MIGRATED = new HashSet<>(Arrays.asList(
-        // group A
-        // group B
-        // group C
-        "daemon/Stickd.java", "daemon/Sleep.java", "daemon/AutoKill.java", "daemon/TaskSampler.java", "daemon/Updater.java",
-        "daemon/SoftPointer.java"));
+    static final Set<String> NOT_MIGRATED = new HashSet<>(Arrays.<String>asList(
+        // empty since the migration of 2026-11-13: every command lives in core/cmd
+    ));
 
     /** A string literal that starts a system tool: the mark of a shell command built in place. */
     static final Pattern SHELLISH = Pattern.compile(
-        "\"[^\"]*\\b(dumpsys|pm|am|cmd|settings|device_config|appops|svc|sm|logcat|input|media|content|screencap|getprop|setprop|pidof|base64|setsid) [a-z-]");
+        // the tool word must start the literal or follow a shell separator, so screen text like "Other settings stay" is not a hit
+        "\"(?:[^\"]*(?:[;|&({!]|\\$\\(|\\b(?:then|do|else|if)\\b)\\s*)?(dumpsys|pm|am|cmd|settings|device_config|appops|svc|sm|logcat|input|media|content|screencap|getprop|setprop|pidof|base64|setsid) [a-z-]");
 
     /** Loads every *Cmds class so its Cmd.def entries are registered. */
     static void loadAll() throws Exception {
