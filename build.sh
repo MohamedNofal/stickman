@@ -63,7 +63,9 @@ mkdir -p dexroot && cp classes.dex dexroot/
 ( cd dexroot && zip -q ../app-unsigned.apk classes.dex )
 # native daemon, shipped as a "library" so Android extracts it to nativeLibraryDir (readable by shell)
 mkdir -p libroot/lib/armeabi-v7a && cp ../native/remapd libroot/lib/armeabi-v7a/libremapd.so
-( cd libroot && zip -q ../app-unsigned.apk lib/armeabi-v7a/libremapd.so )
+# static toybox (0BSD, native/toybox/): the setup script installs it where the system has no such tools (Fire OS 5)
+cp ../native/toybox/toybox libroot/lib/armeabi-v7a/libtoybox.so
+( cd libroot && zip -q ../app-unsigned.apk lib/armeabi-v7a/libremapd.so lib/armeabi-v7a/libtoybox.so )
 zipalign -f 4 app-unsigned.apk app-aligned.apk
 cd ..
 

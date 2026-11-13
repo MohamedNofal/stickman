@@ -63,9 +63,40 @@ public final class EnsureScript {
             + "rm -f " + DIR + "/" + name + ".pid; ";
     }
 
+    /** Stickman's own tools (toybox and links to it), used only where the system lacks them: see {@link #tools}. */
+    public static final String BIN = DIR + "/bin";
+
+    /**
+     * Put in front of every command the bridge runs: where the tools were installed, they come first in PATH.
+     * The daemons inherit it from the ensure script that starts them.
+     */
+    public static final String PATH_PREFIX = "[ -d " + BIN + " ] && export PATH=" + BIN + ":$PATH; ";
+
+    /**
+     * Fire OS 5 (Android 5.1) has the old toolbox: no base64, setsid, timeout, pidof, stat, head, tail, cut, tr, sed,
+     * sort, printf..., and its sleep only takes whole seconds. The APK ships a static toybox (0BSD) next to remapd;
+     * where base64 or setsid is missing this installs it under DIR/bin with one link per tool it contains. They all
+     * take precedence there: the old tools that do exist behave differently (cmp has no -s, sleep takes whole
+     * seconds only, ps has no -A / -o). Uses only what toolbox has: mkdir, cat, chmod, mv, ln, rm.
+     * Newer systems skip all of it.
+     */
+    static String tools(String toyboxPath, int version) {
+        String tb = path(toyboxPath);
+        return "if ! command -v base64 >/dev/null 2>&1 || ! command -v setsid >/dev/null 2>&1; then "
+            + "if [ -f " + tb + " ] && [ \"$(cat " + BIN + "/.v 2>/dev/null)\" != " + version + " ]; then "
+            + "mkdir -p " + BIN + " && cat " + tb + " > " + BIN + "/toybox.new && chmod 755 " + BIN + "/toybox.new && "
+            + "mv " + BIN + "/toybox.new " + BIN + "/toybox && { "
+            + "for a in $(" + BIN + "/toybox); do rm -f " + BIN + "/$a; ln -s toybox " + BIN + "/$a 2>/dev/null; done; "
+            + "echo " + version + " > " + BIN + "/.v; }; fi; fi; "
+            + PATH_PREFIX;
+    }
+
     public static String build(String apkPath, String libPath, int version, String remapConf, String stickdConf, boolean migrate) {
         String apk = path(apkPath), lib = path(libPath);
         StringBuilder s = new StringBuilder();
+        // 0. tools first: everything below uses base64, setsid, cmp...
+        s.append("mkdir -p " + DIR + "; ");
+        s.append(tools(libPath.substring(0, libPath.lastIndexOf('/') + 1) + "libtoybox.so", version));
         // 1. dirs (act/ is the action spool, R5)
         s.append("D=" + DIR + "; mkdir -p " + DIR + " " + Spool.DIR + " && cd " + DIR + " || exit 1; ");
         s.append(ALIVE_FN);

@@ -209,7 +209,7 @@ public final class Stickd {
      * under app_process), so its children are re-parented to init and only die at their next write.
      */
     static final String REAP_FOLLOWERS =
-        "for P in $(pidof logcat); do [ \"$(awk '{print $4}' /proc/$P/stat 2>/dev/null)\" = 1 ] "
+        "for P in $(pidof logcat); do [ \"$(cut -d' ' -f4 /proc/$P/stat 2>/dev/null)\" = 1 ] "
         + "&& grep -qE 'set_resumed_activity|RemapD:I' /proc/$P/cmdline 2>/dev/null && kill $P; done; true";
 
     private void followForeground() {

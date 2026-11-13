@@ -25,19 +25,34 @@ public final class EndPolicy {
     /**
      * As above for one app the user picked: an app on Stickman's own never-kill list (Appstore, launchers, Amazon
      * services) or without a launcher entry (background and system services) gives "guarded" until {@code force}
-     * (the user confirmed "Are you sure?"). Stickman, the system and Bluetooth stay "never"; in front, playing and the
+     * (the user confirmed "Are you sure?"). Confirmed, everything may be ended except Stickman, the system and
+     * Bluetooth: playing, protected and in-front are reasons to ask, not to refuse. Stickman, the system and Bluetooth stay "never"; in front, playing and the
      * user's own protection still apply.
      */
     public static String check(String pkg, String fgPkg, Set<String> protectedMedia, Set<String> whitelist,
                                Set<String> launchable, boolean force) {
         if (pkg == null || SELF.equals(pkg) || KillPolicy.isHardNever(pkg)) return "never";
-        boolean guarded = KillPolicy.isNeverKill(pkg);
+        if (force) return null;   // the user picked this app and confirmed: their call
         if (pkg.equals(fgPkg)) return "in front";
         if (protectedMedia != null && protectedMedia.contains(pkg)) return "playing";
         if (whitelist != null && whitelist.contains(pkg)) return "protected";
         // spared by Stickman itself, or a background/system service with no launcher entry
-        if (guarded || launchable == null || !launchable.contains(pkg)) return force ? null : GUARDED;
+        if (KillPolicy.isNeverKill(pkg) || launchable == null || !launchable.contains(pkg)) return GUARDED;
         return null;
+    }
+
+    /**
+     * The "Are you sure?" text for ending an app that {@link #check} would not end by itself, by its reason
+     * ("playing", "protected", "in front", "guarded"). Only "never" cannot be confirmed away.
+     */
+    public static String confirmText(String reason, String label) {
+        if ("playing".equals(reason))
+            return label + " is playing or has something paused. Ending it stops that and loses your place.\n\nEnd it anyway?";
+        if ("protected".equals(reason))
+            return "You protected " + label + " (★), so Stickman never closes it by itself.\n\nEnd it this once?";
+        if ("in front".equals(reason))
+            return label + " is the app in front.\n\nEnd it anyway?";
+        return guardedWarning(label);
     }
 
     /** What ending a guarded app does, for the "Are you sure?" question. */

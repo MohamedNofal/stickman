@@ -98,7 +98,8 @@ public final class Commands {
             + "case \"$p\" in ''|null|:0) echo PROXY none;; *) "
             + "port=${p##*:}; hex=; "
             + "case \"$port\" in ''|*[!0-9]*) ;; *) hex=$(printf '%04X' \"$port\" 2>/dev/null);; esac; "
-            + "if [ -z \"$hex\" ]; then echo PROXY kept; "
+            // Android 7 hides /proc/net/tcp from shell: "can't tell" must not look like "nothing listens"
+            + "if [ -z \"$hex\" ] || ! head -c 1 /proc/net/tcp >/dev/null 2>&1; then echo PROXY kept; "
             + "elif cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -q \":$hex [0-9A-Fa-f:]* 0A \"; then echo PROXY kept; "
             + "else settings put global http_proxy :0; echo PROXY cleared; fi;; esac";
     }
@@ -106,7 +107,8 @@ public final class Commands {
     public static String act(String id, String arg) {
         String line = (arg == null || arg.length() == 0) ? id : id + " " + arg;
         // Spool protocol (see Spool): write <name>.tmp then rename to <name>.act; <name> = <epoch-ms>-<pid>-<random>.
-        return "d=" + Spool.DIR + "; mkdir -p $d; t=$(date +%s%N); t=${t%??????}; n=$d/$t-$$-$RANDOM; "
+        // Android 7's date has no %N (it prints "1794523775N"): seconds * 1000 then, so the order stays by time.
+        return "d=" + Spool.DIR + "; mkdir -p $d; t=$(date +%s%N); case $t in *N) t=${t%N}000;; *) t=${t%??????};; esac; n=$d/$t-$$-$RANDOM; "
             + "echo " + Originals.q(line) + " > $n.tmp && mv $n.tmp $n.act";
     }
 
@@ -115,6 +117,8 @@ public final class Commands {
      * the standalone {@code media} command with the same verbs.
      */
     public static String media(String verb) {
-        return "cmd media_session dispatch " + verb + " 2>/dev/null || media dispatch " + verb;
+        // not "cmd ... || media ...": on Android 7-9 the unknown cmd subcommand still exits 0, so the fallback never ran
+        // and every media key did nothing there. Fire OS 8 has no media binary; older systems do.
+        return "if command -v media >/dev/null 2>&1; then media dispatch " + verb + "; else cmd media_session dispatch " + verb + "; fi";
     }
 }

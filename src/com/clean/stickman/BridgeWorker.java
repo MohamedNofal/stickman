@@ -59,11 +59,12 @@ public class BridgeWorker implements Runnable {
             // remembered only once adb really answered through it (a firewall could also explain the silence)
             if (wideUsed && !Store.wideVpn(svc)) { Store.setWideVpn(svc, true); Log.i(TAG, "bridge: this stick needs the wide VPN; using it from now on"); }
             if (!Store.hasRemap(svc))
-                Store.importRemap(svc, adb.exec(IMPORT_CMD, 10000));
+                Store.importRemap(svc, adb.exec(com.clean.stickman.core.EnsureScript.PATH_PREFIX + IMPORT_CMD, 10000));
             String cmd;
             while ((cmd = Bridge.take()) != null) {
                 String orig = cmd;
                 if (cmd.equals(Ensure.MARKER)) cmd = Ensure.cmd(svc);
+                else cmd = com.clean.stickman.core.EnsureScript.PATH_PREFIX + cmd;   // Stickman's own tools on Fire OS 5
                 try {
                     // the ensure script starts both daemons and runs several pm/am calls: right after boot 20 s is not enough
                     result = adb.exec(cmd, orig.equals(Ensure.MARKER) ? 60000 : 20000).trim();

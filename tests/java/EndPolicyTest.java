@@ -31,8 +31,12 @@ public class EndPolicyTest {
         T.eq("never", EndPolicy.check("com.android.bluetooth", "a.b", s(), s(), LAUNCH, true), "never Bluetooth");
         T.eq("never", EndPolicy.check("system", "a.b", s(), s(), LAUNCH, true), "never the system");
         T.eq("never", EndPolicy.check("x; reboot", "a.b", s(), s(), LAUNCH, true), "never a non-package");
-        T.eq("in front", EndPolicy.check("com.amazon.venezia", "com.amazon.venezia", s(), s(), LAUNCH, true), "in front still blocks");
-        T.eq("protected", EndPolicy.check("com.amazon.venezia", "a.b", s(), s("com.amazon.venezia"), LAUNCH, true), "user's star still blocks");
+        // playing / protected / in front are reasons to ask, not to refuse (a paused Stremio must be endable)
+        T.eq("playing", EndPolicy.check("com.stremio.one", "a.b", s("com.stremio.one"), s(), s("com.stremio.one"), false), "paused player: ask");
+        T.eq(null, EndPolicy.check("com.stremio.one", "a.b", s("com.stremio.one"), s(), s("com.stremio.one"), true), "confirmed: ended");
+        T.eq(null, EndPolicy.check("c.d", "a.b", s(), s("c.d"), s("c.d"), true), "starred, confirmed");
+        T.eq(null, EndPolicy.check("c.d", "c.d", s(), s(), s("c.d"), true), "in front, confirmed");
+        T.yes(EndPolicy.confirmText("playing", "Stremio").contains("paused"), "says why");
         // the automatic paths (End all etc.) keep refusing
         T.eq("never", EndPolicy.check("com.amazon.venezia", "a.b", s(), s(), LAUNCH), "End all spares it");
         T.eq("system", EndPolicy.check("com.some.service", "a.b", s(), s(), LAUNCH), "End all skips system services");

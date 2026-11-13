@@ -1,0 +1,3 @@
+toybox 0.8.11 (https://landley.net/toybox, 0BSD: see LICENSE), built static for 32-bit ARM with the applets in
+mini.conf:  CROSS_COMPILE=arm-linux-gnueabihf- CC=gcc make allnoconfig KCONFIG_ALLCONFIG=mini.conf && LDFLAGS=--static make toybox
+Shipped as lib/armeabi-v7a/libtoybox.so; core/EnsureScript.tools() installs it on systems without base64/setsid (Fire OS 5).

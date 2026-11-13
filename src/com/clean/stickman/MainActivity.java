@@ -145,7 +145,22 @@ public class MainActivity extends Activity implements Bridge.Listener {
         // VPN app and Android disconnects any other VPN on the spot. So with another VPN up, just opening Stickman cut
         // the user's VPN. Leave it alone here; the bridge prepares when the user chooses Continue on a change.
         if (Bridge.otherVpnActive(this)) { vpnPaused = true; updateStatusLine(); return; }
-        Intent consent = VpnService.prepare(this);
+        prepareOnOpen(0);
+    }
+
+    /**
+     * Right after boot Android 5.1's connectivity service is not ready for VPNs yet and prepare() throws (a
+     * NullPointerException from the system, seen on a 5.1 emulator: the app crashed on open). Try again shortly.
+     */
+    void prepareOnOpen(final int attempt) {
+        Intent consent;
+        try {
+            consent = VpnService.prepare(this);
+        } catch (RuntimeException e) {
+            android.util.Log.w("Stickman", "VPN service not ready (" + e + "), attempt " + attempt);
+            if (attempt < 5 && !isFinishing()) h.postDelayed(() -> prepareOnOpen(attempt + 1), 3000);
+            return;
+        }
         if (consent != null) startActivityForResult(consent, 1);
         else ensureOnOpen();
     }

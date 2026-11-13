@@ -84,6 +84,8 @@ public class TasksPage extends ApplyPage {
 
     /** Pending End / End all result (0 = none). */
     long endAt, endAllAt;
+    /** The pending End was already confirmed by the user ("<pkg> force"). */
+    boolean endForced;
     String endPkg, endLabel;
     /** What to say when the pending stickd.conf save (Protect / Always kill) completes. */
     String savedMsg;
@@ -529,10 +531,13 @@ public class TasksPage extends ApplyPage {
         TaskDialog.Options o = new TaskDialog.Options();
         o.detailsOnly = system || (x != null && "sys".equals(x.state));
         o.endBlocked = endBlocked(pkg, c);
-        // on Stickman's own never-kill list: End stays available, behind an "Are you sure?"
-        final boolean guarded = EndPolicy.GUARDED.equals(o.endBlocked);
+        // Only Stickman, the system and Bluetooth can't be ended. Every other reason (playing, protected, spared by
+        // Stickman, a system service) keeps End available behind an "Are you sure?" that says why.
+        final String askWhy = o.endBlocked != null && !"never".equals(o.endBlocked) ? o.endBlocked : null;
+        final boolean guarded = askWhy != null;
         if (guarded) {
-            o.endBlocked = null; o.guarded = true;
+            o.guarded = EndPolicy.GUARDED.equals(askWhy);
+            o.endBlocked = null;
             if (o.detailsOnly) { o.detailsOnly = false; o.canAlwaysKill = false; o.canProtect = false; }   // system: End only
         }
         o.protectedPkg = c.whitelist.contains(pkg);
@@ -547,7 +552,7 @@ public class TasksPage extends ApplyPage {
         self[0] = new TaskDialog(a, label(pkg), pkg, x, hist.get(pkg), o, new TaskDialog.Actions() {
             public void end(String p) {
                 if (!guarded) { endApp(p, false); return; }
-                ThemedDialog.confirm(a, "Are you sure?", EndPolicy.guardedWarning(label(p)), "End app", () -> endApp(p, true));
+                ThemedDialog.confirm(a, "Are you sure?", EndPolicy.confirmText(askWhy, label(p)), "End app", () -> endApp(p, true));
             }
             public void alwaysKill(String p, boolean on) { setAlwaysKill(p, on); }
             public void protect(String p, boolean on) { setProtect(p, on); }
@@ -560,6 +565,7 @@ public class TasksPage extends ApplyPage {
         if (!stickdOn()) return;
         endAt = 0;   // armed only once the command is really sent (not if the VPN warning is cancelled)
         endPkg = pkg;
+        endForced = force;
         endLabel = label(pkg);
         send(Commands.act(Actions.END, force ? pkg + " force" : pkg), "end", "Ending " + endLabel + "…", () -> endAt = System.currentTimeMillis());
     }
@@ -641,7 +647,16 @@ public class TasksPage extends ApplyPage {
             if (st != null && LogTail.statusAt("end") >= endAt - 1000 && st.startsWith(endPkg + " ")) {
                 endAt = 0;
                 int r = st.indexOf("refused=");
-                say(r >= 0 ? "Can't end " + endLabel + ": " + ResultText.reason(st.substring(r + 8).trim()) : "Ended " + endLabel + ".");
+                String why = r >= 0 ? st.substring(r + 8).trim() : null;
+                // The stick knows more than the tile (a paused video, a service): its refusal of a plain End is a
+                // question for the user, not the end of it. Only "never" (Stickman, system, Bluetooth) is final.
+                if (why != null && !endForced && !"never".equals(why)) {
+                    final String p = endPkg;
+                    ThemedDialog.confirm(a, "Are you sure?", EndPolicy.confirmText("system".equals(why) ? EndPolicy.GUARDED : why, endLabel),
+                        "End app", () -> endApp(p, true));
+                } else {
+                    say(why != null ? "Can't end " + endLabel + ": " + ResultText.reason(why) : "Ended " + endLabel + ".");
+                }
             } else if (now - endAt > RESULT_TIMEOUT_MS && !Bridge.busy) {
                 endAt = 0;
                 say(NO_ANSWER);
