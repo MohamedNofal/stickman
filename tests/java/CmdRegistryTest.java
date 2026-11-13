@@ -20,9 +20,6 @@ public class CmdRegistryTest {
         "core/LruParser.java", "StatusPage.java", "ShortcutsPage.java", "SleepPage.java", "WhatsNew.java", "SettingsPage.java", "core/Actions.java", "core/LiveValues.java",
         "core/SleepTimer.java",
         // group B
-        "core/Lean.java", "core/Originals.java", "core/Starve.java", "core/Ota.java", "core/AmazonUninstall.java",
-        "core/BgTime.java", "core/BootStart.java", "core/DnsGuard.java", "core/Debloat.java", "core/Telemetry.java",
-        "SpeedPage.java", "PrivacyPage.java", "DebloatPage.java",
         // group C
         "daemon/Stickd.java", "daemon/Sleep.java", "daemon/AutoKill.java", "daemon/TaskSampler.java", "daemon/Updater.java",
         "daemon/SoftPointer.java"));

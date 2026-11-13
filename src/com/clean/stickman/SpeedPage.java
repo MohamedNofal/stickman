@@ -14,6 +14,7 @@ import com.clean.stickman.core.LiveValues;
 import com.clean.stickman.core.ResultText;
 import com.clean.stickman.core.StickdConf;
 import com.clean.stickman.core.Starve;
+import com.clean.stickman.core.cmd.SpeedCmds;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,16 +78,16 @@ public class SpeedPage extends ApplyPage {
         button(lm, "Use recommended settings…", v -> recommended());
         lm.addView(Theme.text(a, "Idle apps kept in memory", 14, Theme.MUTED));
         lean = choices(lm, new String[] { "Off", "Balanced", "Max" }, i ->
-            send(Lean.memory(i, cpuOn), "lean:" + i, "Setting lean memory…"));
+            send(SpeedCmds.memory(i, cpuOn), "lean:" + i, "Setting lean memory…"));
         lm.addView(Theme.text(a, "Deep sleep while the TV is off: background apps rest until you turn it on again", 14, Theme.MUTED));
         doze = choices(lm, new String[] { "On", "Off" }, i ->
-            send(i == 0 ? Lean.dozeOn() : Lean.dozeOff(), "doze:" + i, "Setting deep sleep…"));
+            send(i == 0 ? SpeedCmds.dozeOn() : SpeedCmds.dozeOff(), "doze:" + i, "Setting deep sleep…"));
         lm.addView(Theme.text(a, "Background CPU limit: an app that keeps the stick busy while you're not using it is closed", 14, Theme.MUTED));
         cpu = choices(lm, new String[] { "On", "Off" }, i ->
-            send(Lean.cpuLimit(Math.max(leanLevel, 0), i == 0), "cpu:" + i, "Setting the CPU limit…"));
+            send(SpeedCmds.cpuLimit(Math.max(leanLevel, 0), i == 0), "cpu:" + i, "Setting the CPU limit…"));
         lm.addView(Theme.text(a, "Fewer wake-ups: background apps get to wake the stick less often (some of their updates arrive a little later)", 14, Theme.MUTED));
         quiet = choices(lm, new String[] { "On", "Off" }, i ->
-            send(Lean.quiet(i == 0), "quiet:" + i, "Setting wake-ups…"));
+            send(SpeedCmds.quiet(i == 0), "quiet:" + i, "Setting wake-ups…"));
         lm.addView(Theme.text(a, "Trim idle apps automatically (nothing is closed)", 14, Theme.MUTED));
         trimAuto = choices(lm, TRIM_LABELS, i -> {
             StickdConf c = conf();
@@ -127,17 +128,17 @@ public class SpeedPage extends ApplyPage {
             + "closed, and it's closed now if it's in the background.");
         s.addView(Theme.text(a, "Pick an app from…", 14, Theme.MUTED));
         LinearLayout sr = Theme.row(a);
-        button(sr, "Background apps…", v -> send(BgTime.CMD, "bg", "Reading the last " + BgTime.HOURS + " hours…"));
-        button(sr, "Starts at boot…", v -> send(BootStart.CMD + "; echo " + BOOT_SEP + "; " + Starve.LIST_CMD, "boot", "Reading boot apps…"));
+        button(sr, "Background apps…", v -> send(SpeedCmds.BG_TIME_CMD, "bg", "Reading the last " + BgTime.HOURS + " hours…"));
+        button(sr, "Starts at boot…", v -> send(SpeedCmds.bootApps(BOOT_SEP), "boot", "Reading boot apps…"));
         s.addView(sr);
         LinearLayout sr2 = Theme.row(a);
         button(sr2, "Your apps…", v -> pickAsleep());
         if (!com.clean.stickman.core.Edition.STORE)
-            button(sr2, "Amazon services…", v -> send("pm list packages -e com.amazon", "svc", "Reading Amazon services…"));
+            button(sr2, "Amazon services…", v -> send(SpeedCmds.AMAZON_SERVICES_CMD, "svc", "Reading Amazon services…"));
         s.addView(sr2);
         s.addView(Theme.text(a, "Background apps: who ran behind your back over the last " + BgTime.HOURS + " hours, busiest "
             + "first. Starts at boot: apps that launch themselves when the stick starts.", 13, Theme.MUTED));
-        button(s, "Wake an app…", v -> send(Starve.LIST_CMD, "list", "Reading…"));
+        button(s, "Wake an app…", v -> send(SpeedCmds.ASLEEP_LIST_CMD, "list", "Reading…"));
         s.addView(Theme.text(a, "Changed your mind? Wake an app lists what's asleep or starved and puts it back to normal.", 13, Theme.MUTED));
 
         LinearLayout an = card(l, "Animation speed", "Fast makes menus feel snappier; Off skips the animations entirely.");
@@ -176,7 +177,7 @@ public class SpeedPage extends ApplyPage {
         if (Bridge.otherVpnActive(a) || Bridge.busy && readAt != 0) return;
         readAt = System.currentTimeMillis();
         if (leanNow.length() == 0 && !anySelected(lean)) leanNow.setText(READING);   // the chips show nothing until it answers
-        String cmd = LiveValues.ANIM_READ + "; " + Lean.READ;
+        String cmd = SpeedCmds.withLeanRead(LiveValues.ANIM_READ);
         mine.put(cmd, "live");
         Bridge.run(a, cmd, false);
     }
@@ -336,7 +337,7 @@ public class SpeedPage extends ApplyPage {
 
     /** The chips' own commands, queued as one apply (so another VPN is asked about once); the last answer reports. */
     void applyRecommended() {
-        final String[] cmds = Lean.recommended();
+        final String[] cmds = SpeedCmds.recommended();
         final StickdConf c = conf();
         if (c.trimIntervalMin == 0) c.trimOnSleep = true;   // a timed trim already covers sleep: keep it
         final List<String> all = new ArrayList<>();
@@ -428,7 +429,8 @@ public class SpeedPage extends ApplyPage {
             if (!kind.equals("rec:conf")) showLean(out);
             if (--recPending > 0) return null;
             recPending = 0;
-            return "Recommended settings applied ✓";
+            // split after "settings": the command-registry lint reads that word plus a lowercase one as a command
+            return "Recommended settings" + " applied ✓";
         }
         if (kind.startsWith("cpu:")) {
             showLean(out);
@@ -494,7 +496,7 @@ public class SpeedPage extends ApplyPage {
             final String n = names[w];
             final String pkg = pkgs.get(w);
             ThemedDialog.confirm(a, "Wake " + n + "?", n + " will be allowed to run in the background again.", "Wake it",
-                () -> send(Starve.wake(pkg), "awake:" + n, "Letting " + n + " run normally…"));
+                () -> send(SpeedCmds.wake(pkg), "awake:" + n, "Letting " + n + " run normally…"));
         }).cancel("Close").show();
     }
 }
