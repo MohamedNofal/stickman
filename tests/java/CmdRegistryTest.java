@@ -43,6 +43,16 @@ public class CmdRegistryTest {
         T.eq("", bad.toString(), "commands declared available on a version that lacks one of their tools");
     }
 
+    /** A tool name nobody listed anywhere would be treated as "present": refuse it. */
+    public void testEveryToolNameIsKnown() throws Exception {
+        loadAll();
+        StringBuilder bad = new StringBuilder();
+        for (Cmd c : Cmd.all())
+            for (String t : (c.tools + " " + c.fallbackTools).trim().split("\\s+"))
+                if (!t.isEmpty() && !Tools.known(t)) bad.append(c.id).append(": ").append(t).append("; ");
+        T.eq("", bad.toString(), "tool names that are in no table of Tools.java");
+    }
+
     public void testToolsTable() {
         T.eq("device_config", Tools.firstMissing("settings device_config", 28), "missing binary");
         T.eq(null, Tools.firstMissing("settings device_config", 30), "there on Fire OS 8");

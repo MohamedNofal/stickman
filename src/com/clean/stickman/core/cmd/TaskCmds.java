@@ -12,7 +12,7 @@ public final class TaskCmds {
     public static String logBufGet() { return "logcat -g 2>/dev/null"; }
 
     /** Grows the main ring to 1 MiB so the task feed does not evict other STATUS lines as fast. Best effort. */
-    public static final Cmd LOG_BUF_GROW = Cmd.def("tasks.log_buf_grow", "Tasks", 25, "logcat logcat:-G");
+    public static final Cmd LOG_BUF_GROW = Cmd.def("tasks.log_buf_grow", "Tasks", 22, "logcat logcat:-G");
     public static String logBufGrow() { return "logcat -G 1M >/dev/null 2>&1; true"; }
 
     /**

@@ -10,8 +10,8 @@ public final class Listen {
     private Listen() {}
 
     public static final String FILE = Originals.DIR + "/listen";
-    public static final String ON = "mkdir -p " + Originals.DIR + " && touch " + FILE + " && echo LISTENING";
-    public static final String OFF = "rm -f " + FILE + "; echo LISTEN_OFF";
+    public static final String ON = com.clean.stickman.core.cmd.RemoteCmds.listenOn(Originals.DIR, FILE);
+    public static final String OFF = com.clean.stickman.core.cmd.RemoteCmds.listenOff(FILE);
 
     /** remapd's log line once it has switched to swallowing buttons. */
     public static final String REMAPD_ON = "listening: buttons swallowed";

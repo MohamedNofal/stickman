@@ -13,7 +13,7 @@ public final class SleepDaemonCmds {
      * minApi 25: the {@code -v epoch} format came with the Android 7 logcat (not in the Tools tables, not probed on
      * API 22). Without it a button press during a fade does not cancel the timer; nothing else breaks.
      */
-    public static final Cmd KEY_WATCH = Cmd.def("sleep.key_watch", "Sleep timer", 25, "logcat");
+    public static final Cmd KEY_WATCH = Cmd.def("sleep.key_watch", "Sleep timer", 25, "logcat logcat:epoch");
     public static String[] keyWatch() { return new String[] { "/system/bin/logcat", "-v", "epoch", "-T", "1", "-s", "RemapD:I" }; }
 
     /** Stay-awake: the user's own stay-on value (empty, "0" or "null" = off, so Stickman may claim it). */

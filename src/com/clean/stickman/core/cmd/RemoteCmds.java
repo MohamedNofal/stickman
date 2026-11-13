@@ -38,4 +38,15 @@ public final class RemoteCmds {
         String f = EnsureScript.DIR + "/mouse.cmd";
         return "echo " + (on ? "on" : "off") + " > " + f + ".tmp && mv " + f + ".tmp " + f;
     }
+
+    /** Listen mode: remapd swallows every button while this file is fresh (see core/Listen for the protocol). */
+    public static final Cmd LISTEN_ON = Cmd.def("remote.listen_on", "Remote", 22, "mkdir touch echo");
+    public static String listenOn(String dir, String file) { return "mkdir -p " + dir + " && touch " + file + " && echo LISTENING"; }
+
+    public static final Cmd LISTEN_OFF = Cmd.def("remote.listen_off", "Remote", 22, "rm echo");
+    public static String listenOff(String file) { return "rm -f " + file + "; echo LISTEN_OFF"; }
+
+    /** The app's own log reader (argv, run in the app process, needs READ_LOGS): remapd and stickd lines only. */
+    public static final Cmd LOG_TAIL = Cmd.def("remote.log_tail", "Remote", 22, "logcat");
+    public static String[] logTail() { return new String[] { "logcat", "-v", "time", "-T", "100", "RemapD:I", "Stickd:I", "*:S" }; }
 }

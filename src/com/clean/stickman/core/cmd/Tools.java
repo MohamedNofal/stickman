@@ -19,11 +19,11 @@ public final class Tools {
         + "test true false uniq tee basename dirname readlink env top pgrep pkill");
 
     /** Missing on Android 5.1 (Fire OS 5), beyond what the bundled toybox covers. */
-    static final Set<String> MISSING_22 = set("cmd device_config sm awk getconf "
+    static final Set<String> MISSING_22 = set("cmd cmd:appops cmd:package cmd:alarm cmd:media_session device_config sm sm:fstrim awk getconf "
         + "pm:disable-user pm:enable pm:suspend pm:unsuspend pm:uninstall-system-updates pm:trim-caches "
         + "am:set-standby-bucket am:get-standby-bucket am:send-trim-memory "
         + "dumpsys:deviceidle dumpsys:thermalservice dumpsys:activity-lru "
-        + "settings:private_dns logcat:-G");
+        + "settings:private_dns logcat:epoch");
 
     /** Missing on Android 7.1 (Fire OS 6). */
     static final Set<String> MISSING_25 = set("device_config awk getconf "
@@ -39,6 +39,22 @@ public final class Tools {
 
     /** Missing on Android 11 (Fire OS 8). */
     static final Set<String> MISSING_30 = set("media");
+
+    /**
+     * Every other name a registry entry may use: tools present on all four versions (Android's own commands that
+     * exist since 5.1, per AOSP source and the firmware lists). A name that is in none of the sets is a typo or a
+     * tool nobody checked, and the registry test refuses it.
+     */
+    static final Set<String> EVERYWHERE = set("am:broadcast am:force-stop am:kill am:start app_process appops "
+        + "content:query dumpsys:activity dumpsys:activity-processes dumpsys:media_session dumpsys:package dumpsys:power "
+        + "dumpsys:procstats dumpsys:wifi getprop input ln log logcat logcat:-G ping pm:grant pm:install pm:list "
+        + "pm:path pm:uninstall screencap settings svc svc:power ip");
+
+    /** Whether a tool name is known at all (bundled, present everywhere, or listed as missing somewhere). */
+    public static boolean known(String tool) {
+        return BUNDLED.contains(tool) || EVERYWHERE.contains(tool) || MISSING_22.contains(tool) || MISSING_25.contains(tool)
+            || MISSING_28.contains(tool) || MISSING_30.contains(tool);
+    }
 
     static Set<String> set(String s) { return new HashSet<>(Arrays.asList(s.trim().split("\\s+"))); }
 
