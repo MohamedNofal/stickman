@@ -156,12 +156,27 @@ def resource_table(path):
     return table, by_file
 
 
+def is_bitmap(head):
+    """PNG, JPEG or WebP by content: some builds store images without a file extension (TizenTube's banner)."""
+    return head[:8] == b"\x89PNG\r\n\x1a\n" or head[:3] == b"\xff\xd8\xff" or (head[:4] == b"RIFF" and head[8:12] == b"WEBP")
+
+
+def flat(im):
+    """A picture of one colour (Bare Launcher's banner is a plain dark rectangle): no use as art."""
+    ext = im.convert("RGB").getextrema()
+    return all(hi - lo < 8 for lo, hi in ext)
+
+
 def raster(z, table, rid):
     """The largest bitmap among a drawable's density variants, as a PIL image, or None (vector only)."""
     from PIL import Image
-    files = [f for _, f in table.get(rid, {}).get("files", []) if f.lower().endswith((".png", ".webp", ".jpg"))]
+    files = [f for _, f in table.get(rid, {}).get("files", []) if not f.lower().endswith(".xml")]
     for f in sorted(files, key=lambda n: z.getinfo(n).file_size, reverse=True):
-        try: return Image.open(io.BytesIO(z.read(f))).convert("RGBA")
+        try:
+            data = z.read(f)
+            if not is_bitmap(data[:12]): continue
+            im = Image.open(io.BytesIO(data)).convert("RGBA")
+            if not flat(im): return im
         except Exception: continue
     return None
 
@@ -198,8 +213,11 @@ def save_art(path, banner, icon, out):
             if im is None and ref.lower().endswith(".xml"):
                 # the same resource may hold the XML for new systems only; else draw the adaptive layers
                 im = adaptive(path, z, table, ref)
-            if im is None and ref.lower().endswith((".png", ".webp", ".jpg")):
-                try: im = Image.open(io.BytesIO(z.read(ref))).convert("RGBA")
+            if im is None and not ref.lower().endswith(".xml"):
+                try:
+                    data = z.read(ref)
+                    im = Image.open(io.BytesIO(data)).convert("RGBA") if is_bitmap(data[:12]) else None
+                    if im is not None and flat(im): im = None
                 except Exception: im = None
             if im is None: continue
             if im.width > 320: im = im.resize((320, max(1, im.height * 320 // im.width)), Image.LANCZOS)
