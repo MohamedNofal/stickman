@@ -55,7 +55,8 @@ public class LogTail implements Runnable {
                             lastFeedAt = FEED.latestAt();   // only a completed (accepted) snapshot counts as fresh
                             continue;
                         }
-                        addStatus(l.length() > 14 ? l.substring(6, 14) : "", body);
+                        // the app installer's progress lines are for the Apps page (lastStatus), not for the Status page's list
+                        if (!com.clean.stickman.core.Apps.housekeeping(body)) addStatus(l.length() > 14 ? l.substring(6, 14) : "", body);
                         putStatus(body, logTime(l));
                         continue;
                     }

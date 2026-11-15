@@ -30,6 +30,22 @@ public final class Actions {
     public static final String UPDATE_CHECK = "update_check";
     public static final String UPDATE_NOW = "update_now";
 
+    /**
+     * The app installer (core/Apps; Apps page only, never button actions). app_install: a catalogue app, "ID PKG";
+     * app_get: what the user typed (link, GitHub project or Downloader code), downloaded and held for app_confirm /
+     * app_cancel; app_update PKG; app_remove PKG; app_auto "PKG 0|1"; apps_refresh: say what is tracked.
+     */
+    public static final String APP_INSTALL = "app_install";
+    /** "ID PKG": the copy on the Fire TV is another build (see Apps.sameBuild): uninstall it, install the catalogue's. */
+    public static final String APP_REPLACE = "app_replace";
+    public static final String APP_GET = "app_get";
+    public static final String APP_CONFIRM = "app_confirm";
+    public static final String APP_CANCEL = "app_cancel";
+    public static final String APP_UPDATE = "app_update";
+    public static final String APP_REMOVE = "app_remove";
+    public static final String APP_AUTO = "app_auto";
+    public static final String APPS_REFRESH = "apps_refresh";
+
     /** Every action id, in menu order. */
     public static final String[] ALL = {
         BOOST, SLEEP_NOW, SLEEP_TIMER, SLEEP_TIMER_SET, SCREEN_OFF, SCREENSAVER_TOGGLE, SCREENSHOT, MOUSE_TOGGLE,

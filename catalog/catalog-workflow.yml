@@ -1,0 +1,104 @@
+# NOT ACTIVE YET. GitHub only accepts a workflow file from a token with the "workflow" scope, which the release
+# token does not have. To switch the scheduled catalogue refresh on: `gh auth refresh -h github.com -s workflow`,
+# then `git mv catalog/catalog-workflow.yml .github/workflows/catalog.yml` and push. Until then the catalog branch is
+# refreshed by hand: python3 catalog/resolve.py, then publish catalog.json + icons/ as the catalog branch.
+#
+# Keeps Stickman's app catalogue current.
+#
+# catalog/sources.json (on main, edited by people) says where each hand-picked app is released and pins its package
+# name and signing key. This job runs catalog/resolve.py, which looks up the newest release of every app, checks it
+# against the pins, and writes catalog.json + icons/. The result is published as the only content of the "catalog"
+# branch, which is what the app on the Fire TV reads:
+#   https://raw.githubusercontent.com/<owner>/<repo>/catalog/catalog.json
+# Nothing is committed to main. A source that fails keeps its last good entry (restored from the catalog branch
+# first); a file whose link and size did not change is not downloaded again, so most runs fetch nothing.
+name: Catalogue
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      fresh:
+        description: "Download and check every app again, even the unchanged ones"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalogue
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Restore the last good catalogue
+        run: |
+          mkdir -p catalog/icons last
+          if git fetch --quiet --depth 1 origin catalog; then
+            git archive FETCH_HEAD | tar -x -C last
+            cp last/catalog.json catalog/catalog.json
+            if [ -d last/icons ]; then cp last/icons/*.png catalog/icons/ 2>/dev/null || true; fi
+            echo "restored $(ls catalog/icons | wc -l) icons and the catalogue of $(git log -1 --format=%cI FETCH_HEAD)"
+          else
+            echo "no catalog branch yet: everything is resolved from scratch"
+          fi
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tools (aapt2, apksigner, Pillow)
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "$BT" >> "$GITHUB_PATH"
+          "$BT/aapt2" version
+          python3 -m pip install --quiet pillow
+
+      - name: Resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          python3 catalog/resolve.py ${{ inputs.fresh && '--fresh' || '' }}
+          echo "resolve.py exit $? (1 = some sources failed and kept their last good entry)"
+          set -e
+          # never publish an empty or broken catalogue
+          python3 -c "import json; d=json.load(open('catalog/catalog.json')); assert d['format'] == 1 and len(d['apps']) > 0, 'empty'; print(len(d['apps']), 'apps')"
+
+      - name: Publish to the catalog branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # the popularity counts move a little on every run: a catalogue that differs in nothing else is not news
+          SAME=$(python3 - <<'PY'
+          import json, os, hashlib
+          def body(p):
+              if not os.path.exists(p): return None
+              apps = json.load(open(p)).get("apps", [])
+              return [{k: v for k, v in a.items() if k not in ("downloads", "stars", "published")} for a in apps]
+          def icons(d):
+              return {f: hashlib.sha256(open(os.path.join(d, f), "rb").read()).hexdigest() for f in sorted(os.listdir(d))} if os.path.isdir(d) else {}
+          print("yes" if body("last/catalog.json") == body("catalog/catalog.json") and icons("last/icons") == icons("catalog/icons") else "no")
+          PY
+          )
+          if [ "$SAME" = yes ]; then echo "nothing changed: not publishing"; exit 0; fi
+          rm -rf out && mkdir out && cp catalog/catalog.json out/ && cp -r catalog/icons out/icons
+          cd out
+          git init --quiet --initial-branch=catalog
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "Catalogue $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --quiet --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" catalog
+          echo "published $(ls icons | wc -l) apps"

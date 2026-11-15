@@ -27,6 +27,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 8).
 - **Remote**: press, double press and hold, different buttons inside one app, presets for every Fire TV remote, and learning for unknown buttons. Any button can open an app, act as another key, or run an action: Boost, sleep timer, screen off, screenshot, media controls, close the current app.
 - **Mouse pointer**: arrows move a pointer, OK clicks, Rewind / Fast-forward scroll, Back leaves. Switch it on from the Remote page or put it on a button. On Fire OS 7 and 8 it is Android's own pointer; on Fire OS 5 and 6 Stickman draws it and taps for it.
 - **Tasks**: a live map of running apps sized by RAM, with End, Always kill and Protect.
+- **Apps**: install, update and uninstall apps without the usual prompts. Pick from a hand-picked catalogue (Kodi, VLC, SmartTube, Stremio, Jellyfin and more), or type a Downloader code, a link or a GitHub project; Stickman shows what the file really is before it installs it. Apps installed this way update themselves while the TV is asleep.
 - **Speed**:
   - Boost and auto-close.
   - Use recommended settings: one press applies the sensible defaults (Lean memory Balanced, background CPU limit, deep sleep, fewer wake-ups, trim when the TV sleeps).

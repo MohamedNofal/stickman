@@ -22,6 +22,15 @@ public final class StatusText {
         int sp = body.indexOf(' ');
         String kind = sp < 0 ? body : body.substring(0, sp);
         String rest = sp < 0 ? "" : body.substring(sp + 1).trim();
+        if (kind.startsWith("app:") || kind.equals("apps")) {   // the app installer (core/Apps): outcomes only
+            if (Apps.housekeeping(body)) return null;
+            java.util.Map<String, String> st = Apps.parseStatus(rest);
+            String pkg = st.get("pkg") != null ? st.get("pkg") : kind.substring(4);
+            if (Apps.INSTALLED.equals(st.get("state"))) return "Installed " + name(pkg, label) + ".";
+            if (Apps.REMOVED.equals(st.get("state"))) return "Uninstalled " + name(pkg, label) + ".";
+            String what = Apps.LINK_KEY.equals(pkg) ? "Add an app" : name(pkg, label);
+            return what + ": " + (st.get("msg") == null ? "something went wrong." : st.get("msg"));
+        }
         switch (kind) {
             case "started":
                 return "Stickman's background helper started.";

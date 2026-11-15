@@ -11,6 +11,20 @@ public class StatusTextTest {
         }
     };
 
+    public void testAppInstallerLines() {
+        T.eq("Installed wako.", StatusText.human("STATUS app:app.wako state=installed pkg=app.wako vc=12", L), "installed");
+        T.eq("Uninstalled wako.", StatusText.human("STATUS app:app.wako state=removed pkg=app.wako", L), "removed");
+        T.eq("wako: Not enough free storage: needs about 300 MB, 120 MB free.",
+            StatusText.human("STATUS app:app.wako state=error msg=Not enough free storage: needs about 300 MB, 120 MB free.", L), "what went wrong, as said");
+        T.eq("Add an app: No app behind code 12345.", StatusText.human("STATUS app:link state=error msg=No app behind code 12345.", L), "a typed code that led nowhere");
+        T.eq(null, StatusText.human("STATUS app:app.wako state=downloading pct=43 size=1000", L), "progress is not news");
+        T.eq(null, StatusText.human("STATUS app:app.wako state=queued", L), "nor is waiting");
+        T.eq(null, StatusText.human("STATUS app:link state=confirm pkg=app.wako vc=12 size=1000 msg=installed=-", L), "nor the question");
+        T.eq(null, StatusText.human("STATUS app:link state=installed pkg=app.wako vc=12", L), "the package's own line says it");
+        T.eq(null, StatusText.human("STATUS apps list=app.wako:1:catalog:0", L), "the tracked list is plumbing");
+        T.eq(null, StatusText.human("STATUS apps list=", L), "even when empty");
+    }
+
     public void testDaemonLines() {
         T.eq("Stickman's background helper started.", StatusText.human("STATUS started version=10", L), "started");
         T.eq("In front: Netflix.", StatusText.human("STATUS fg com.netflix.ninja profile=default", L), "fg default");

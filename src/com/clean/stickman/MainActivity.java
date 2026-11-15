@@ -29,7 +29,7 @@ import java.util.ArrayList;
 
 /** App shell: left sidebar of sections + a content area that swaps Page views. Fully D-pad driven. */
 public class MainActivity extends Activity implements Bridge.Listener {
-    static final String[] ALL_SECTIONS = { "Remote", "Tasks", "Speed", "Sleep", "Privacy", "Debloat", "Shortcuts", "Status", "Settings" };
+    static final String[] ALL_SECTIONS = { "Remote", "Tasks", "Apps", "Speed", "Sleep", "Privacy", "Debloat", "Shortcuts", "Status", "Settings" };
     static final String[] SECTIONS = visibleSections();
 
     static String[] visibleSections() {
@@ -78,6 +78,7 @@ public class MainActivity extends Activity implements Bridge.Listener {
         switch (SECTIONS[i]) {
             case "Remote": return new RemotePage();
             case "Tasks": return new TasksPage();
+            case "Apps": return new AppsPage();
             case "Status": return new StatusPage();
             case "Speed": return new SpeedPage();
             case "Sleep": return new SleepPage();
