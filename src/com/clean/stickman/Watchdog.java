@@ -18,9 +18,6 @@ final class Watchdog {
 
     private static volatile long lastAt;
 
-    /** At most one watchdog-started ensure per this long: a probe that can never succeed must not keep taking the VPN. */
-    static final long MIN_GAP_MS = 20 * 60_000L;
-
     /** done (may be null) always runs, when the check is over: callers hold their receiver / job alive until then. */
     static void check(Context ctx, final String why, final Runnable done) {
         final Context c = ctx.getApplicationContext();
@@ -38,8 +35,10 @@ final class Watchdog {
                 if (!Store.enabled(c) || Bridge.busy) return;
                 long t2 = System.currentTimeMillis();
                 long last = Store.watchdogAt(c);   // persisted: the limit must survive this process being reclaimed
-                if (last != 0 && t2 >= last && t2 - last < MIN_GAP_MS) { Log.i("Stickman", "watchdog (" + why + "): still no answer, waiting before another try"); return; }
+                int failed = Store.watchdogFails(c);   // restarts since the last one that worked (BridgeWorker resets it)
+                if (last != 0 && t2 >= last && t2 - last < Liveness.retryGapMs(failed)) { Log.i("Stickman", "watchdog (" + why + "): still no answer, waiting before another try"); return; }
                 Store.setWatchdogAt(c, t2);
+                Store.setWatchdogFails(c, failed + 1);   // counted as failed until the setup reports both daemons up
                 Log.i("Stickman", "watchdog (" + why + "): daemons not running (" + reply + ") -> ensuring");
                 Bridge.run(c, Ensure.MARKER, true);
             } finally {

@@ -175,6 +175,10 @@ public final class Store {
         prefs(c).edit().putString("watchdogBoot", bootId()).putLong("watchdogAt", t).apply();
     }
 
+    static int watchdogFails(Context c) { return prefs(c).getInt("watchdogFails", 0); }
+
+    static void setWatchdogFails(Context c, int n) { prefs(c).edit().putInt("watchdogFails", n).apply(); }
+
     /** Context.checkSelfPermission is API 23; this works from API 1 (Fire OS 5 is API 22). */
     static boolean granted(Context c, String perm) {
         return c.checkPermission(perm, android.os.Process.myPid(), android.os.Process.myUid())

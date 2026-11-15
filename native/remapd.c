@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/file.h>
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -271,6 +272,50 @@ static void emit(int type, int code, int value) {
 }
 static void tap(int code) { emit(EV_KEY, code, 1); emit(EV_SYN, 0, 0); emit(EV_KEY, code, 0); emit(EV_SYN, 0, 0); }
 
+/* ---- waking the stick ---------------------------------------------------------------------------------------
+ * Android wakes for a button of the real remote (an external device: every key-down carries the wake flag) and the
+ * screensaver ends on any key it is given. A grabbed remote takes that away wherever no key reaches Android:
+ *   - a button whose rule is an action (open app, Boost, a command...) sends no key at all, so the stick stayed
+ *     asleep, or the app opened behind the screensaver;
+ *   - with the key injector (Fire OS 5-7) even plain buttons are injected events, which never wake (only Back and
+ *     Menu count as wake keys there): a sleeping box looked dead to its remote (GitHub issue #5).
+ * So remapd wakes the stick itself before an action runs, with KEYCODE_WAKEUP: it wakes from sleep, ends the
+ * screensaver, is never handed to an app and does nothing when the stick is already awake, so it needs no knowledge
+ * of the power state and cannot get it wrong. Through the injector where there is one (which also wakes instead of
+ * typing blind for replayed keys, see Injector); otherwise from a one-key virtual device of its own: the clone
+ * carries the remote's ids and so the remote's key layout, which has no wake key, while an unknown device gets
+ * Generic.kl ("key 143 WAKEUP") on every Android version. In listen-only mode Android saw the press itself. */
+#define WAKE_NAME "Stickman Wake"
+static int wfd = -1;
+
+static int make_wake(void) {
+    int fd = open("/dev/uinput", O_WRONLY | O_CLOEXEC | O_NONBLOCK);
+    if (fd < 0) return -1;
+    ioctl(fd, UI_SET_EVBIT, EV_KEY); ioctl(fd, UI_SET_EVBIT, EV_SYN);
+    ioctl(fd, UI_SET_KEYBIT, KEY_WAKEUP);
+    ioctl(fd, UI_SET_PHYS, VIRT_PHYS);   /* never taken for the remote (is_virtual) */
+    struct uinput_user_dev u; memset(&u, 0, sizeof u);
+    snprintf(u.name, sizeof u.name, WAKE_NAME);
+    u.id.bustype = BUS_VIRTUAL; u.id.vendor = 0x1209; u.id.product = 0x5351; u.id.version = 1;
+    if (write(fd, &u, sizeof u) != sizeof u || ioctl(fd, UI_DEV_CREATE) < 0) {
+        alog("wake device not created: %s", strerror(errno)); close(fd); return -1;
+    }
+    return fd;
+}
+
+static void wake_stick(void) {
+    if (passthrough) return;
+    if (ufd < 0) {
+        if (ifd >= 0 && write(ifd, "W\n", 2) != 2) inj_lost = 1;
+        return;
+    }
+    if (wfd < 0) return;
+    struct input_event ev[4]; memset(ev, 0, sizeof ev);
+    ev[0].type = EV_KEY; ev[0].code = KEY_WAKEUP; ev[0].value = 1; ev[1].type = EV_SYN;
+    ev[2].type = EV_KEY; ev[2].code = KEY_WAKEUP; ev[2].value = 0; ev[3].type = EV_SYN;
+    if (write(wfd, ev, sizeof ev) < 0) {}
+}
+
 static void run_sh(const char *cmd) {
     pid_t p = fork();
     if (p == 0) {
@@ -347,6 +392,10 @@ static void do_action(int code, int layer) {
     const char *arg = strchr(a, ' '); arg = arg ? arg + 1 : "";
     while (*arg == ' ' || *arg == '\t') arg++;
     char cmd[400];
+    /* an action sends no key, so nothing else would wake the stick or end the screensaver for this press.
+     * Not for "Sleep now" (it would wake a sleeping stick only to send it back) nor for a disabled button;
+     * key / orig rules go out as keys and wake the normal way. */
+    if (!strncmp(a, "start ", 6) || !strncmp(a, "sh ", 3) || (!strncmp(a, "act ", 4) && strcmp(arg, "sleep_now"))) wake_stick();
     if (!strncmp(a, "start ", 6)) {
         snprintf(cmd, sizeof cmd, "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10200000 -n '%s'", arg);
         run_start(cmd, code); alog("key %d %s -> start %s", code, ln, arg);
@@ -546,9 +595,12 @@ static int any_key_held(void) {
 }
 
 static void injector_failed(const char *why) {
-    inj_fails++;
-    inj_retry_at = inj_fails <= 5 ? now_ms() + 5000LL * inj_fails : 0;
-    alog("key injector %s (%d); %s", why, inj_fails, inj_retry_at ? "retrying soon" : "giving up until the remote reconnects");
+    /* never give up: without the injector the remaps are gone until someone opens the app. Backs off to one try
+     * a minute (a start costs a second of CPU), e.g. while the system is too busy after a wake-up or an update. */
+    if (inj_fails < 1000) inj_fails++;
+    int wait_s = 5 * (inj_fails < 12 ? inj_fails : 12);
+    inj_retry_at = now_ms() + 1000LL * wait_s;
+    alog("key injector %s (%d); next try in %d s", why, inj_fails, wait_s);
 }
 
 /* 1 when the pending injector just became ready, -1 when it failed (stopped), 0 otherwise */
@@ -778,12 +830,20 @@ static void mouse_tick(void) {
     if (dx || dy) { m_fx -= dx; m_fy -= dy; mouse_send(dx, dy, 0); }
 }
 
+/* Never take the remote in the middle of a press. Android saw that press's DOWN itself (the remote reconnects on a
+ * button press after standby, and we may only notice the new device a moment later); grabbing now would keep the UP
+ * from it for ever, and a key Android believes held blocks that button system-wide until the remote disconnects
+ * (seen with Back: neither the remote's nor an injected Back did anything). So the grab waits until no button is
+ * down: that one press does its normal Android job, unremapped. Checked again right after the grab, for a press
+ * that began in between. */
 static void set_grab(int on) {
     if (passthrough) on = 0;   /* nothing to replay the keys through: never take the remote away from Android */
     if (rfd < 0 || on == grabbed) return;
     if (!on) release_all();
-    if (ioctl(rfd, EVIOCGRAB, on ? 1 : 0) == 0) { grabbed = on; alog(on ? "remote grabbed" : "remote released"); }
-    else alog("EVIOCGRAB(%d) failed: %s", on, strerror(errno));
+    if (on && any_key_held()) return;   /* the loop comes back on that key's UP (and at least once a second) */
+    if (ioctl(rfd, EVIOCGRAB, on ? 1 : 0) != 0) { alog("EVIOCGRAB(%d) failed: %s", on, strerror(errno)); return; }
+    if (on && any_key_held()) { ioctl(rfd, EVIOCGRAB, 0); return; }
+    grabbed = on; alog(on ? "remote grabbed" : "remote released");
 }
 
 static void handle(struct input_event *ev) {
@@ -821,6 +881,58 @@ static void device_lost(const char *why) {
     close(rfd); rfd = -1; grabbed = 0; passthrough = 0; back_down_at = 0;
 }
 
+/* ---- stickd's keeper -------------------------------------------------------------------------------------------
+ * The two daemons look after each other (core/Buddy has the rules, shared with stickd's half): when stickd is gone
+ * (crashed, killed) remapd starts it again from the installed APK, the way the setup script does; no app, no VPN.
+ * Not while DIR/stopped exists (Stickman switched off / uninstalled), and never from a test instance. */
+#define BUDDY_CHECK_MS 5000
+static long long sg_next; static int sg_miss, sg_tries;
+
+static int stickd_alive(void) {
+    char b[64] = "", path[64]; int pid = 0;
+    FILE *f = fopen(DIR_PATH "stickd.pid", "r");
+    if (!f) return 0;
+    if (fscanf(f, "%d", &pid) != 1) pid = 0;
+    fclose(f);
+    if (pid <= 0) return 0;
+    snprintf(path, sizeof path, "/proc/%d/comm", pid);
+    if ((f = fopen(path, "r"))) { if (!fgets(b, sizeof b, f)) b[0] = 0; fclose(f); b[strcspn(b, "\n")] = 0; if (!strcmp(b, "stickd")) return 1; }
+    snprintf(path, sizeof path, "/proc/%d/cmdline", pid);   /* app_process --nice-name: arg0 is the name, comm may be "main" */
+    memset(b, 0, sizeof b);
+    if ((f = fopen(path, "r"))) { size_t n = fread(b, 1, sizeof b - 1, f); fclose(f); b[n] = 0; if (!strcmp(b, "stickd")) return 1; }
+    return 0;
+}
+
+static void guard_stickd(void) {
+    long long t = now_ms();
+    if (strict_name) return;
+    if (!sg_next) sg_next = t + 20000;   /* the setup script starts stickd right after us: give it time */
+    if (t < sg_next) return;
+    sg_next = t + BUDDY_CHECK_MS;
+    if (access(DIR_PATH "stopped", F_OK) == 0) { sg_miss = 0; return; }
+    if (stickd_alive()) { sg_miss = 0; sg_tries = 0; return; }
+    if (++sg_miss < 2) return;           /* twice in a row: never in the gap of a planned restart */
+    sg_miss = 0;
+    char apk[512] = "";
+    FILE *f = fopen(DIR_PATH "apk", "r");
+    if (f) { if (fgets(apk, sizeof apk, f)) apk[strcspn(apk, "\r\n")] = 0; fclose(f); }
+    if (sg_tries < 12) sg_tries++;
+    sg_next = t + 15000 + 5000LL * sg_tries;   /* app_process needs seconds to start; back off to one try a minute */
+    if (!apk[0] || access(apk, R_OK) != 0) { alog("stickd is gone, and no readable apk to start it from"); return; }
+    alog("stickd is gone: starting it again (try %d)", sg_tries);
+    pid_t p = fork();
+    if (p != 0) return;
+    setsid();
+    for (int i = 0; i < 64; i++) close(i);   /* above all the grabbed remote: it must die with remapd alone */
+    open("/dev/null", O_RDONLY); open("/dev/null", O_WRONLY); open("/dev/null", O_WRONLY);
+    char dir[128]; snprintf(dir, sizeof dir, "%s", DIR_PATH);
+    size_t dl = strlen(dir); if (dl > 1 && dir[dl - 1] == '/') dir[dl - 1] = 0;
+    setenv("CLASSPATH", apk, 1);
+    execl("/system/bin/app_process", "app_process", "/system/bin", "--nice-name=stickd",
+          "com.clean.stickman.daemon.Stickd", dir, (char *)NULL);
+    _exit(127);
+}
+
 /* pid in PID_PATH if it names a live process whose comm is exactly "remapd" (and isn't us), else 0 */
 static int other_instance(void) {
     FILE *f = fopen(pid_path, "r");
@@ -845,6 +957,12 @@ int main(int argc, char **argv) {
     if (argc > 3 && argv[3][0]) pid_path = argv[3];
     int other = other_instance();   /* before grabbing anything: only one process may own the remote */
     if (other) { alog("remapd already running pid %d", other); return 0; }
+    {   /* two starts at the same moment (the app's setup and stickd's revival) both pass the check above: the lock
+         * decides. Never closed: the kernel drops it when this process ends, whatever ends it. */
+        char lp[256]; snprintf(lp, sizeof lp, "%s.lock", pid_path);
+        int lf = open(lp, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+        if (lf >= 0 && flock(lf, LOCK_EX | LOCK_NB) < 0 && errno == EWOULDBLOCK) { alog("another remapd holds the lock"); return 0; }
+    }
     signal(SIGCHLD, SIG_IGN); signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
     unlink(DIR_PATH "released");   /* running again: a past Back-hold exit no longer counts */
     L = lyr_new(250, 600);
@@ -855,6 +973,7 @@ int main(int argc, char **argv) {
     dino = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (dino >= 0 && inotify_add_watch(dino, DIR_PATH, IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_CLOSE_WRITE | IN_ATTRIB) < 0) { close(dino); dino = -1; }
 
+    wfd = make_wake();   /* now, not when the remote turns up: nothing slow may sit between finding it and the grab */
     for (;;) {
         load_conf();
         if (rfd < 0) {
@@ -911,6 +1030,7 @@ int main(int argc, char **argv) {
             injector_failed("stopped");
             set_state("passthrough %s: key injector stopped", remote_name);
         }
+        guard_stickd();
         mouse_check_cmd();
         if (mouse_on && passthrough) mouse_set(0);
         set_grab(nmapped > 0 || listening || mouse_on);

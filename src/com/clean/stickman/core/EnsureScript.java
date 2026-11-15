@@ -32,6 +32,7 @@ public final class EnsureScript {
         // 1. dirs (act/ is the action spool, R5)
         s.append(SetupCmds.enterDir(Spool.DIR));
         s.append(SetupCmds.aliveFn());
+        s.append(SetupCmds.clearStopped());
         // 2. remapd binary
         s.append(SetupCmds.installRemapd(libPath));
         // 3. confs

@@ -46,7 +46,7 @@ public final class Tools {
      * tool nobody checked, and the registry test refuses it.
      */
     static final Set<String> EVERYWHERE = set("am:broadcast am:force-stop am:kill am:start app_process appops "
-        + "content:query dumpsys:activity dumpsys:activity-processes dumpsys:media_session dumpsys:package dumpsys:power "
+        + "content:query dumpsys:activity dumpsys:activity-processes dumpsys:input dumpsys:media_session dumpsys:package dumpsys:power "
         + "dumpsys:procstats dumpsys:wifi getprop input ln log logcat logcat:-G ping pm:grant pm:install pm:list "
         + "pm:path pm:uninstall screencap settings svc svc:power ip");
 

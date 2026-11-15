@@ -20,6 +20,18 @@ public final class Liveness {
         return reply.trim().endsWith("remapd=" + DOWN);
     }
 
+    private static final long[] RETRY_GAP_MS = { 60_000, 120_000, 300_000, 600_000, 1_200_000 };
+
+    /**
+     * How long the watchdog waits before starting the setup again, after failures restarts in a row that did not
+     * bring both daemons up. None after a restart that worked: the next death is repaired at once. A setup that
+     * cannot work (ADB switched off, another VPN in the way) must not keep taking the VPN, hence the backoff.
+     */
+    public static long retryGapMs(int failures) {
+        if (failures <= 0) return 0;
+        return RETRY_GAP_MS[Math.min(failures, RETRY_GAP_MS.length) - 1];
+    }
+
     /** remapd's state for the answer: pid = content of remapd.pid ("" if missing), alive = that process exists. */
     public static String remapdState(String pid, boolean alive, boolean releasedMarker) {
         if (pid != null && !pid.trim().isEmpty() && alive) return UP;
