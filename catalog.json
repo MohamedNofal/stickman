@@ -1,6 +1,6 @@
 {
  "format": 1,
- "generated": "2026-11-15T21:15:32Z",
+ "generated": "2026-11-15T21:29:12Z",
  "apps": [
   {
    "id": "kodi",
@@ -59,6 +59,22 @@
    "art": "banner"
   },
   {
+   "id": "plex",
+   "name": "Plex",
+   "category": "Media centres",
+   "summary": "Films and shows from your own media server, plus free TV.",
+   "homepage": "https://www.plex.tv",
+   "package": "com.plexapp.android",
+   "store": "amazon",
+   "asin": "B004Y1WCDE",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B004Y1WCDE",
+   "files": {},
+   "art": "icon"
+  },
+  {
    "id": "jellyfin",
    "name": "Jellyfin",
    "category": "Media centres",
@@ -82,6 +98,22 @@
    "downloads": 3541,
    "published": "2026-11-10",
    "stars": 4743
+  },
+  {
+   "id": "emby",
+   "name": "Emby",
+   "category": "Media centres",
+   "summary": "The TV app for your Emby media server.",
+   "homepage": "https://emby.media",
+   "package": "tv.emby.embyatv",
+   "store": "amazon",
+   "asin": "B00VVJKTW8",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B00VVJKTW8",
+   "files": {},
+   "art": "icon"
   },
   {
    "id": "wholphin",
@@ -311,6 +343,130 @@
    "stars": 2811
   },
   {
+   "id": "vuleo",
+   "name": "Vuleo",
+   "category": "IPTV",
+   "summary": "An IPTV player for your own playlists, portals and Stremio add-ons.",
+   "homepage": "https://vuleo.tv",
+   "package": "com.brillianceappsfinland.playontv",
+   "version": "1.4.0",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "99e53134a2a9d94c16943980cfa280b1f661918f25378c67988f98e2bf150fff",
+   "source": "github:brillianceappsfinland/vuleo-releases",
+   "files": {
+    "any": {
+     "url": "https://github.com/brillianceappsfinland/vuleo-releases/releases/download/v1.4.0%2B356/vuleo.apk",
+     "size": 281240921,
+     "sha256": "9a5f67bb70bdd681b037d5b2aa0801373d42403f9723c61ba7d7ebf056a0f65f",
+     "versionCode": 35609
+    }
+   },
+   "art": "banner",
+   "downloads": 223,
+   "published": "2026-11-03",
+   "stars": 6
+  },
+  {
+   "id": "tivra",
+   "name": "TIVRA",
+   "category": "IPTV",
+   "summary": "An IPTV player with a TV guide, for your own playlists.",
+   "homepage": "https://tivratv.com",
+   "package": "com.tivratv.tv",
+   "version": "3.4.1",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "3de3a779229562d815eea26ac7bc7066b3e197235343a5f58801dd3c7f87f384",
+   "source": "url:https://tivratv.com/downloads/tivra-latest.apk",
+   "files": {
+    "any": {
+     "url": "https://tivratv.com/downloads/tivra-latest.apk",
+     "size": 168993537,
+     "sha256": "1b329f3f49e3c274dfa12b9402fb30df63f360cd679950b7f3ac48feb3afd4ba",
+     "versionCode": 265
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "implayer",
+   "name": "iMPlayer",
+   "category": "IPTV",
+   "summary": "An IPTV player with a TV guide, for your own playlists.",
+   "homepage": "https://implayer.tv",
+   "package": "com.myiptvonline.implayer",
+   "version": "4.1.6",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "e1cacb9974064e78d6aefe2d78b5eea6f30592887589a1254648749973d7d766",
+   "source": "url:https://implayer.tv/download",
+   "files": {
+    "any": {
+     "url": "https://implayer.tv/download",
+     "size": 98308940,
+     "sha256": "3f3b347cbc829d572f7431768639791e050a24e08e2759ee73b50f0481300bbd",
+     "versionCode": 486
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "streamvault",
+   "name": "StreamVault",
+   "category": "IPTV",
+   "summary": "A free IPTV player for your own playlists.",
+   "homepage": "https://github.com/davidona/streamvault-iptv",
+   "package": "com.streamvault.app",
+   "version": "1.2.5",
+   "minSdk": 25,
+   "tv": true,
+   "signer": "c248b65f3ef3ac2b61c6b21e6129fb1396924a015b6bef21566aced827bf4f4d",
+   "source": "github:davidona/streamvault-iptv",
+   "files": {
+    "any": {
+     "url": "https://github.com/Davidona/StreamVault-IPTV/releases/download/v1.2.5/StreamVault-1.2.5.apk",
+     "size": 57624325,
+     "sha256": "67c46be6b3b3ccf153272c9d0c64b1144bd524e4330d68e3ef24e17261447df7",
+     "versionCode": 27
+    }
+   },
+   "art": "banner",
+   "downloads": 1022,
+   "published": "2026-11-09",
+   "stars": 1053
+  },
+  {
+   "id": "m3uandroid",
+   "name": "M3U Android",
+   "category": "IPTV",
+   "summary": "A clean, ad-free open-source IPTV player.",
+   "homepage": "https://github.com/oxyroid/M3UAndroid",
+   "package": "com.m3u.smartphone",
+   "version": "1.15.0",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "49545adef6b5b670f35249e02ead730971f2f8b4b9fedde1f8faf6b499edd747",
+   "source": "github:oxyroid/M3UAndroid",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/oxyroid/M3UAndroid/releases/download/v1.15.0/1.15.0_armeabi-v7a.apk",
+     "size": 15054286,
+     "sha256": "8ff0e7f093c1279ca578dd20159cf82cbf11325abe884031ee15907a0967f2af",
+     "versionCode": 144
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/oxyroid/M3UAndroid/releases/download/v1.15.0/1.15.0_arm64-v8a.apk",
+     "size": 15500800,
+     "sha256": "5a3fe9104447bb8241c540705ee3a5be5ae01e6610201ceb9fe9360848421883",
+     "versionCode": 144
+    }
+   },
+   "downloads": 15940,
+   "published": "2025-03-29",
+   "stars": 1283
+  },
+  {
    "id": "smarttube",
    "name": "SmartTube",
    "category": "Video",
@@ -421,6 +577,70 @@
    "downloads": 7787,
    "published": "2026-11-01",
    "stars": 2360
+  },
+  {
+   "id": "bbciplayer",
+   "name": "BBC iPlayer",
+   "category": "UK TV",
+   "summary": "BBC channels live and on demand.",
+   "homepage": "https://www.bbc.co.uk/iplayer",
+   "package": "uk.co.bbc.iplayer",
+   "store": "amazon",
+   "asin": "B00OP4CQE0",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B00OP4CQE0",
+   "files": {},
+   "art": "icon"
+  },
+  {
+   "id": "itvx",
+   "name": "ITVX",
+   "category": "UK TV",
+   "summary": "ITV channels live and on demand.",
+   "homepage": "https://www.itv.com",
+   "package": "air.ITVMobilePlayer",
+   "store": "amazon",
+   "asin": "B00PH7XGQG",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B00PH7XGQG",
+   "files": {},
+   "art": "icon"
+  },
+  {
+   "id": "channel4",
+   "name": "Channel 4",
+   "category": "UK TV",
+   "summary": "Channel 4 live and on demand.",
+   "homepage": "https://www.channel4.com",
+   "package": "com.channel4.ondemand",
+   "store": "amazon",
+   "asin": "B00BHDIS12",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B00BHDIS12",
+   "files": {},
+   "art": "icon"
+  },
+  {
+   "id": "my5",
+   "name": "5 (My5)",
+   "category": "UK TV",
+   "summary": "Channel 5 live and on demand.",
+   "homepage": "https://www.channel5.com",
+   "package": "com.mobileiq.demand5",
+   "store": "amazon",
+   "asin": "B00ICKFR7Q",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B00ICKFR7Q",
+   "files": {},
+   "art": "icon"
   },
   {
    "id": "projectivy",
@@ -809,6 +1029,22 @@
    "stars": 1168
   },
   {
+   "id": "downloader",
+   "name": "Downloader",
+   "category": "Tools",
+   "summary": "Downloads files and apps by link or code.",
+   "homepage": "https://www.aftvnews.com/downloader/",
+   "package": "com.esaba.downloader",
+   "store": "amazon",
+   "asin": "B01N0BP507",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B01N0BP507",
+   "files": {},
+   "art": "icon"
+  },
+  {
    "id": "localsend",
    "name": "LocalSend",
    "category": "Tools",
@@ -896,6 +1132,22 @@
    "stars": 9489
   },
   {
+   "id": "xplore",
+   "name": "X-plore",
+   "category": "Tools",
+   "summary": "A two-pane file manager with network shares.",
+   "homepage": "https://www.lonelycatgames.com",
+   "package": "com.lonelycatgames.Xplore",
+   "store": "amazon",
+   "asin": "B00LLG7AR8",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B00LLG7AR8",
+   "files": {},
+   "art": "icon"
+  },
+  {
    "id": "totalcmd",
    "name": "Total Commander",
    "category": "Tools",
@@ -916,6 +1168,22 @@
     }
    },
    "art": "banner"
+  },
+  {
+   "id": "sendfiles",
+   "name": "Send Files to TV",
+   "category": "Tools",
+   "summary": "Sends files from your phone to the TV.",
+   "homepage": "https://sendfilestotv.app",
+   "package": "com.yablio.sendfilestotv",
+   "store": "amazon",
+   "asin": "B07QHFL8LK",
+   "version": "",
+   "minSdk": 1,
+   "tv": true,
+   "source": "amazon:B07QHFL8LK",
+   "files": {},
+   "art": "icon"
   },
   {
    "id": "aurorastore",
