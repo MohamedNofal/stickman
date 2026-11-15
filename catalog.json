@@ -1,6 +1,6 @@
 {
  "format": 1,
- "generated": "2026-11-15T20:04:46Z",
+ "generated": "2026-11-15T21:15:32Z",
  "apps": [
   {
    "id": "kodi",
@@ -29,65 +29,6 @@
     }
    },
    "art": "banner"
-  },
-  {
-   "id": "vlc",
-   "name": "VLC",
-   "category": "Players",
-   "summary": "Plays almost any video or audio file, from USB or the network.",
-   "homepage": "https://www.videolan.org/vlc/download-android.html",
-   "package": "org.videolan.vlc",
-   "version": "3.7.1",
-   "minSdk": 17,
-   "tv": true,
-   "signer": "c8768d2cea0c4b622e419b4b4715981946821e4ebc035fb41776cad395a7f68e",
-   "source": "versioned:https://get.videolan.org/vlc-android/",
-   "files": {
-    "armeabi-v7a": {
-     "url": "https://get.videolan.org/vlc-android/3.7.1/VLC-Android-3.7.1-armeabi-v7a.apk",
-     "size": 47073346,
-     "sha256": "a6a7f940e4bd190c9a70f3f0dc97c1c402c10200af20edac7a1d452b24abd8a0",
-     "versionCode": 13070105
-    },
-    "arm64-v8a": {
-     "url": "https://get.videolan.org/vlc-android/3.7.1/VLC-Android-3.7.1-arm64-v8a.apk",
-     "size": 47990842,
-     "sha256": "bea9ea0cdecfd8f461ef305d2afe5d1ac1459cfb9156acce2f615788a486de74",
-     "versionCode": 13070106
-    }
-   },
-   "art": "banner"
-  },
-  {
-   "id": "smarttube",
-   "name": "SmartTube",
-   "category": "Video",
-   "summary": "A YouTube client made for the TV remote.",
-   "homepage": "https://github.com/yuliskov/SmartTube",
-   "package": "org.smarttube.stable",
-   "version": "32.71",
-   "minSdk": 17,
-   "tv": true,
-   "signer": "109735aa24fe85e2e1623ebb3b1ecc4bf4263f4c6374e4411d646bfa2eda482a",
-   "source": "github:yuliskov/SmartTube",
-   "files": {
-    "armeabi-v7a": {
-     "url": "https://github.com/yuliskov/SmartTube/releases/download/32.71s/SmartTube_stable_32.71_armeabi-v7a.apk",
-     "size": 25517725,
-     "sha256": "288e8caaa11417f6b64d2a7f906cead85c0b8a9bb5904753d7cb4f79d117d023",
-     "versionCode": 2461
-    },
-    "arm64-v8a": {
-     "url": "https://github.com/yuliskov/SmartTube/releases/download/32.71s/SmartTube_stable_32.71_arm64-v8a.apk",
-     "size": 26731385,
-     "sha256": "6a799a129015e772d231440f4e3ad919f643164a0fdeb76ecb202bf3afb3db52",
-     "versionCode": 2461
-    }
-   },
-   "art": "banner",
-   "downloads": 23402,
-   "published": "2026-11-06",
-   "stars": 36361
   },
   {
    "id": "stremio",
@@ -205,6 +146,84 @@
    "stars": 3527
   },
   {
+   "id": "cinaura",
+   "name": "Cinaura",
+   "category": "Media centres",
+   "summary": "A media library for your own files on a NAS or in the cloud.",
+   "homepage": "https://github.com/jrmux/cinaura-release",
+   "package": "com.cinaura.tv",
+   "version": "1.9.0",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "bbbef30b6cb3b773c3949a84a4ed59241b597d1f8f516bd67e4e84b888c5ca8b",
+   "source": "github:jrmux/cinaura-release",
+   "files": {
+    "any": {
+     "url": "https://github.com/jrmux/cinaura-release/releases/download/v1.9.0/cinaura-v1.9.0.apk",
+     "size": 25463201,
+     "sha256": "49c53b5edf06cfe57326a89e7e27af3aa89d97c23b98b58eb310709136904f6c",
+     "versionCode": 34
+    }
+   },
+   "art": "banner",
+   "downloads": 133,
+   "published": "2026-11-06",
+   "stars": 78
+  },
+  {
+   "id": "moonfin",
+   "name": "Moonfin",
+   "category": "Media centres",
+   "summary": "A polished TV client for Jellyfin.",
+   "homepage": "https://github.com/Moonfin-Client/Moonfin-Core",
+   "package": "org.moonfin.androidtv",
+   "version": "3.1.0",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "7d00411fa20a6fb82c0eddffb73daa91a101dbe5ccfb9387b720e836cf71d7a1",
+   "source": "github:Moonfin-Client/Moonfin-Core",
+   "files": {
+    "any": {
+     "url": "https://github.com/Moonfin-Client/Moonfin-Core/releases/download/3.1.0/Moonfin_AndroidTV_v3.1.0.apk",
+     "size": 143416176,
+     "sha256": "fe01bab95c368379929e9b7a6b530c06e90535454699790de1165b3ed621f0f2",
+     "versionCode": 2000024
+    }
+   },
+   "art": "banner",
+   "downloads": 735,
+   "published": "2026-11-12",
+   "stars": 1026
+  },
+  {
+   "id": "vlc",
+   "name": "VLC",
+   "category": "Players",
+   "summary": "Plays almost any video or audio file, from USB or the network.",
+   "homepage": "https://www.videolan.org/vlc/download-android.html",
+   "package": "org.videolan.vlc",
+   "version": "3.7.1",
+   "minSdk": 17,
+   "tv": true,
+   "signer": "c8768d2cea0c4b622e419b4b4715981946821e4ebc035fb41776cad395a7f68e",
+   "source": "versioned:https://get.videolan.org/vlc-android/",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://get.videolan.org/vlc-android/3.7.1/VLC-Android-3.7.1-armeabi-v7a.apk",
+     "size": 47073346,
+     "sha256": "a6a7f940e4bd190c9a70f3f0dc97c1c402c10200af20edac7a1d452b24abd8a0",
+     "versionCode": 13070105
+    },
+    "arm64-v8a": {
+     "url": "https://get.videolan.org/vlc-android/3.7.1/VLC-Android-3.7.1-arm64-v8a.apk",
+     "size": 47990842,
+     "sha256": "bea9ea0cdecfd8f461ef305d2afe5d1ac1459cfb9156acce2f615788a486de74",
+     "versionCode": 13070106
+    }
+   },
+   "art": "banner"
+  },
+  {
    "id": "mpv",
    "name": "mpv",
    "category": "Players",
@@ -292,6 +311,68 @@
    "stars": 2811
   },
   {
+   "id": "smarttube",
+   "name": "SmartTube",
+   "category": "Video",
+   "summary": "A YouTube client made for the TV remote.",
+   "homepage": "https://github.com/yuliskov/SmartTube",
+   "package": "org.smarttube.stable",
+   "version": "32.71",
+   "minSdk": 17,
+   "tv": true,
+   "signer": "109735aa24fe85e2e1623ebb3b1ecc4bf4263f4c6374e4411d646bfa2eda482a",
+   "source": "github:yuliskov/SmartTube",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/yuliskov/SmartTube/releases/download/32.71s/SmartTube_stable_32.71_armeabi-v7a.apk",
+     "size": 25517725,
+     "sha256": "288e8caaa11417f6b64d2a7f906cead85c0b8a9bb5904753d7cb4f79d117d023",
+     "versionCode": 2461
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/yuliskov/SmartTube/releases/download/32.71s/SmartTube_stable_32.71_arm64-v8a.apk",
+     "size": 26731385,
+     "sha256": "6a799a129015e772d231440f4e3ad919f643164a0fdeb76ecb202bf3afb3db52",
+     "versionCode": 2461
+    }
+   },
+   "art": "banner",
+   "downloads": 23402,
+   "published": "2026-11-06",
+   "stars": 36361
+  },
+  {
+   "id": "tizentube",
+   "name": "TizenTube Cobalt",
+   "category": "Video",
+   "summary": "YouTube for the TV without ads, with SponsorBlock.",
+   "homepage": "https://github.com/reisxd/TizenTubeCobalt",
+   "package": "io.gh.reisxd.tizentube.cobalt",
+   "version": "2.0.3",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "378ea3935af1b95c32f6ce193f4ff7f420cdc2d7160c8c866d28d6a91042ec9a",
+   "source": "github:reisxd/TizenTubeCobalt",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/reisxd/TizenTubeCobalt/releases/download/v2.0.3/cobalt-arm.apk",
+     "size": 80570825,
+     "sha256": "72a3527f520db3a1b414916ad96481244e451c41e272ae33344ae5e79abb37dd",
+     "versionCode": 203
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/reisxd/TizenTubeCobalt/releases/download/v2.0.3/cobalt-arm64.apk",
+     "size": 153048724,
+     "sha256": "4e3df211abb243cb06b06ba3676fe62c3d5b59baa47c1a0050cb180b3493e539",
+     "versionCode": 203
+    }
+   },
+   "art": "banner",
+   "downloads": 48680,
+   "published": "2026-10-16",
+   "stars": 3574
+  },
+  {
    "id": "newpipe",
    "name": "NewPipe",
    "category": "Video",
@@ -342,31 +423,6 @@
    "stars": 2360
   },
   {
-   "id": "moonlight",
-   "name": "Moonlight",
-   "category": "Games",
-   "summary": "Stream games from your PC to the TV.",
-   "homepage": "https://moonlight-stream.org",
-   "package": "com.limelight",
-   "version": "12.2",
-   "minSdk": 21,
-   "tv": true,
-   "signer": "d6ce3a4df15060fe488fe52441a549dee4ba199b36e2cb1ed9085cca8bfa1aca",
-   "source": "github:moonlight-stream/moonlight-android",
-   "files": {
-    "any": {
-     "url": "https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk",
-     "size": 11137885,
-     "sha256": "a871f6190365386ef3ac5722a016d4da015ee1555631ec257f6e5dc3f4a45fe0",
-     "versionCode": 315
-    }
-   },
-   "art": "banner",
-   "downloads": 68567,
-   "published": "2026-09-12",
-   "stars": 7498
-  },
-  {
    "id": "projectivy",
    "name": "Projectivy Launcher",
    "category": "Launchers",
@@ -390,6 +446,192 @@
    "downloads": 50196,
    "published": "2026-10-31",
    "stars": 2369
+  },
+  {
+   "id": "at4k",
+   "name": "AT4K Launcher",
+   "category": "Launchers",
+   "summary": "A clean, Apple TV style home screen.",
+   "homepage": "https://at4klauncher.com",
+   "package": "com.overdevs.at4k",
+   "version": "1.3",
+   "minSdk": 27,
+   "tv": true,
+   "signer": "bfc84ab1296c72653ebca20a2f4cd293bc342a67dd4c61df931edfbad5271685",
+   "source": "github:avadhesh18/at4k",
+   "files": {
+    "any": {
+     "url": "https://github.com/avadhesh18/at4k/releases/download/v1.3/app-release.apk",
+     "size": 7708317,
+     "sha256": "1bb6dad64f26e8d82d65f5a02f76327affb24b825f4d8d3f99c4d56d6fab77a3",
+     "versionCode": 20
+    }
+   },
+   "art": "banner",
+   "downloads": 2649,
+   "published": "2026-11-02",
+   "stars": 775
+  },
+  {
+   "id": "monet",
+   "name": "Monet Launcher",
+   "category": "Launchers",
+   "summary": "A tidy home screen with an app switcher and button remapping.",
+   "homepage": "https://github.com/Klevico/Monet-Launcher",
+   "package": "com.klevico.monet",
+   "version": "1.1.1",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "4bec386a6baae56f0694d3be54f67e0625b973109e0dbb947df2a5d0254975e0",
+   "source": "github:Klevico/Monet-Launcher",
+   "files": {
+    "any": {
+     "url": "https://github.com/Klevico/Monet-Launcher/releases/download/v1.1.1/monet-1.1.1.apk",
+     "size": 19371661,
+     "sha256": "dd742a4eb7a4cdc0f9315d25d799e9a8aca51c942160e94f8b298d1e68c501f6",
+     "versionCode": 135
+    }
+   },
+   "art": "banner",
+   "downloads": 1345,
+   "published": "2026-11-03",
+   "stars": 330
+  },
+  {
+   "id": "flauncher",
+   "name": "FLauncher",
+   "category": "Launchers",
+   "summary": "A simple open-source home screen with app categories.",
+   "homepage": "https://github.com/osrosal/flauncher",
+   "package": "me.efesser.flauncher",
+   "version": "2025.07.001",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "3ef9f30df1f52f48b4b0c524a6e1861faedd2cccfa96d03e90076a1e30dec101",
+   "source": "github:osrosal/flauncher",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/osrosal/flauncher/releases/download/v2025.07.001/flauncher-armeabi-v7a-release.apk",
+     "size": 10581743,
+     "sha256": "467fd0befe6daa3993a8a34a3981a631858ace28b38d9836d691478af8b71e40",
+     "versionCode": 20
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/osrosal/flauncher/releases/download/v2025.07.001/flauncher-arm64-v8a-release.apk",
+     "size": 10990590,
+     "sha256": "6e366d960d1c42ff923bddf86a034a231800924c0d395aefa7c448b1c4e8896f",
+     "versionCode": 20
+    }
+   },
+   "art": "banner",
+   "downloads": 6358,
+   "published": "2025-07-27",
+   "stars": 316
+  },
+  {
+   "id": "barelauncher",
+   "name": "Bare Launcher",
+   "category": "Launchers",
+   "summary": "A tiny, fast home screen with just your apps.",
+   "homepage": "https://github.com/f102mithunysypdlcjr-pixel/BareLauncherv3",
+   "package": "com.bare.launcher",
+   "version": "2.2.0",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "0dee6d87ac58781599eabceacf04318ada3c2495ebc8ad16a4bfdde24fe089f8",
+   "source": "github:f102mithunysypdlcjr-pixel/BareLauncherv3",
+   "files": {
+    "any": {
+     "url": "https://github.com/f102mithunysypdlcjr-pixel/BareLauncherv3/releases/download/v2.2.0/BareLauncher.apk",
+     "size": 104580,
+     "sha256": "83089ab84ad99df8d861e3d152bc6a51aea9b07be0d71284109f1a3c5267fe0c",
+     "versionCode": 30
+    }
+   },
+   "art": "icon",
+   "downloads": 6612,
+   "published": "2026-07-20",
+   "stars": 141
+  },
+  {
+   "id": "homeonfire",
+   "name": "Home on Fire",
+   "category": "Launchers",
+   "summary": "Makes the Fire TV Home button open your own launcher.",
+   "homepage": "https://github.com/toolicious/home-on-fire",
+   "package": "io.github.toolicious.homeonfire",
+   "version": "1.5.2",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "ed50072a63376ba7c7f6ffc6dc566c569044d9982d5b3fa97fe534cd96610d4f",
+   "source": "github:toolicious/home-on-fire",
+   "files": {
+    "any": {
+     "url": "https://github.com/toolicious/home-on-fire/releases/download/v1.5.2/home-on-fire.apk",
+     "size": 195203,
+     "sha256": "87403c961264cc2e36e53cf571777ec20705eb87f46794cb0ac667135a98d9fe",
+     "versionCode": 140
+    }
+   },
+   "art": "banner",
+   "downloads": 15239,
+   "published": "2026-09-22",
+   "stars": 109
+  },
+  {
+   "id": "couchy",
+   "name": "Couchy Launcher",
+   "category": "Launchers",
+   "summary": "A light open-source home screen for the couch.",
+   "homepage": "https://github.com/conreo/couchy-launcher",
+   "package": "com.conreo.couchytv",
+   "version": "1.0.6",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "ac27073beac802ce1aa6a7ba7e0cf5029e3afa27ae09f7388a0576357c7d33b0",
+   "source": "github:conreo/couchy-launcher",
+   "files": {
+    "any": {
+     "url": "https://github.com/conreo/couchy-launcher/releases/download/v1.0.6/Couchy-Launcher-v1.0.6.apk",
+     "size": 2282007,
+     "sha256": "9d065bbefada54eaad65e3174e606d03c2f767000efb5ebe6343ea8b6b439c8a",
+     "versionCode": 7
+    }
+   },
+   "downloads": 21732,
+   "published": "2026-08-01",
+   "stars": 163
+  },
+  {
+   "id": "arclauncher",
+   "name": "Arc Launcher",
+   "category": "Launchers",
+   "summary": "A good-looking open-source home screen.",
+   "homepage": "https://github.com/meddouribadis/arclauncher",
+   "package": "com.omeda.arc",
+   "version": "1.2.2",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "93cd0cff69f6df008d0d6c10a20890c6702067e7f2cd0afa61cd01a4cb3d0ae7",
+   "source": "github:meddouribadis/arclauncher",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/meddouribadis/arclauncher/releases/download/1.2.2/arclauncher-1.2.2-armeabi-v7a.apk",
+     "size": 20653983,
+     "sha256": "ccf9aee59779054c9ea115ee989ad08f32690a15b424b3ef2a09d2ed549edb6e",
+     "versionCode": 4130
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/meddouribadis/arclauncher/releases/download/1.2.2/arclauncher-1.2.2-arm64-v8a.apk",
+     "size": 22819819,
+     "sha256": "c578d6b624a45f14ccc121dc5561083b3c80f478c1e01db7771db49251da0722",
+     "versionCode": 4130
+    }
+   },
+   "art": "banner",
+   "downloads": 303,
+   "published": "2026-11-11",
+   "stars": 626
   },
   {
    "id": "ltvlauncher",
@@ -423,6 +665,125 @@
    "stars": 478
   },
   {
+   "id": "moonlight",
+   "name": "Moonlight",
+   "category": "Games",
+   "summary": "Stream games from your PC to the TV.",
+   "homepage": "https://moonlight-stream.org",
+   "package": "com.limelight",
+   "version": "12.2",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "d6ce3a4df15060fe488fe52441a549dee4ba199b36e2cb1ed9085cca8bfa1aca",
+   "source": "github:moonlight-stream/moonlight-android",
+   "files": {
+    "any": {
+     "url": "https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk",
+     "size": 11137885,
+     "sha256": "a871f6190365386ef3ac5722a016d4da015ee1555631ec257f6e5dc3f4a45fe0",
+     "versionCode": 315
+    }
+   },
+   "art": "banner",
+   "downloads": 68567,
+   "published": "2026-09-12",
+   "stars": 7498
+  },
+  {
+   "id": "artemis",
+   "name": "Artemis",
+   "category": "Games",
+   "summary": "Moonlight with extras, for streaming games from an Apollo PC.",
+   "homepage": "https://github.com/ClassicOldSong/moonlight-android",
+   "package": "com.limelight.noir",
+   "version": "20.2.6",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "d06f9a5fadeddef3910b1506e7a24d1c628ce42e72ba3660340dbb9f5dea81d6",
+   "source": "github:ClassicOldSong/moonlight-android",
+   "files": {
+    "any": {
+     "url": "https://github.com/ClassicOldSong/moonlight-android/releases/download/v20.2.6/artemis-nonRoot_game-release.apk",
+     "size": 12082799,
+     "sha256": "6735b5fdd790410ea726754235f49757fa594ef01da1e5acadf72690c9423f6c",
+     "versionCode": 57
+    }
+   },
+   "art": "banner",
+   "downloads": 326730,
+   "published": "2025-08-08",
+   "stars": 4198
+  },
+  {
+   "id": "retroarch",
+   "name": "RetroArch",
+   "category": "Games",
+   "summary": "Plays classic console games with a controller.",
+   "homepage": "https://www.retroarch.com",
+   "package": "com.retroarch",
+   "version": "1.22.2_GIT",
+   "minSdk": 16,
+   "tv": true,
+   "signer": "d7a5eab30902c9b2775af6fb4eac2d294a64634fb47dd1382bc3ac5bf669982e",
+   "source": "versioned:https://buildbot.libretro.com/stable/",
+   "files": {
+    "any": {
+     "url": "https://buildbot.libretro.com/stable/1.22.2/android/RetroArch.apk",
+     "size": 198332624,
+     "sha256": "2eca60b3a540697cd7676edea2fbabdfaf54c3ae958584168231981099d2868a",
+     "versionCode": 1763607132
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "ppsspp",
+   "name": "PPSSPP",
+   "category": "Games",
+   "summary": "Plays PSP games in HD.",
+   "homepage": "https://www.ppsspp.org",
+   "package": "org.ppsspp.ppsspp",
+   "version": "v1.20.4",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "c5342629df16762391907b3297aad122b4c1a8a9e608dfb94217a08e3bbf13a2",
+   "source": "page:https://www.ppsspp.org/download/",
+   "files": {
+    "any": {
+     "url": "https://www.ppsspp.org/files/1_20_4/ppsspp.apk",
+     "size": 45448397,
+     "sha256": "dd702a31270ecd68db37afee311d6efe08b1d4da9601d2750ce1a73bbd316c3f",
+     "versionCode": 120040000
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "daijisho",
+   "name": "Daijishō",
+   "category": "Games",
+   "summary": "A game library front end for your emulators.",
+   "homepage": "https://github.com/TapiocaFox/Daijishou",
+   "package": "com.magneticchen.daijishou",
+   "version": "1.5.0",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "c1dc929edf4c062eaeee609ec009c7859e34050e62058282d1eaf5e8b2c22f51",
+   "source": "github:TapiocaFox/Daijishou",
+   "files": {
+    "any": {
+     "url": "https://github.com/TapiocaFox/Daijishou/releases/download/v1.5.0/416.apk",
+     "size": 17912484,
+     "sha256": "c09989b5d938f41cc1d53d2f38fa3b1261a40bc4d8dcf8367cce83353457df51",
+     "versionCode": 416
+    }
+   },
+   "art": "banner",
+   "downloads": 175673,
+   "published": "2026-01-15",
+   "stars": 1985
+  },
+  {
    "id": "aerialviews",
    "name": "Aerial Views",
    "category": "Screensavers",
@@ -446,37 +807,6 @@
    "downloads": 11451,
    "published": "2026-10-02",
    "stars": 1168
-  },
-  {
-   "id": "tvbro",
-   "name": "TV Bro",
-   "category": "Tools",
-   "summary": "A web browser built for the remote, with Firefox's engine inside.",
-   "homepage": "https://github.com/truefedex/tv-bro",
-   "package": "com.phlox.tvwebbrowser.gecko",
-   "version": "3.0.5",
-   "minSdk": 26,
-   "tv": true,
-   "signer": "5aa54ff8346c6aa7659cd6330a3f6fb3ca6971f67f2da42f90909024986f6540",
-   "source": "github:truefedex/tv-bro",
-   "files": {
-    "armeabi-v7a": {
-     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoIncluded-armeabi-v7a.apk",
-     "size": 155946578,
-     "sha256": "f28d061c86d8fd4457e0849d6390106c100cbc4dc7fce18258a15a2353d46aaa",
-     "versionCode": 83
-    },
-    "arm64-v8a": {
-     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoIncluded-arm64-v8a.apk",
-     "size": 194461256,
-     "sha256": "762262e3509fead636dfc49509b9dca90dc7a2d6a09260c61394c51cd392d461",
-     "versionCode": 83
-    }
-   },
-   "art": "banner",
-   "downloads": 1156,
-   "published": "2026-11-13",
-   "stars": 1897
   },
   {
    "id": "localsend",
@@ -510,6 +840,37 @@
    "stars": 99135
   },
   {
+   "id": "tvbro",
+   "name": "TV Bro",
+   "category": "Tools",
+   "summary": "A web browser built for the remote, with Firefox's engine inside.",
+   "homepage": "https://github.com/truefedex/tv-bro",
+   "package": "com.phlox.tvwebbrowser.gecko",
+   "version": "3.0.5",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "5aa54ff8346c6aa7659cd6330a3f6fb3ca6971f67f2da42f90909024986f6540",
+   "source": "github:truefedex/tv-bro",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoIncluded-armeabi-v7a.apk",
+     "size": 155946578,
+     "sha256": "f28d061c86d8fd4457e0849d6390106c100cbc4dc7fce18258a15a2353d46aaa",
+     "versionCode": 83
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoIncluded-arm64-v8a.apk",
+     "size": 194461256,
+     "sha256": "762262e3509fead636dfc49509b9dca90dc7a2d6a09260c61394c51cd392d461",
+     "versionCode": 83
+    }
+   },
+   "art": "banner",
+   "downloads": 1156,
+   "published": "2026-11-13",
+   "stars": 1897
+  },
+  {
    "id": "materialfiles",
    "name": "Material Files",
    "category": "Tools",
@@ -533,6 +894,194 @@
    "downloads": 63789,
    "published": "2026-09-20",
    "stars": 9489
+  },
+  {
+   "id": "totalcmd",
+   "name": "Total Commander",
+   "category": "Tools",
+   "summary": "A two-panel file manager with network and cloud access.",
+   "homepage": "https://www.ghisler.com/android.htm",
+   "package": "com.ghisler.android.TotalCommander",
+   "version": "3.62d",
+   "minSdk": 8,
+   "tv": true,
+   "signer": "e50eb216a57d5eb0b1e67802e783df7b587bdbdc379e3e296f89b49ed32f00fd",
+   "source": "page:https://api.github.com/repos/chrisgch/tca/contents/fdroid/repo",
+   "files": {
+    "any": {
+     "url": "https://raw.githubusercontent.com/chrisgch/tca/master/fdroid/repo/tcandroid-down362d-universal.apk",
+     "size": 5599020,
+     "sha256": "d918ccc0506f6ac3b72fb2cc4dc1eccb3f83eb873077d982a79054d8d65467e4",
+     "versionCode": 2490
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "aurorastore",
+   "name": "Aurora Store",
+   "category": "Tools",
+   "summary": "Install free Google Play apps without a Google account.",
+   "homepage": "https://auroraoss.com",
+   "package": "com.aurora.store",
+   "version": "4.8.4",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "5c83c7672b929955dc0a1db89a5e6ae4389e2eae7ec939956041694e5815f532",
+   "source": "page:https://f-droid.org/packages/com.aurora.store/",
+   "files": {
+    "any": {
+     "url": "https://f-droid.org/repo/com.aurora.store_76.apk",
+     "size": 9360088,
+     "sha256": "fd9c75d90d0f4a7c132b9b4a5a2cf1992a45e03b8d8ff988b7dcfbc0db2c4d11",
+     "versionCode": 76
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "appmanager",
+   "name": "App Manager",
+   "category": "Tools",
+   "summary": "See, disable and back up installed apps.",
+   "homepage": "https://github.com/MuntashirAkon/AppManager",
+   "package": "io.github.muntashirakon.AppManager",
+   "version": "4.1.1",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "320c0c0fe8cef873f2b554cb88c837f1512589dcced50c5b25c43c04596760ab",
+   "source": "github:MuntashirAkon/AppManager",
+   "files": {
+    "any": {
+     "url": "https://github.com/MuntashirAkon/AppManager/releases/download/v4.1.1/AppManager_v4.1.1.apk",
+     "size": 28270163,
+     "sha256": "2540d6d9352acd8b04d6210140630a380abb1bc46ad4745c89ad97603dee3c40",
+     "versionCode": 451
+    }
+   },
+   "art": "banner",
+   "downloads": 86237,
+   "published": "2026-09-04",
+   "stars": 9612
+  },
+  {
+   "id": "shizuku",
+   "name": "Shizuku",
+   "category": "Tools",
+   "summary": "Lets other apps use system-level access without root.",
+   "homepage": "https://shizuku.rikka.app",
+   "package": "moe.shizuku.privileged.api",
+   "version": "13.6.0.r1086.2650830c",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "268b5590e868fb08bae7e0ac413564cd1ff88f5ccff74af9dbd0dc918e30db30",
+   "source": "github:RikkaApps/Shizuku",
+   "files": {
+    "any": {
+     "url": "https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk",
+     "size": 2571773,
+     "sha256": "6e273ab0e991c4e79bc8b1bbb9b9dd739ccac1a8712a541a214078886b7b790f",
+     "versionCode": 1086
+    }
+   },
+   "art": "icon",
+   "downloads": 3774683,
+   "published": "2025-05-25",
+   "stars": 33765
+  },
+  {
+   "id": "tailscale",
+   "name": "Tailscale",
+   "category": "Network",
+   "summary": "Reach your home server or media from anywhere.",
+   "homepage": "https://tailscale.com",
+   "package": "com.tailscale.ipn",
+   "version": "1.104.7-tfb3b9b296-g226f029a3",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "5cdb295551bfe1a087fed6acda07141c6c929fa7c29bd273a7092813acc434bf",
+   "source": "index:https://pkgs.tailscale.com/stable/",
+   "files": {
+    "any": {
+     "url": "https://pkgs.tailscale.com/stable/tailscale-android-universal-1.104.7.apk",
+     "size": 105727207,
+     "sha256": "5a620e118c36a203bdde43ddd93ef4122ce2d8ab2f7ad59ec30b6bbf391e01d9",
+     "versionCode": 299086440
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "wireguard",
+   "name": "WireGuard",
+   "category": "Network",
+   "summary": "A fast VPN to reach your home network.",
+   "homepage": "https://www.wireguard.com",
+   "package": "com.wireguard.android",
+   "version": "1.0.20260315",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "84a13fa2c4e0064b0c11654b8a86574b7a9b9352a3834cee32455b061c3d4127",
+   "source": "index:https://download.wireguard.com/android-client/",
+   "files": {
+    "any": {
+     "url": "https://download.wireguard.com/android-client/com.wireguard.android-1.0.20260315.apk",
+     "size": 16943472,
+     "sha256": "f92971bc804f4c448e8845ae97e426095eab06ec09a2473a3fa2cfe7288e3298",
+     "versionCode": 519
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "protonvpn",
+   "name": "Proton VPN",
+   "category": "Network",
+   "summary": "A VPN with a free plan, from the makers of Proton Mail.",
+   "homepage": "https://protonvpn.com",
+   "package": "ch.protonvpn.android",
+   "version": "5.20.98.0",
+   "minSdk": 26,
+   "tv": true,
+   "signer": "dcc9439ec1a6c6a8d0203f3423ee42bcc8b970628e53cb73a0393f398dd5b853",
+   "source": "github:ProtonVPN/android-app",
+   "files": {
+    "any": {
+     "url": "https://github.com/ProtonVPN/android-app/releases/download/5.20.98.0/ProtonVPN-5.20.98.0.605209800.-production-vanilla-direct-release.apk",
+     "size": 60497711,
+     "sha256": "c4d531002b98953b66589bc9bdf83fdd1ad51f35f6e5ebb41bccb4156104fc27",
+     "versionCode": 605209800
+    }
+   },
+   "art": "banner",
+   "downloads": 56126,
+   "published": "2026-10-22",
+   "stars": 4305
+  },
+  {
+   "id": "netguard",
+   "name": "NetGuard",
+   "category": "Network",
+   "summary": "A firewall that needs no root: choose which apps may go online.",
+   "homepage": "https://netguard.me",
+   "package": "eu.faircode.netguard",
+   "version": "2.337",
+   "minSdk": 23,
+   "tv": false,
+   "signer": "e4a260a2dce7b7af23ee919c489e15fd0102b93f9e7c9d82b09c0b395000e4d4",
+   "source": "github:M66B/NetGuard",
+   "files": {
+    "any": {
+     "url": "https://github.com/M66B/NetGuard/releases/download/2.337/NetGuard-v2.337-release.apk",
+     "size": 3222200,
+     "sha256": "150a0362f04408c2d3cc7fb38d7e126445019d523489c8d82df6fb456c4e6ad2",
+     "versionCode": 2026080101
+    }
+   },
+   "art": "icon",
+   "downloads": 41675,
+   "published": "2026-08-01",
+   "stars": 3998
   }
  ]
 }
