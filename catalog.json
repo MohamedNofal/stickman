@@ -1,6 +1,6 @@
 {
  "format": 1,
- "generated": "2026-11-15T19:11:45Z",
+ "generated": "2026-11-15T20:04:46Z",
  "apps": [
   {
    "id": "kodi",
@@ -451,24 +451,30 @@
    "id": "tvbro",
    "name": "TV Bro",
    "category": "Tools",
-   "summary": "A web browser built for the remote.",
+   "summary": "A web browser built for the remote, with Firefox's engine inside.",
    "homepage": "https://github.com/truefedex/tv-bro",
-   "package": "com.phlox.tvwebbrowser",
+   "package": "com.phlox.tvwebbrowser.gecko",
    "version": "3.0.5",
-   "minSdk": 24,
+   "minSdk": 26,
    "tv": true,
-   "signer": "1e5124be7e7fcb7a6462b47a42a8567863c6fccc6fe7708cd278be4f43047c75",
+   "signer": "5aa54ff8346c6aa7659cd6330a3f6fb3ca6971f67f2da42f90909024986f6540",
    "source": "github:truefedex/tv-bro",
    "files": {
-    "any": {
-     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoExcluded.apk",
-     "size": 3788211,
-     "sha256": "62e958757c31e2b8ba3fad609d4508320f19c072e5cfab1401f22dee6a05a0e3",
+    "armeabi-v7a": {
+     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoIncluded-armeabi-v7a.apk",
+     "size": 155946578,
+     "sha256": "f28d061c86d8fd4457e0849d6390106c100cbc4dc7fce18258a15a2353d46aaa",
+     "versionCode": 83
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoIncluded-arm64-v8a.apk",
+     "size": 194461256,
+     "sha256": "762262e3509fead636dfc49509b9dca90dc7a2d6a09260c61394c51cd392d461",
      "versionCode": 83
     }
    },
    "art": "banner",
-   "downloads": 3347,
+   "downloads": 1156,
    "published": "2026-11-13",
    "stars": 1897
   },
