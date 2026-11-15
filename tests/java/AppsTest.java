@@ -412,5 +412,24 @@ public class AppsTest {
         T.eq("Update available", Apps.tileLine(5, "1.0", 6, "", new HashMap<String, String>(), -1), "a typed link: the version is only known after the download");
     }
 
+    public void testAppstoreApps() {
+        String store = "{\"id\":\"bbciplayer\",\"name\":\"BBC iPlayer\",\"category\":\"UK TV\",\"package\":\"uk.co.bbc.iplayer\",\"store\":\"amazon\",\"asin\":\"B00OP4CQE0\",\"files\":{}}";
+        List<Apps.Entry> c = Apps.parseCatalog("{\"apps\":[" + store + "]}");
+        T.eq(1, c.size(), "an Appstore app needs no file");
+        Apps.Entry e = c.get(0);
+        T.eq("amazon", e.store, "store");
+        T.eq(null, Apps.pick(e, STICK), "never downloaded by Stickman");
+        T.eq("[amzn://apps/android?asin=B00OP4CQE0, amzn://apps/android?p=uk.co.bbc.iplayer, market://details?id=uk.co.bbc.iplayer]", Apps.storeUris(e).toString(), "its page, best link first");
+        T.eq(0, Apps.parseCatalog("{\"apps\":[" + store.replace("B00OP4CQE0", "x; rm -rf") + "]}").size(), "a bad Appstore id: left out");
+        T.eq(0, Apps.parseCatalog("{\"apps\":[" + store.replace("\"amazon\"", "\"googleplay\"") + "]}").size(), "an unknown store and no file: left out");
+        String withFile = store.replace("\"files\":{}", "\"files\":{\"any\":{\"url\":\"https://e.org/a.apk\",\"size\":100000,\"sha256\":\"" + rep("a", 64) + "\",\"versionCode\":3}}");
+        T.eq(null, Apps.pick(Apps.parseCatalog("{\"apps\":[" + withFile + "]}").get(0), STICK), "an Appstore app is never downloaded, whatever the entry says");
+        T.eq(Apps.IN_STORE, Apps.storeLine(null), "not installed");
+        T.eq("Installed · 2026.1.0", Apps.storeLine("2026.1.0-tv (1234)"), "installed");
+        T.eq("[" + Apps.B_STORE + "]", Apps.storeButtons(false, false, false).toString(), "get it");
+        T.eq("[Open, Uninstall]", Apps.storeButtons(true, true, true).toString(), "installed");
+        T.eq(Apps.TONE_QUIET, Apps.lineTone(Apps.IN_STORE), "plain line");
+    }
+
     static String rep(String s, int n) { StringBuilder b = new StringBuilder(); for (int i = 0; i < n; i++) b.append(s); return b.toString(); }
 }

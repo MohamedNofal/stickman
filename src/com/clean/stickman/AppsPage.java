@@ -219,6 +219,7 @@ public class AppsPage extends ApplyPage implements AppStore.Listener {
         List<Tile> out = new ArrayList<>();
         for (AppStore.Installed i : store.installed.values()) {
             Apps.Entry e = Apps.byPackage(store.catalog, i.pkg);
+            if (e != null && e.store != null) e = null;   // an Appstore app is the Appstore's: only listed here if sideloaded
             if (e == null && !tracked.containsKey(i.pkg) && !Apps.sideloaded(i.system, i.installer, i.pkg)) continue;
             Tile t = new Tile();
             t.pkg = i.pkg;
@@ -434,6 +435,7 @@ public class AppsPage extends ApplyPage implements AppStore.Listener {
 
     String lineOf(Tile t) {
         AppStore.Installed i = store.installed.get(t.pkg);
+        if (t.entry != null && t.entry.store != null) return Apps.storeLine(i == null ? null : i.version);
         long vc = i == null ? -1 : i.vc;
         Apps.FileRef f = t.entry == null ? null : Apps.pick(t.entry, abis);
         if (t.entry != null) {
@@ -525,8 +527,46 @@ public class AppsPage extends ApplyPage implements AppStore.Listener {
         try { return s == null ? -1 : Long.parseLong(s); } catch (NumberFormatException e) { return -1; }
     }
 
+    /** OK on an Appstore app's tile: what it is, and the way to its Appstore page (Amazon installs and updates it). */
+    void openStore(final Tile t) {
+        final AppStore.Installed i = store.installed.get(t.pkg);
+        StringBuilder m = new StringBuilder();
+        if (!t.entry.summary.isEmpty()) m.append(t.entry.summary).append("\n\n");
+        if (i != null) m.append("On this Fire TV: ").append(Apps.shortVersion(i.version).isEmpty() ? "installed" : "version " + Apps.shortVersion(i.version)).append("\n\n");
+        m.append(Apps.STORE_TEXT);
+        final ThemedDialog d = new ThemedDialog(a).title(t.name).message(m.toString());
+        for (String b : Apps.storeButtons(i != null, i != null && i.canOpen, i != null && !i.system && !Apps.neverRemove(t.pkg))) {
+            switch (b) {
+                case Apps.B_STORE:
+                    d.button(b, () -> appstore(t.entry));
+                    break;
+                case Apps.B_OPEN:
+                    d.button(b, () -> launch(t.pkg));
+                    break;
+                default:
+                    d.button(b, () -> ThemedDialog.confirm(a, "Uninstall " + t.name + "?", "The app and everything it saved are removed from this Fire TV.",
+                        "Uninstall", () -> act(Actions.APP_REMOVE, t.pkg, t.pkg, "Uninstalling " + t.name + "…")));
+            }
+        }
+        d.cancel("Close").focusButton(0).show();
+    }
+
+    /** Opens an app's Appstore page: by its Appstore id, else by package, else any store that takes market links. */
+    void appstore(Apps.Entry e) {
+        for (String uri : Apps.storeUris(e)) {
+            try {
+                a.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return;
+            } catch (Exception ignored) {
+                // no app takes this kind of link: try the next one
+            }
+        }
+        say("Couldn't open the Appstore on this Fire TV.");
+    }
+
     /** OK on a tile: what the app is, and what can be done with it right now. */
     void open(final Tile t) {
+        if (t.entry != null && t.entry.store != null) { openStore(t); return; }
         final AppStore.Installed i = store.installed.get(t.pkg);
         final long vc = i == null ? -1 : i.vc;
         final Apps.FileRef f = t.entry == null ? null : Apps.pick(t.entry, abis);

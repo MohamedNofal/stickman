@@ -91,7 +91,50 @@ def find_page(src, abi):
     return max(hits)[1], {}
 
 
-FINDERS = {"github": find_github, "index": find_index, "versioned": find_versioned, "page": find_page}
+def find_url(src, abi):
+    """A fixed link the developer keeps pointing at the newest file (e.g. implayer.tv/download, tivra-latest.apk).
+    The checksum recorded below is that of today's file: when the developer replaces it, Stickman refuses the
+    new file as "does not match the catalogue" until this resolver has run again, which is the safe way round."""
+    return src["url"], {}
+
+
+FINDERS = {"github": find_github, "index": find_index, "versioned": find_versioned, "page": find_page, "url": find_url}
+
+
+def amazon_listing(asin):
+    """Package name, title and icon of an Amazon Appstore app, from its amazon.co.uk page (the page carries the package
+    as <meta name="appstore:bundle_id">)."""
+    t = get("https://www.amazon.co.uk/dp/" + asin)
+    b = re.search(r'<meta name="appstore:bundle_id" content="([^"]+)"', t)
+    img = re.search(r'"(https://m\.media-amazon\.com/images/I/[A-Za-z0-9+%-]+\._h1_\.png)"', t) or \
+        re.search(r'<meta (?:property|name)="og:image" content="([^"]+)"', t)
+    return (b.group(1) if b else None), (img.group(1) if img else None)
+
+
+def resolve_store(app, old):
+    """An app only the Amazon Appstore has (BBC iPlayer, Plex, ...): no file, Stickman opens its Appstore page and
+    Amazon installs and updates it. The listing must still name the pinned package."""
+    src = app["source"]
+    pkg, img = amazon_listing(src["asin"])
+    if not pkg: raise RuntimeError("Amazon's page for %s names no app (blocked, or not an app)" % src["asin"])
+    if app.get("package") and pkg != app["package"]:
+        raise RuntimeError("Amazon's %s is %s, not %s" % (src["asin"], pkg, app["package"]))
+    e = {"package": pkg, "store": "amazon", "asin": src["asin"], "version": "", "minSdk": 1, "tv": True, "files": {}}
+    icon = os.path.join(HERE, "icons", app["id"] + ".png")
+    if img:
+        try:
+            from PIL import Image
+            im = Image.open(io.BytesIO(get(img, binary=True))).convert("RGBA")
+            if im.width > 320: im = im.resize((320, max(1, im.height * 320 // im.width)), Image.LANCZOS)
+            im.save(icon, "PNG", optimize=True)
+            e["art"] = "banner" if im.width > im.height * 1.3 else "icon"
+        except Exception as ex:
+            print("note %-14s no art: %s" % (app["id"], ex), flush=True)
+    if "art" not in e and old and old.get("art"): e["art"] = old["art"]
+    e.update({k: app[k] for k in ("id", "name", "category", "summary", "homepage")})
+    e["source"] = "amazon:" + src["asin"]
+    order = ("id", "name", "category", "summary", "homepage", "package", "store", "asin", "version", "minSdk", "tv", "source", "files", "art")
+    return {k: e[k] for k in order if k in e}, False
 
 
 def remote_size(url):
@@ -229,6 +272,7 @@ def save_art(path, banner, icon, out):
 
 def resolve(app, cache, old, fresh):
     """One catalogue entry. old = the app's entry in the last catalog.json (or None); returns (entry, kept)."""
+    if app["source"]["type"] == "amazon": return resolve_store(app, old)
     src = app["source"]; files = {}; meta = {}; first = None
     icon = os.path.join(HERE, "icons", app["id"] + ".png")
     abis = ["any"] if src.get("any") else ABIS

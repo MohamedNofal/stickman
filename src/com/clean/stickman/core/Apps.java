@@ -55,6 +55,11 @@ public final class Apps {
 
     public static final class Entry {
         public String id, name, category, summary, homepage, pkg, version, signer, art;
+        /**
+         * "amazon" for an app only the Amazon Appstore has (BBC iPlayer, Plex, ...): it has no file; Stickman opens its
+         * Appstore page (asin) and Amazon installs and updates it. Null for an app Stickman installs itself.
+         */
+        public String store, asin;
         public int minSdk;
         public long stars, downloads;
         /** CPU type ("armeabi-v7a", "arm64-v8a", or "any" for one file that runs everywhere) -> file. */
@@ -74,6 +79,7 @@ public final class Apps {
             e.id = Json.str(m, "id"); e.name = Json.str(m, "name"); e.category = Json.str(m, "category");
             e.summary = Json.str(m, "summary"); e.homepage = Json.str(m, "homepage"); e.pkg = Json.str(m, "package");
             e.version = Json.str(m, "version"); e.signer = Json.str(m, "signer"); e.art = Json.str(m, "art");
+            e.store = Json.str(m, "store"); e.asin = Json.str(m, "asin");
             e.minSdk = (int) Json.num(m, "minSdk", 1); e.stars = Json.num(m, "stars", 0); e.downloads = Json.num(m, "downloads", 0);
             Map<String, Object> files = Json.obj(m.get("files"));
             if (files != null) for (Map.Entry<String, Object> f : files.entrySet()) {
@@ -83,12 +89,45 @@ public final class Apps {
                 if (url == null || !url.startsWith("https://") || sha == null || !sha.matches("[0-9a-f]{64}") || size <= 0 || vc < 0) continue;
                 e.files.put(f.getKey(), new FileRef(url, sha, size, vc));
             }
-            if (e.id == null || !e.id.matches("[a-z0-9_-]{1,40}") || e.name == null || !validPkg(e.pkg) || e.files.isEmpty()) continue;
+            boolean store = STORE_AMAZON.equals(e.store) && e.asin != null && e.asin.matches("[A-Z0-9]{10}");
+            if (!store) { e.store = null; e.asin = null; }
+            else e.files.clear();   // an Appstore app is never downloaded by Stickman, whatever the entry says
+            if (e.id == null || !e.id.matches("[a-z0-9_-]{1,40}") || e.name == null || !validPkg(e.pkg) || (e.files.isEmpty() && !store)) continue;
             if (e.category == null) e.category = "Other";
             if (e.summary == null) e.summary = "";
             if (e.version == null) e.version = "";
             out.add(e);
         }
+        return out;
+    }
+
+    public static final String STORE_AMAZON = "amazon";
+    public static final String IN_STORE = "In the Appstore", B_STORE = "Get it in the Appstore";
+    public static final String STORE_TEXT = "This one comes from the Amazon Appstore: Amazon installs it and keeps it up to date.";
+
+    /** The links that open an Appstore app's page, best first: by its Appstore id, by package, the generic market link. */
+    public static List<String> storeUris(Entry e) {
+        List<String> out = new ArrayList<>();
+        if (e == null || e.store == null) return out;
+        if (e.asin != null) out.add("amzn://apps/android?asin=" + e.asin);
+        out.add("amzn://apps/android?p=" + e.pkg);
+        out.add("market://details?id=" + e.pkg);
+        return out;
+    }
+
+    /** The line under an Appstore app's tile. installedVersion null = not installed. */
+    public static String storeLine(String installedVersion) {
+        if (installedVersion == null) return IN_STORE;
+        String v = shortVersion(installedVersion);
+        return v.isEmpty() ? "Installed" : "Installed · " + v;
+    }
+
+    /** The buttons of an Appstore app's dialog: get it from the Appstore, or open / uninstall the copy that is here. */
+    public static List<String> storeButtons(boolean installed, boolean canOpen, boolean removable) {
+        List<String> out = new ArrayList<>();
+        if (!installed) { out.add(B_STORE); return out; }
+        if (canOpen) out.add(B_OPEN);
+        if (removable) out.add(B_UNINSTALL);
         return out;
     }
 
