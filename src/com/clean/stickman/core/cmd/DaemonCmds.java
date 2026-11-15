@@ -43,6 +43,17 @@ public final class DaemonCmds {
     public static final Cmd UNINSTALL_RELEASE = Cmd.def("stickd.uninstall_release", "Uninstall watchdog", 22, "svc rm am:broadcast");
     public static String uninstallRelease(String releaseScript) { return releaseScript + "true"; }
 
+    /**
+     * stickd found remapd gone (core/Buddy): the ensure script's own start step, which does nothing when remapd is
+     * alive after all. stickd is shell too, so this needs neither the app nor its VPN.
+     */
+    public static final Cmd REVIVE_REMAPD = Cmd.def("stickd.revive_remapd", "Self-healing", 22, "cat tr head setsid nohup sleep");
+    public static String reviveRemapd() { return SetupCmds.aliveFn() + SetupCmds.startRemapd() + "alive remapd && echo REMAPD $P"; }
+
+    /** The input reader's "KeyDowns: N keys currently down" lines, one per keyboard device (parsed by core.StuckKey). */
+    public static final Cmd KEYS_DOWN = Cmd.def("stickd.keys_down", "Self-healing", 22, "dumpsys:input grep");
+    public static String keysDown() { return "dumpsys input | grep KeyDowns"; }
+
     /** Screensaver toggle: current value ("0" = off; anything else, empty included, counts as on). */
     public static final Cmd SCREENSAVER_GET = Cmd.def("stickd.screensaver_get", "Screensaver", 22, "settings");
     public static String screensaverGet() { return "settings get secure screensaver_enabled"; }

@@ -123,6 +123,12 @@ public final class SetupCmds {
             + "rm -rf " + OLD_DIR + "; sleep 0.3; echo MIGRATED; fi; ";
     }
 
+    /** Stickman is (being) switched on: the daemons may restart each other again (see {@link #stop}, core/Buddy). In DIR. */
+    public static final Cmd CLEAR_STOPPED = Cmd.def("setup.clear_stopped", "Setup", 22, "rm");
+    public static String clearStopped() {
+        return "rm -f " + com.clean.stickman.core.Buddy.STOPPED + "; ";
+    }
+
     /** Stops the old wolfd shell script (comm "sh": matched by cmdline, but never our own shell). */
     public static final Cmd RETIRE_WOLFD = Cmd.def("setup.retire_wolfd", "Setup", 22, "cat grep kill rm");
     public static String retireWolfd() {
@@ -209,7 +215,8 @@ public final class SetupCmds {
      */
     public static final Cmd STOP = Cmd.def("setup.stop", "Setup", 22, "cat tr head kill rm svc:power am:broadcast echo");
     public static String stop() {
-        return killDaemon("remapd") + killDaemon("stickd") + releaseStayOnFade() + "echo STOPPED";
+        // first: the daemons restart each other (core/Buddy) unless this marker says the stop is meant
+        return "echo 1 > " + DIR + "/" + com.clean.stickman.core.Buddy.STOPPED + "; " + killDaemon("remapd") + killDaemon("stickd") + releaseStayOnFade() + "echo STOPPED";
     }
 
     /** First connect: rules from KeyShift (v1) and/or an earlier Stickman (v2); echo keeps a missing final newline apart. */

@@ -50,6 +50,8 @@ public final class Stickd {
     private volatile String fgPkg;
     private volatile String activeProfile;
 
+    private static java.nio.channels.FileLock lock;
+
     public Stickd(String dir) { this.dir = dir; }
 
     public void register(String id, Handler h) { handlers.put(id, h); }
@@ -79,6 +81,14 @@ public final class Stickd {
             Sh.log("already running pid=" + other + "; exiting");
             return;
         }
+        // two starts at the same moment (the app's setup and remapd's revival) both pass the check above: the lock
+        // decides. Held until the process ends, whatever ends it.
+        try {
+            lock = new FileOutputStream(file("stickd.lock")).getChannel().tryLock();
+            if (lock == null) { Sh.log("another stickd holds the lock; exiting"); return; }
+        } catch (Throwable t) {
+            Sh.log("lock not available (" + t + "): going on without");
+        }
         writeAtomic(file("stickd.pid"), pid + "\n");
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (pid.equals(read(file("stickd.pid")).trim())) file("stickd.pid").delete();
@@ -103,6 +113,12 @@ public final class Stickd {
         Thread lv = new Thread(this::serveLiveness, "stickd-live");
         lv.setDaemon(true);
         lv.start();
+        Thread g = new Thread(this::guardRemapd, "stickd-buddy");
+        g.setDaemon(true);
+        g.start();
+        Thread sk = new Thread(this::watchStuckKey, "stickd-keys");
+        sk.setDaemon(true);
+        sk.start();
         Thread a = new Thread(this::followForeground, "stickd-fg");
         Thread b = new Thread(this::readSpool, "stickd-act");
         a.start(); b.start();
@@ -142,6 +158,48 @@ public final class Stickd {
             } catch (Exception e) {
                 // port taken (an older stickd still exiting): try again
                 try { Thread.sleep(5000); } catch (InterruptedException ie) { return; }
+            }
+        }
+    }
+
+    // ---- remapd's keeper (see core/Buddy) ----
+    private void guardRemapd() {
+        int misses = 0, tries = 0;
+        while (true) {
+            sleep(com.clean.stickman.core.Buddy.CHECK_MS);
+            try {
+                boolean alive = isProc(read(file("remapd.pid")).trim(), "remapd");
+                if (alive) tries = 0;
+                misses = com.clean.stickman.core.Buddy.misses(misses, alive, file(com.clean.stickman.core.Buddy.STOPPED).exists(), file("released").exists());
+                if (!com.clean.stickman.core.Buddy.revive(misses)) continue;
+                misses = 0;
+                Sh.log("remapd is gone: starting it again");
+                String out = Sh.run(DaemonCmds.reviveRemapd()).trim();
+                Sh.log(out.startsWith("REMAPD") ? "remapd is back (" + out + ")" : "remapd did not start");
+                sleep(com.clean.stickman.core.Buddy.pauseMs(tries++));
+            } catch (Throwable t) {
+                Sh.log("buddy error: " + t);
+            }
+        }
+    }
+
+    // ---- stuck key check (see core/StuckKey) ----
+    private void watchStuckKey() {
+        boolean reported = false;
+        while (true) {
+            sleep(com.clean.stickman.core.StuckKey.EVERY_MS);
+            try {
+                int n = 0;
+                for (int i = 0; i < com.clean.stickman.core.StuckKey.CONFIRMS; i++) {
+                    n = com.clean.stickman.core.StuckKey.keysDown(Sh.run(DaemonCmds.keysDown()));
+                    if (n == 0) break;
+                    sleep(com.clean.stickman.core.StuckKey.CONFIRM_MS);
+                }
+                if (n > 0 && !reported) Sh.log("STATUS stuck_key " + n + ": Android believes a button is held down; it clears when the remote reconnects (sleep and wake the stick)");
+                if (n == 0 && reported) Sh.log("STATUS stuck_key 0: cleared");
+                reported = n > 0;
+            } catch (Throwable t) {
+                Sh.log("stuck key check error: " + t);
             }
         }
     }
@@ -191,6 +249,7 @@ public final class Stickd {
     /** Uninstalled: kill remapd (exact name), release stay-on + fade, remove both pid files, exit. */
     void shutdownForUninstall() {
         Sh.log("watchdog: Stickman is uninstalled; stopping remapd and stickd");
+        try { writeAtomic(file(com.clean.stickman.core.Buddy.STOPPED), "1\n"); } catch (Exception ignored) { }   // remapd must not restart us
         String rp = read(file("remapd.pid")).trim();
         if (isProc(rp, "remapd")) Sh.run(DaemonCmds.killRemapd(rp));
         file("remapd.pid").delete();

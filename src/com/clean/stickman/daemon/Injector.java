@@ -1,6 +1,7 @@
 package com.clean.stickman.daemon;
 
 import com.clean.stickman.core.KeyLayout;
+import com.clean.stickman.core.WakeGate;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -18,12 +19,13 @@ import java.util.Map;
  * Started by remapd: app_process /system/bin com.clean.stickman.daemon.Injector VENDOR PRODUCT VERSION NAME
  * (ids in hex). Prints READY once injection is set up; exits on stdin EOF (remapd gone) or when the system
  * keeps refusing events, so remapd can release the remote instead of leaving it dead.
- * Lines starting with "P" drive the drawn pointer instead (see SoftPointer).
+ * Lines starting with "P" drive the drawn pointer instead (see SoftPointer); a "W" line wakes the stick.
  */
 public final class Injector {
     static final int REPEAT_DELAY_MS = 500, REPEAT_EVERY_MS = 50, MAX_FAILS = 5;
     // android.view.KeyEvent / InputDevice / KeyCharacterMap constants (the daemon is built without android.jar imports)
     static final int ACTION_DOWN = 0, ACTION_UP = 1, FLAG_FROM_SYSTEM = 0x8, SOURCE_KEYBOARD = 0x101, VIRTUAL_KEYBOARD = -1;
+    static final int KEYCODE_WAKEUP = 224, SCAN_WAKEUP = 143;
 
     private final Method uptime, keyCodeFromString;
     private final java.lang.reflect.Constructor<?> newKeyEvent;
@@ -34,6 +36,10 @@ public final class Injector {
     private final Map<Integer, String> layout = new HashMap<>(), generic = new HashMap<>();
     private final Map<Integer, Long> downAt = new HashMap<>();
     private int fails;
+    /** Buttons pressed while the stick slept: they woke it and are not replayed. */
+    private final java.util.Set<Integer> asleepDown = new java.util.HashSet<>();
+    private Object power;
+    private Method isInteractive;
     /** Drawn pointer (remapd's "P ..." lines) for systems without a virtual mouse; made on first use. */
     private SoftPointer pointer;
     private volatile int repeatCode = -1;
@@ -48,6 +54,13 @@ public final class Injector {
         keyCodeFromString = ke.getMethod("keyCodeFromString", String.class);
         newKeyEvent = ke.getConstructor(long.class, long.class, int.class, int.class, int.class, int.class,
             int.class, int.class, int.class, int.class);
+        try {
+            Object b = Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "power");
+            power = Class.forName("android.os.IPowerManager$Stub").getMethod("asInterface", Class.forName("android.os.IBinder")).invoke(null, b);
+            isInteractive = power.getClass().getMethod("isInteractive");
+        } catch (Throwable t) {
+            Sh.log("injector: power state not readable (" + t + "): every press wakes");
+        }
         int vendor = hex(a, 0), product = hex(a, 1), version = hex(a, 2);
         String name = a.length > 3 ? a[3] : "";
         String used = null;
@@ -91,6 +104,10 @@ public final class Injector {
     private synchronized void send(int linux, int action, long down, int repeat) {
         int code = keyCode(linux);
         if (code == 0) return;
+        sendCode(code, linux, action, down, repeat);
+    }
+
+    private synchronized void sendCode(int code, int linux, int action, long down, int repeat) {
         boolean ok;
         try {
             Object ev = newKeyEvent.newInstance(down, now(), action, code, repeat, 0,
@@ -101,14 +118,32 @@ public final class Injector {
         if (++fails >= MAX_FAILS) { Sh.log("injector: system refuses key events, giving up"); System.exit(3); }
     }
 
+    /** KEYCODE_WAKEUP: wakes from sleep, ends the screensaver, reaches no app, does nothing when already awake. */
+    private void wake() {
+        long t = now();
+        sendCode(KEYCODE_WAKEUP, SCAN_WAKEUP, ACTION_DOWN, t, 0);
+        sendCode(KEYCODE_WAKEUP, SCAN_WAKEUP, ACTION_UP, t, 0);
+    }
+
+    /** Whether the screen is on (awake or showing the screensaver); null when the system would not say. */
+    private Boolean interactive() {
+        if (isInteractive == null) return null;
+        try { return (Boolean) isInteractive.invoke(power); } catch (Throwable t) { return null; }
+    }
+
     /** Synchronized with the repeat loop's check-and-send, so no repeat DOWN can follow this key's UP. */
     private synchronized void onLine(int linux, int value) {
         if (value == 1) {
+            // injected keys never wake a sleeping stick (see WakeGate): do what a real remote's press does there
+            int plan = WakeGate.onDown(interactive());
+            if (plan != WakeGate.PASS) wake();
+            if (plan == WakeGate.WAKE_ONLY) { asleepDown.add(linux); return; }
             long t = now();
             downAt.put(linux, t);
             send(linux, ACTION_DOWN, t, 0);
             startRepeat(linux, t);
         } else if (value == 0) {
+            if (asleepDown.remove(linux)) return;   // the press that woke the stick: its release goes nowhere either
             Long t = downAt.remove(linux);
             if (repeatCode == linux) { repeatCode = -1; repeatGen++; }
             if (t != null) send(linux, ACTION_UP, t, 0);
@@ -143,6 +178,7 @@ public final class Injector {
             BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
             for (String l; (l = in.readLine()) != null; ) {
                 String[] t = l.trim().split(" ");
+                if (t.length == 1 && t[0].equals("W")) { j.wake(); continue; }   // remapd: an action is about to run
                 if (t.length > 0 && t[0].equals("P")) {
                     if (j.pointer == null) j.pointer = new SoftPointer(j.im, j.inject, j.uptime);
                     j.pointer.onLine(t);

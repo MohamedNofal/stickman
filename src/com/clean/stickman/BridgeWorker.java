@@ -74,7 +74,7 @@ public class BridgeWorker implements Runnable {
                 if (orig.equals(Ensure.MARKER)) {
                     Store.setLastEnsure(svc, result);
                     // both daemons, or BootJob retries later (a missing stickd = no DNS guard / sleep / act)
-                    if (com.clean.stickman.core.EnsureScript.bothRunning(result)) Store.markEnsured(svc);
+                    if (com.clean.stickman.core.EnsureScript.bothRunning(result)) { Store.markEnsured(svc); Store.setWatchdogFails(svc, 0); }
                 }
                 Bridge.notifyResult(orig, result, true);
             }
