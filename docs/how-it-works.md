@@ -12,7 +12,8 @@ Everything useful needs the `shell` user, which can read input devices, create v
 ## The daemons (run as shell)
 
 - **`remapd`** (`native/remapd.c`, static armv7 C, plus the layer state machine in `native/layers.c`):
-  - Takes exclusive control of `"Amazon Fire TV Remote"` with `EVIOCGRAB`. SELinux allows shell only read access to input devices, but a read-only handle is enough to grab.
+  - Takes exclusive control of the remote with `EVIOCGRAB`. SELinux allows shell only read access to input devices, but a read-only handle is enough to grab.
+  - Which device is the remote (`native/remote_pick.h`): the one named `"Amazon Fire TV Remote"` where there is one; otherwise the best of the devices with remote buttons, in tiers (Amazon Bluetooth, other Bluetooth, other hardware). Devices made by software, such as Amazon's `amzkeyboard` for the phone app, are only watched. The remote disconnects in standby and returns as a new device, so remapd never settles for a stand-in: a better device replaces a held guess as soon as it appears, and buttons pressed on another remote-like device make remapd follow them there. The grab is never taken while a button is down (Android would not see the release and the key would stay "held").
   - Creates a `uinput` clone with the same vendor/product IDs, so Android applies the same key layout. Shell is in group `net_bt_admin`, which owns `/dev/uinput`.
   - Forwards every event to the clone, except remapped keys, which run their action. Handles tap/double/hold layers and per-app profiles, and re-grabs the remote when it reconnects (inotify on `/dev/input`).
   - Stickman actions are written to the **`act/` spool** for stickd.

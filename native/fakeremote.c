@@ -1,12 +1,20 @@
 /*
- * fakeremote - dev-only on-device test remote (NOT packaged in the APK).
- * Creates a uinput device "Stickman Test Remote" (bus BT, 0171:0427, so the Fire TV remote's .kl applies),
- * then reads commands from stdin, one per line (see fakeremote_parse.h):
+ * fakeremote - dev-only on-device test input device (NOT packaged in the APK).
+ * Creates a uinput device, by default "Stickman Test Remote" (bus BT, 0171:0427, so the Fire TV remote's .kl
+ * applies), then reads commands from stdin, one per line (see fakeremote_parse.h):
  *   down <code> | up <code> | tap <code> [hold_ms=80] | sleep <ms> | quit
  * Every key event written is printed as "SENT <code> <value> <CLOCK_MONOTONIC ms>".
  * Also prints "CLOCK mono=<ms> real=<ms>" at start (lets the host align getevent's timestamps) and
  * "READY" once the device exists. Keys still down are released and the device destroyed on quit/EOF/signal.
  * Pair with "remapd <conf> 'Stickman Test Remote'" (tools/devtest.sh).
+ *
+ * Options, to stand in for other devices a Fire TV has (tools/switchtest.sh):
+ *   --name NAME            device name (e.g. "Amazon Fire TV Remote", "amzkeyboard")
+ *   --bus bt|virtual|host  bus type (default bt)
+ *   --id VVVV:PPPP         vendor:product in hex (default 0171:0427; Amazon's own virtual devices use 0000:0000)
+ *   --keys all|remote      all = every key like the real remote's keyboard page (default); remote = only the
+ *                          buttons of a remote (no letters)
+ *   --tag TEXT             ignored; a test's handle on this process (its command line)
  */
 #define _GNU_SOURCE
 #include <fcntl.h>
@@ -22,6 +30,8 @@
 #include "fakeremote_parse.h"
 
 #define NAME "Stickman Test Remote"
+static const char *dev_name = NAME;
+static int dev_bus = BUS_BLUETOOTH, dev_vendor = 0x0171, dev_product = 0x0427, keys_all = 1;
 
 /* core/Keys.ALL */
 static const int KEYS_ALL[] = { 116, 217, 103, 108, 105, 106, 96, 158, 172, 139, 168, 164, 208,
@@ -60,17 +70,26 @@ static int is_btn(int k) {   /* BTN_* ranges: keep them off so Android doesn't t
 
 static void on_sig(int s) { (void)s; stop = 1; }
 
-int main(void) {
+int main(int argc, char **argv) {
+    for (int i = 1; i + 1 < argc; i += 2) {
+        const char *o = argv[i], *v = argv[i + 1];
+        if (!strcmp(o, "--name")) dev_name = v;
+        else if (!strcmp(o, "--bus")) dev_bus = !strcmp(v, "virtual") ? BUS_VIRTUAL : !strcmp(v, "host") ? BUS_HOST : BUS_BLUETOOTH;
+        else if (!strcmp(o, "--id")) { unsigned a = 0, b = 0; if (sscanf(v, "%x:%x", &a, &b) == 2) { dev_vendor = (int)a; dev_product = (int)b; } }
+        else if (!strcmp(o, "--keys")) keys_all = strcmp(v, "remote") != 0;
+        else if (!strcmp(o, "--tag")) {}   /* ignored: lets a test find this process by its command line */
+        else { fprintf(stderr, "unknown option %s\n", o); return 2; }
+    }
     signal(SIGINT, on_sig); signal(SIGTERM, on_sig); signal(SIGHUP, on_sig); signal(SIGPIPE, SIG_IGN);
     ufd = open("/dev/uinput", O_WRONLY | O_CLOEXEC);
     if (ufd < 0) { perror("open /dev/uinput"); return 1; }
     ioctl(ufd, UI_SET_EVBIT, EV_KEY); ioctl(ufd, UI_SET_EVBIT, EV_SYN);
-    for (int k = 1; k <= FR_MAXCODE; k++) if (!is_btn(k)) ioctl(ufd, UI_SET_KEYBIT, k);
+    if (keys_all) for (int k = 1; k <= FR_MAXCODE; k++) if (!is_btn(k)) ioctl(ufd, UI_SET_KEYBIT, k);
     for (unsigned i = 0; i < sizeof KEYS_ALL / sizeof KEYS_ALL[0]; i++) ioctl(ufd, UI_SET_KEYBIT, KEYS_ALL[i]);
     ioctl(ufd, UI_SET_PHYS, "stickman/fakeremote");
     struct uinput_user_dev u; memset(&u, 0, sizeof u);
-    snprintf(u.name, sizeof u.name, "%s", NAME);
-    u.id.bustype = BUS_BLUETOOTH; u.id.vendor = 0x0171; u.id.product = 0x0427; u.id.version = 1;
+    snprintf(u.name, sizeof u.name, "%s", dev_name);
+    u.id.bustype = dev_bus; u.id.vendor = dev_vendor; u.id.product = dev_product; u.id.version = 1;
     if (write(ufd, &u, sizeof u) != sizeof u || ioctl(ufd, UI_DEV_CREATE) < 0) { perror("uinput create"); return 1; }
     printf("CLOCK mono=%lld real=%lld\nREADY\n", ms_of(CLOCK_MONOTONIC), ms_of(CLOCK_REALTIME));
     fflush(stdout);

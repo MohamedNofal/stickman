@@ -3,7 +3,8 @@
  * started by the Stickman app through its self-ADB bridge.
  *
  * shell is in groups `input` (read /dev/input/eventN) and `net_bt_admin` (rw /dev/uinput), so:
- *   1. EVIOCGRAB the real "Amazon Fire TV Remote" -> Android stops seeing it directly
+ *   1. EVIOCGRAB the real remote ("Amazon Fire TV Remote", or what remote_pick.h makes of the other devices: the
+ *      remote comes and goes with standby, and some Fire TVs have look-alikes) -> Android stops seeing it directly
  *   2. create a uinput clone with the same vendor/product (same .kl keylayout applies)
  *   3. forward every event to the clone; remapped keys go through the tap/double/hold
  *      state machine in layers.c and run their rule's action instead.
@@ -47,6 +48,7 @@
 #include <unistd.h>
 #include "layers.h"
 #include "amcheck.h"
+#include "remote_pick.h"
 
 #define REMOTE_NAME "Amazon Fire TV Remote"   /* default device to grab; also the clone's name */
 #define VIRT_PHYS "remapd/virtual"
@@ -446,65 +448,74 @@ static void set_state(const char *fmt, ...) {
     rename(DIR_PATH "/remote.state.tmp", DIR_PATH "/remote.state");
 }
 
-static int has_word(const char *name, const char *w) {
-    char low[128]; size_t i = 0;
-    for (; name[i] && i < sizeof low - 1; i++) low[i] = (char)tolower((unsigned char)name[i]);
-    low[i] = 0;
-    return strstr(low, w) != NULL;
-}
-
-/* How much a device looks like the Fire TV remote: 0 = not it. The exact name always wins (every Fire OS 8 remote
- * is "Amazon Fire TV Remote"); other Fire OS versions and remotes use other names, so fall back to "has a d-pad
- * plus Back or Home", preferring Amazon/remote names and avoiding the HDMI-CEC and keyboard devices. */
-static int score_remote(int fd, const char *name) {
-    if (!strcmp(name, grab_name) && !getenv("REMAPD_TEST_NO_EXACT")) return 1000;   /* env: dev test of the fallback */
-    if (strict_name) return 0;
-    unsigned char b[(KEY_MAX + 8) / 8]; memset(b, 0, sizeof b);
-    if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof b), b) < 0) return 0;
-#define HAS(k) (b[(k) / 8] & (1 << ((k) % 8)))
-    if (!(HAS(KEY_UP) && HAS(KEY_DOWN) && HAS(KEY_LEFT) && HAS(KEY_RIGHT))) return 0;
-    if (!(HAS(KEY_BACK) || HAS(KEY_HOMEPAGE) || HAS(KEY_HOME))) return 0;
-    int sc = 20;
-    if (has_word(name, "amazon")) sc += 40;
-    if (has_word(name, "remote")) sc += 40;
-    if (has_word(name, "fire tv")) sc += 20;
-    if (has_word(name, "cec")) sc -= 60;
-    if (HAS(KEY_Q) && HAS(KEY_SPACE)) sc -= 10;   /* a full keyboard */
-#undef HAS
-    return sc > 0 ? sc : 0;
-}
-
 static int is_virtual(int fd) {
     char phys[64] = {0};
     ioctl(fd, EVIOCGPHYS(sizeof phys - 1), phys);
     return strcmp(phys, VIRT_PHYS) == 0;
 }
 
-static int open_remote(void) {
-    DIR *d = opendir("/dev/input"); if (!d) return -1;
-    struct dirent *e; int found = -1, best = 0;
-    char seen[400] = "", bestp[64] = ""; size_t sl = 0;
+/* ---- finding the remote (the rules and their reasons: remote_pick.h) ---- */
+#define MAXCAND 6
+struct cand { int fd, score; char path[64], name[128]; struct input_id id; };
+static struct cand cands[MAXCAND];   /* remote-like devices other than the held one: open, not grabbed, best first */
+static int ncands;
+static int held_score = -1;          /* score of the device behind rfd; -1 = none */
+static char held_path[64];
+static struct input_id held_id;
+static char seen_names[400];         /* every device of the last scan, for the "not found" state */
+static int rescan_now = 1;           /* look again: at start, when /dev/input changed, when the remote was lost */
+static long long next_rescan;
+
+static int score_fd(int fd, const char *name, struct input_id *id) {
+    memset(id, 0, sizeof *id); ioctl(fd, EVIOCGID, id);
+    struct rp_dev d; memset(&d, 0, sizeof d);
+    d.name = name; d.bus = id->bustype; d.vendor = id->vendor; d.product = id->product;
+    d.exact = !strcmp(name, grab_name) && !getenv("REMAPD_TEST_NO_EXACT");   /* env: dev test of the guesses */
+    if (strict_name) return d.exact ? RP_KNOWN : 0;                          /* test harness: that device only */
+    unsigned char b[(KEY_MAX + 8) / 8]; memset(b, 0, sizeof b);
+    if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof b), b) >= 0) {
+#define HAS(k) (b[(k) / 8] & (1 << ((k) % 8)))
+        d.dpad = HAS(KEY_UP) && HAS(KEY_DOWN) && HAS(KEY_LEFT) && HAS(KEY_RIGHT);
+        d.back_home = HAS(KEY_BACK) || HAS(KEY_HOMEPAGE) || HAS(KEY_HOME);
+#undef HAS
+    }
+    return rp_score(&d);
+}
+
+static void close_cands(void) {
+    for (int i = 0; i < ncands; i++) close(cands[i].fd);
+    ncands = 0;
+}
+
+/* Looks at every input device. The remote-like ones (other than the held one) stay open, not grabbed, best first:
+ * the first is what to take when nothing is held, and all of them are watched for button presses. */
+static void scan(void) {
+    close_cands();
+    seen_names[0] = 0;
+    size_t sl = 0;
+    DIR *d = opendir("/dev/input"); if (!d) return;
+    struct dirent *e;
     while ((e = readdir(d))) {
         if (strncmp(e->d_name, "event", 5)) continue;
-        char p[64]; snprintf(p, sizeof p, "/dev/input/%s", e->d_name);
-        int fd = open(p, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
-        if (fd < 0) { static int warned; if (warned++ < 8) alog("open %s: %s", p, strerror(errno)); continue; }
-        char name[128] = {0}; ioctl(fd, EVIOCGNAME(sizeof name - 1), name);
-        if (is_virtual(fd)) { close(fd); continue; }
-        if (sl < sizeof seen - 2) sl += snprintf(seen + sl, sizeof seen - sl, "%s%s", sl ? "|" : "", name[0] ? name : "?");
-        if (sl >= sizeof seen) sl = sizeof seen - 1;
-        int sc = score_remote(fd, name);
-        if (sc > best) {
-            if (found >= 0) close(found);
-            found = fd; best = sc;
-            snprintf(remote_name, sizeof remote_name, "%s", name); snprintf(bestp, sizeof bestp, "%s", p);
-            if (sc >= 1000) break;
-        } else close(fd);
+        struct cand c; memset(&c, 0, sizeof c);
+        snprintf(c.path, sizeof c.path, "/dev/input/%s", e->d_name);
+        if (rfd >= 0 && !strcmp(c.path, held_path)) continue;
+        c.fd = open(c.path, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+        if (c.fd < 0) { static int warned; if (warned++ < 8) alog("open %s: %s", c.path, strerror(errno)); continue; }
+        ioctl(c.fd, EVIOCGNAME(sizeof c.name - 1), c.name);
+        if (is_virtual(c.fd)) { close(c.fd); continue; }
+        if (sl < sizeof seen_names - 2) sl += snprintf(seen_names + sl, sizeof seen_names - sl, "%s%s", sl ? "|" : "", c.name[0] ? c.name : "?");
+        if (sl >= sizeof seen_names) sl = sizeof seen_names - 1;
+        c.score = score_fd(c.fd, c.name, &c.id);
+        if (c.score <= 0) { close(c.fd); continue; }
+        int at = ncands;                       /* best first; among equals the one found first; a full list drops its weakest */
+        while (at > 0 && cands[at - 1].score < c.score) at--;
+        if (at >= MAXCAND) { close(c.fd); continue; }
+        if (ncands == MAXCAND) close(cands[--ncands].fd);
+        memmove(&cands[at + 1], &cands[at], (ncands - at) * sizeof c);
+        cands[at] = c; ncands++;
     }
     closedir(d);
-    if (found >= 0) alog("remote at %s \"%s\" (match %d)", bestp, remote_name, best);
-    else set_state("notfound %s", seen[0] ? seen : "-");
-    return found;
 }
 
 static int uinput_err;
@@ -879,6 +890,7 @@ static void device_lost(const char *why) {
     release_all();
     mouse_set(0);
     close(rfd); rfd = -1; grabbed = 0; passthrough = 0; back_down_at = 0;
+    held_score = -1; held_path[0] = 0; rescan_now = 1;
 }
 
 /* ---- stickd's keeper -------------------------------------------------------------------------------------------
@@ -951,6 +963,50 @@ static int other_instance(void) {
     return strcmp(comm, "remapd") == 0 ? pid : 0;
 }
 
+/* what the virtual remote / the key injector were made for */
+static struct input_id made_for; static char made_for_name[128]; static int made;
+
+/* another node of the device we hold (a remote can appear as two) */
+static int same_device(const struct cand *c) {
+    return rfd >= 0 && !strcmp(c->name, remote_name) && c->id.bustype == held_id.bustype
+        && c->id.vendor == held_id.vendor && c->id.product == held_id.product;
+}
+
+/* Candidate i becomes the remote: rfd. The grab follows in the main loop, once no button is down. */
+static void adopt(int i, const char *why) {
+    struct cand c = cands[i];
+    memmove(&cands[i], &cands[i + 1], (ncands - i - 1) * sizeof c); ncands--;
+    rfd = c.fd; grabbed = 0; held_score = c.score; held_id = c.id;
+    snprintf(held_path, sizeof held_path, "%s", c.path);
+    snprintf(remote_name, sizeof remote_name, "%s", c.name);
+    alog("remote at %s \"%s\" (match %d%s%s)", c.path, c.name, c.score, why ? ", " : "", why ? why : "");
+    /* the virtual remote and the injector carry the identity of the device they were made for (its ids choose the
+     * key layout): a different device gets its own. The same remote coming back keeps them, so nothing slow sits
+     * between its return and the grab. */
+    if (made && (made_for.bustype != c.id.bustype || made_for.vendor != c.id.vendor || made_for.product != c.id.product
+                 || strcmp(made_for_name, c.name))) {
+        if (ufd >= 0) { close(ufd); ufd = -1; }
+        if (ifd >= 0 || pend_out >= 0) injector_stop();
+        inj_fails = 0; inj_retry_at = 0;
+    }
+    made = 1; made_for = c.id; snprintf(made_for_name, sizeof made_for_name, "%s", c.name);
+    if (ufd < 0) ufd = make_uinput(rfd);
+    /* No virtual remote on this system: keep going without the grab. Buttons then do their normal job AND
+     * their Stickman action (better than nothing working); the Status page says so. Expected on Fire OS
+     * 5-7: AOSP only opens /dev/uinput to the shell user from Android 10 (ueventd "0660 uhid uhid"); before
+     * that it is system:net_bt_stack / system:bluetooth. (Android 9 does open /dev/uhid to shell: a HID
+     * clone there would give full remapping on Fire OS 7. Not done yet.) */
+    /* Fire OS 5-7: replay keys through InputManager instead; a failed start retries like a lost injector */
+    if (ufd < 0 && ifd < 0 && pend_out < 0 && !inj_retry_at && make_injector(rfd) < 0) injector_failed("could not be started");
+    passthrough = ufd < 0 && ifd < 0;
+    /* the injector takes a few seconds to start (much longer on a slow box): say so, not "limited", or
+     * the ensure report catches the gap and the Status page claims remapping can't work here */
+    if (passthrough && pend_out >= 0) set_state("starting %s", remote_name);
+    else if (passthrough) set_state("passthrough %s: %s", remote_name, strerror(uinput_err));
+    else set_state(ufd >= 0 ? "ok %s" : "inject %s", remote_name);
+    if (held_score >= RP_KNOWN) close_cands();   /* nothing takes the known remote's place: no need to watch the rest */
+}
+
 int main(int argc, char **argv) {
     conf_path = argc > 1 ? argv[1] : DEF_CONF;
     if (argc > 2 && argv[2][0]) { grab_name = argv[2]; strict_name = 1; }
@@ -974,80 +1030,104 @@ int main(int argc, char **argv) {
     if (dino >= 0 && inotify_add_watch(dino, DIR_PATH, IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_CLOSE_WRITE | IN_ATTRIB) < 0) { close(dino); dino = -1; }
 
     wfd = make_wake();   /* now, not when the remote turns up: nothing slow may sit between finding it and the grab */
+    ino = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (ino >= 0 && inotify_add_watch(ino, "/dev/input", IN_CREATE | IN_ATTRIB) < 0) { close(ino); ino = -1; }
     for (;;) {
         load_conf();
-        if (rfd < 0) {
-            rfd = open_remote();
-            if (rfd < 0) {
-                if (ino < 0) { ino = inotify_init1(IN_NONBLOCK | IN_CLOEXEC); if (ino >= 0) inotify_add_watch(ino, "/dev/input", IN_CREATE | IN_ATTRIB); }
-                if (ino >= 0) {   /* wait for a new /dev/input node (or 1 s), then rescan immediately */
-                    struct pollfd ip = { .fd = ino, .events = POLLIN }; poll(&ip, 1, 1000);
-                    char drain[1024]; while (read(ino, drain, sizeof drain) > 0) {}
-                    usleep(20000);
-                } else sleep(1);
-                continue;
-            }
-            grabbed = 0;
-            if (ufd < 0) ufd = make_uinput(rfd);
-            /* No virtual remote on this system: keep going without the grab. Buttons then do their normal job AND
-             * their Stickman action (better than nothing working); the Status page says so. Expected on Fire OS
-             * 5-7: AOSP only opens /dev/uinput to the shell user from Android 10 (ueventd "0660 uhid uhid"); before
-             * that it is system:net_bt_stack / system:bluetooth. (Android 9 does open /dev/uhid to shell: a HID
-             * clone there would give full remapping on Fire OS 7. Not done yet.) */
-            /* Fire OS 5-7: replay keys through InputManager instead; a failed start retries like a lost injector */
-            if (ufd < 0 && ifd < 0 && pend_out < 0 && !inj_retry_at && make_injector(rfd) < 0) injector_failed("could not be started");
-            passthrough = ufd < 0 && ifd < 0;
-            /* the injector takes a few seconds to start (much longer on a slow box): say so, not "limited", or
-             * the ensure report catches the gap and the Status page claims remapping can't work here */
-            if (passthrough && pend_out >= 0) set_state("starting %s", remote_name);
-            else if (passthrough) set_state("passthrough %s: %s", remote_name, strerror(uinput_err));
-            else set_state(ufd >= 0 ? "ok %s" : "inject %s", remote_name);
-        }
-        {
-            int ip = injector_poll();
-            if (ip > 0) inj_wait = 1;
-            else if (ip < 0) { injector_failed("did not start"); set_state("passthrough %s: key injector did not start", remote_name); }
-        }
-        /* switch to the injector only with no button held: Android saw that press's DOWN itself and must also get
-         * its UP, which a grab taken mid-press would swallow (the key would then stay down) */
-        if (inj_wait && ifd >= 0 && !any_key_held()) {
-            inj_wait = 0; inj_fails = 0;
-            release_all();
-            passthrough = 0;
-            set_state("inject %s", remote_name);
-        }
-        if (rfd >= 0 && ufd < 0 && ifd < 0 && pend_out < 0 && inj_retry_at && now_ms() >= inj_retry_at) {
-            inj_retry_at = 0;
-            if (make_injector(rfd) == 0) set_state("starting %s", remote_name);
-            else injector_failed("could not be started");
-        }
-        if (ifd >= 0 && (inj_lost || kill(ipid, 0) < 0)) {
-            /* never hold the remote with nothing to replay its keys: let go and fall back to listen-only */
-            alog("key injector gone: remote released");
-            if (grabbed) { ioctl(rfd, EVIOCGRAB, 0); grabbed = 0; }
-            injector_stop();
-            passthrough = 1;
-            injector_failed("stopped");
-            set_state("passthrough %s: key injector stopped", remote_name);
-        }
         guard_stickd();
-        mouse_check_cmd();
-        if (mouse_on && passthrough) mouse_set(0);
-        set_grab(nmapped > 0 || listening || mouse_on);
+        /* Which device is the remote (remote_pick.h). Looked at again whenever /dev/input changed or the remote was
+         * lost, every second while there is none, and every 10 s while only a guess is held (a change can be missed,
+         * e.g. a node that was not readable yet). */
+        long long t = now_ms();
+        if (rescan_now || (held_score < RP_KNOWN && t >= next_rescan)) {
+            rescan_now = 0;
+            scan();
+            if (ncands > 0 && rp_take_idle(held_score, cands[0].score)) {
+                if (rfd >= 0) device_lost("a better remote turned up");
+                adopt(0, NULL);
+                rescan_now = rfd >= 0 && held_score < RP_KNOWN;   /* the device just left is a candidate again */
+            }
+            if (rfd < 0) set_state("notfound %s", seen_names[0] ? seen_names : "-");
+            else if (held_score >= RP_KNOWN) close_cands();
+            next_rescan = now_ms() + (rfd < 0 ? 1000 : 10000);
+        }
+        if (rfd >= 0) {
+            {
+                int ip = injector_poll();
+                if (ip > 0) inj_wait = 1;
+                else if (ip < 0) { injector_failed("did not start"); set_state("passthrough %s: key injector did not start", remote_name); }
+            }
+            /* switch to the injector only with no button held: Android saw that press's DOWN itself and must also get
+             * its UP, which a grab taken mid-press would swallow (the key would then stay down) */
+            if (inj_wait && ifd >= 0 && !any_key_held()) {
+                inj_wait = 0; inj_fails = 0;
+                release_all();
+                passthrough = 0;
+                set_state("inject %s", remote_name);
+            }
+            if (rfd >= 0 && ufd < 0 && ifd < 0 && pend_out < 0 && inj_retry_at && now_ms() >= inj_retry_at) {
+                inj_retry_at = 0;
+                if (make_injector(rfd) == 0) set_state("starting %s", remote_name);
+                else injector_failed("could not be started");
+            }
+            if (ifd >= 0 && (inj_lost || kill(ipid, 0) < 0)) {
+                /* never hold the remote with nothing to replay its keys: let go and fall back to listen-only */
+                alog("key injector gone: remote released");
+                if (grabbed) { ioctl(rfd, EVIOCGRAB, 0); grabbed = 0; }
+                injector_stop();
+                passthrough = 1;
+                injector_failed("stopped");
+                set_state("passthrough %s: key injector stopped", remote_name);
+            }
+            mouse_check_cmd();
+            if (mouse_on && passthrough) mouse_set(0);
+            set_grab(nmapped > 0 || listening || mouse_on);
+        }
 
         /* timeout: nearest layer deadline / panic deadline, else 1 s (to notice config changes) */
-        int timeout = 1000; long long t = now_ms();
+        int timeout = 1000; t = now_ms();
         int active = grabbed || (passthrough && nmapped > 0);
         long long dl = active ? lyr_next_deadline(L) : -1;
         if (dl >= 0) { long long left = dl - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
         if (back_down_at) { long long left = back_down_at + PANIC_MS - t; if (left < timeout) timeout = left < 0 ? 0 : (int)left; }
 
-        struct pollfd p[2] = { { .fd = rfd, .events = POLLIN }, { .fd = dino, .events = POLLIN } };
+        /* the remote, our directory, /dev/input, then the other remote-like devices (poll skips fds below 0) */
+        struct pollfd p[3 + MAXCAND]; memset(p, 0, sizeof p);
+        p[0].fd = rfd; p[1].fd = dino; p[2].fd = ino;
+        int np = 3;
+        for (int i = 0; i < ncands; i++) p[np++].fd = cands[i].fd;
+        for (int i = 0; i < np; i++) p[i].events = POLLIN;
         if (pend_out >= 0 && timeout > 200) timeout = 200;   /* injector starting: look for its READY soon */
         { int mt = mouse_timeout(); if (mt >= 0 && mt < timeout) timeout = mt; }
-        int r = poll(p, dino >= 0 ? 2 : 1, timeout);
-        if (r > 0 && dino >= 0 && (p[1].revents & POLLIN)) { char drain[1024]; while (read(dino, drain, sizeof drain) > 0) {} }
-        if (r > 0 && p[0].revents) {
+        int r = poll(p, np, timeout);
+        if (r > 0 && (p[1].revents & POLLIN)) { char drain[1024]; while (read(dino, drain, sizeof drain) > 0) {} }
+        if (r > 0 && (p[2].revents & POLLIN)) {
+            char drain[1024]; while (read(ino, drain, sizeof drain) > 0) {}
+            usleep(20000);   /* a new node is not readable the instant it appears */
+            rescan_now = 1;
+        }
+        /* Buttons pressed on another remote-like device: that one is the remote (never away from the known remote).
+         * Its press has reached Android directly; the grab waits for the release as always, so only this one press
+         * goes unremapped. */
+        int follow = -1;
+        for (int i = 0; r > 0 && i < ncands; i++) {
+            short re = p[3 + i].revents;
+            if (!re) continue;
+            if (re & (POLLERR | POLLHUP | POLLNVAL)) { rescan_now = 1; continue; }   /* gone: the rescan drops it */
+            struct input_event evs[64];
+            ssize_t n = read(cands[i].fd, evs, sizeof evs);
+            if (n < 0) { if (errno != EAGAIN) rescan_now = 1; continue; }
+            for (int k = 0; k < n / (ssize_t)sizeof evs[0]; k++)
+                if (evs[k].type == EV_KEY && evs[k].value == 1 && rp_remote_key(evs[k].code)
+                    && rp_follow(held_score, cands[i].score, same_device(&cands[i]))) follow = i;
+        }
+        if (follow >= 0) {
+            if (rfd >= 0) device_lost("buttons are pressed on another remote");
+            adopt(follow, "in use");
+            rescan_now = 1;
+            continue;   /* p[0] was the device just left */
+        }
+        if (r > 0 && rfd >= 0 && p[0].revents) {
             /* stickd may have switched the profile (or the app started Listen) while we waited: apply it to this key */
             load_conf();
             if (p[0].revents & (POLLERR | POLLHUP | POLLNVAL)) { device_lost("remote gone"); continue; }
