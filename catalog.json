@@ -1,0 +1,532 @@
+{
+ "format": 1,
+ "generated": "2026-11-15T19:11:45Z",
+ "apps": [
+  {
+   "id": "kodi",
+   "name": "Kodi",
+   "category": "Media centres",
+   "summary": "The media centre: your own films, music and add-ons.",
+   "homepage": "https://kodi.tv",
+   "package": "org.xbmc.kodi",
+   "version": "21.3",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "f517b44b5db5e62a6c1ec55ba47526db7de0d61f6ba26a7987520e293499b8d5",
+   "source": "index:https://mirrors.kodi.tv/releases/android/arm/",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://mirrors.kodi.tv/releases/android/arm/kodi-21.3-Omega-armeabi-v7a.apk",
+     "size": 67832726,
+     "sha256": "12d75e895649f68f217e42c2d881a94fd3177d7b9a7937825852aed545520cc8",
+     "versionCode": 2103000
+    },
+    "arm64-v8a": {
+     "url": "https://mirrors.kodi.tv/releases/android/arm64-v8a/kodi-21.3-Omega-arm64-v8a.apk",
+     "size": 68167494,
+     "sha256": "34e7526705a038fa12f70161d0c1cc38f10deb0fee305b46fbd46ff015d05b44",
+     "versionCode": 2103000
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "vlc",
+   "name": "VLC",
+   "category": "Players",
+   "summary": "Plays almost any video or audio file, from USB or the network.",
+   "homepage": "https://www.videolan.org/vlc/download-android.html",
+   "package": "org.videolan.vlc",
+   "version": "3.7.1",
+   "minSdk": 17,
+   "tv": true,
+   "signer": "c8768d2cea0c4b622e419b4b4715981946821e4ebc035fb41776cad395a7f68e",
+   "source": "versioned:https://get.videolan.org/vlc-android/",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://get.videolan.org/vlc-android/3.7.1/VLC-Android-3.7.1-armeabi-v7a.apk",
+     "size": 47073346,
+     "sha256": "a6a7f940e4bd190c9a70f3f0dc97c1c402c10200af20edac7a1d452b24abd8a0",
+     "versionCode": 13070105
+    },
+    "arm64-v8a": {
+     "url": "https://get.videolan.org/vlc-android/3.7.1/VLC-Android-3.7.1-arm64-v8a.apk",
+     "size": 47990842,
+     "sha256": "bea9ea0cdecfd8f461ef305d2afe5d1ac1459cfb9156acce2f615788a486de74",
+     "versionCode": 13070106
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "smarttube",
+   "name": "SmartTube",
+   "category": "Video",
+   "summary": "A YouTube client made for the TV remote.",
+   "homepage": "https://github.com/yuliskov/SmartTube",
+   "package": "org.smarttube.stable",
+   "version": "32.71",
+   "minSdk": 17,
+   "tv": true,
+   "signer": "109735aa24fe85e2e1623ebb3b1ecc4bf4263f4c6374e4411d646bfa2eda482a",
+   "source": "github:yuliskov/SmartTube",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/yuliskov/SmartTube/releases/download/32.71s/SmartTube_stable_32.71_armeabi-v7a.apk",
+     "size": 25517725,
+     "sha256": "288e8caaa11417f6b64d2a7f906cead85c0b8a9bb5904753d7cb4f79d117d023",
+     "versionCode": 2461
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/yuliskov/SmartTube/releases/download/32.71s/SmartTube_stable_32.71_arm64-v8a.apk",
+     "size": 26731385,
+     "sha256": "6a799a129015e772d231440f4e3ad919f643164a0fdeb76ecb202bf3afb3db52",
+     "versionCode": 2461
+    }
+   },
+   "art": "banner",
+   "downloads": 23402,
+   "published": "2026-11-06",
+   "stars": 36361
+  },
+  {
+   "id": "stremio",
+   "name": "Stremio",
+   "category": "Media centres",
+   "summary": "One library for your streaming add-ons.",
+   "homepage": "https://www.stremio.com/downloads",
+   "package": "com.stremio.one",
+   "version": "1.10.4",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "7e6a979c968f771e3fbcf2c2e8718ce61e708d87caf91fc13e2d4c19a8022c6b",
+   "source": "page:https://www.stremio.com/downloads",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk",
+     "size": 91635880,
+     "sha256": "e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b",
+     "versionCode": 31048580
+    },
+    "arm64-v8a": {
+     "url": "https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-33145732-arm64-v8a.apk",
+     "size": 95701510,
+     "sha256": "caaf4faba423a47c3174eda08b94057956ce32af616c6377b3485f4f5dec993c",
+     "versionCode": 33145732
+    }
+   },
+   "art": "banner"
+  },
+  {
+   "id": "jellyfin",
+   "name": "Jellyfin",
+   "category": "Media centres",
+   "summary": "The official TV app for your Jellyfin server.",
+   "homepage": "https://jellyfin.org",
+   "package": "org.jellyfin.androidtv",
+   "version": "0.20.0",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "d881796ed2a67ff6ef9f676828723c6b1fa18e09388962cba4abc4a594a69131",
+   "source": "github:jellyfin/jellyfin-androidtv",
+   "files": {
+    "any": {
+     "url": "https://github.com/jellyfin/jellyfin-androidtv/releases/download/v0.20.0/jellyfin-androidtv-v0.20.0-release.apk",
+     "size": 29945596,
+     "sha256": "dfcc665195bed4ea087dca63df6f77497acc1185c4b15776b336d80eeaeb7fa6",
+     "versionCode": 200099
+    }
+   },
+   "art": "banner",
+   "downloads": 3541,
+   "published": "2026-11-10",
+   "stars": 4743
+  },
+  {
+   "id": "wholphin",
+   "name": "Wholphin",
+   "category": "Media centres",
+   "summary": "A fast open-source TV client for Jellyfin.",
+   "homepage": "https://github.com/damontecres/Wholphin",
+   "package": "com.github.damontecres.wholphin",
+   "version": "1.1.1-0-g159edc87",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "e54fda99b452214b3522deb5de14e2dddc06da8de5db1fa7591dce2d80af96a8",
+   "source": "github:damontecres/Wholphin",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/damontecres/Wholphin/releases/download/v1.1.1/Wholphin-armeabi-v7a.apk",
+     "size": 42309053,
+     "sha256": "ed625579095917190872e8f95b3165969a3b5f0dd98721b0994270a377fcdfb8",
+     "versionCode": 62
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/damontecres/Wholphin/releases/download/v1.1.1/Wholphin-arm64-v8a.apk",
+     "size": 46709688,
+     "sha256": "2d43021dea92537cd79a44dfcd3243910ada22dcea32febef1789f6b78ec72f7",
+     "versionCode": 62
+    }
+   },
+   "art": "banner",
+   "downloads": 784,
+   "published": "2026-11-06",
+   "stars": 3343
+  },
+  {
+   "id": "nuvio",
+   "name": "Nuvio TV",
+   "category": "Media centres",
+   "summary": "A modern media hub for the Stremio add-on ecosystem.",
+   "homepage": "https://github.com/tapframe/NuvioTV",
+   "package": "com.nuvio.tv",
+   "version": "1.1.0",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "1cba06fbdf978d0e3f9ad58de6ba3d69e24a948384adde3aed95451e830e5210",
+   "source": "github:tapframe/NuvioTV",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/NuvioMedia/NuvioTV/releases/download/1.1.0/app-full-armeabi-v7a-release.apk",
+     "size": 53572407,
+     "sha256": "0aee593e3cc5acba52a68a93b286966a4ccd9ff28dc58adce0d6743f2e19af06",
+     "versionCode": 1077
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/NuvioMedia/NuvioTV/releases/download/1.1.0/app-full-arm64-v8a-release.apk",
+     "size": 55503269,
+     "sha256": "5d54e8c16ebc281b5b7d81eeb3aa3f236755dec1cc8ff274c4ba5e6a5093fa63",
+     "versionCode": 1077
+    }
+   },
+   "art": "banner",
+   "downloads": 15512,
+   "published": "2026-11-08",
+   "stars": 3527
+  },
+  {
+   "id": "mpv",
+   "name": "mpv",
+   "category": "Players",
+   "summary": "A lean video player that handles difficult files.",
+   "homepage": "https://github.com/mpv-android/mpv-android",
+   "package": "is.xyz.mpv",
+   "version": "2026-09-17-release",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "fae7f9d02385cc24d96e88436603e23ea6aec7649ad1250abbb4837daab82fff",
+   "source": "github:mpv-android/mpv-android",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/mpv-android/mpv-android/releases/download/2026-09-17/app-default-armeabi-v7a-release.apk",
+     "size": 30935742,
+     "sha256": "30c63f5528530f56cdece5d6466c749976f01bdcd8c8e67ae76e70a54b7243aa",
+     "versionCode": 1048
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/mpv-android/mpv-android/releases/download/2026-09-17/app-default-arm64-v8a-release.apk",
+     "size": 34290346,
+     "sha256": "0b0e0a534dd6b8d2b117f06952e0600064ad97702e48bff02543e3e32107803d",
+     "versionCode": 2048
+    }
+   },
+   "art": "banner",
+   "downloads": 22790,
+   "published": "2026-09-17",
+   "stars": 3701
+  },
+  {
+   "id": "nova",
+   "name": "Nova Video Player",
+   "category": "Players",
+   "summary": "Plays your local and network library with posters and subtitles.",
+   "homepage": "https://github.com/nova-video-player/aos-AVP",
+   "package": "org.courville.nova",
+   "version": "6.6.5-20261111.1224",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "05af6804bcad9e7e6d22d2ffc39fca1857a4aeb4385097cad91b11e5bac1f615",
+   "source": "github:nova-video-player/aos-AVP",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/nova-video-player/aos-AVP/releases/download/v6.6.5/org.courville.nova-2674922-6.6.5-20261111.1224-armeabi-v7a-release.apk",
+     "size": 32683439,
+     "sha256": "9fb146566d8fb70ec5ed03ea180aa10abf294eea7a52a4eafc17634eb20e7143",
+     "versionCode": 2674922
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/nova-video-player/aos-AVP/releases/download/v6.6.5/org.courville.nova-2674922-6.6.5-20261111.1224-arm64-v8a-release.apk",
+     "size": 35685723,
+     "sha256": "e0ffda4c5f3795d75e89b3c7a8c6da792839ebd21dcb46b50cf3248c3d9157b9",
+     "versionCode": 2674922
+    }
+   },
+   "art": "banner",
+   "downloads": 1655,
+   "published": "2026-11-11",
+   "stars": 4809
+  },
+  {
+   "id": "justplayer",
+   "name": "Just Player",
+   "category": "Players",
+   "summary": "A simple player with wide audio and subtitle support.",
+   "homepage": "https://github.com/moneytoo/Player",
+   "package": "com.brouken.player",
+   "version": "0.217",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "3cb97dba57d3d0bc190bae5f1f3a841643bcd9399bc31028ce25775d93d0109d",
+   "source": "github:moneytoo/Player",
+   "files": {
+    "any": {
+     "url": "https://github.com/moneytoo/Player/releases/download/v0.217/Just.Player.v0.217.apk",
+     "size": 51778873,
+     "sha256": "f85156d4748c6263a6af0b13682fb54fbe1dd12a1ed1e8fa3710def548259b74",
+     "versionCode": 217
+    }
+   },
+   "art": "banner",
+   "downloads": 12390,
+   "published": "2026-09-11",
+   "stars": 2811
+  },
+  {
+   "id": "newpipe",
+   "name": "NewPipe",
+   "category": "Video",
+   "summary": "A lightweight YouTube front end without an account.",
+   "homepage": "https://newpipe.net",
+   "package": "org.schabi.newpipe",
+   "version": "0.29.3",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "cb84069bd68116bafae5ee4ee5b08a567aa6d898404e7cb12f9e756df5cf5cab",
+   "source": "github:TeamNewPipe/NewPipe",
+   "files": {
+    "any": {
+     "url": "https://github.com/TeamNewPipe/NewPipe/releases/download/v0.29.3/NewPipe_v0.29.3.apk",
+     "size": 16980865,
+     "sha256": "0ab2b9b5103bd3173cb4540f9a2fe660d93a44ac17254e7d13b26d1d8f012192",
+     "versionCode": 1017
+    }
+   },
+   "art": "banner",
+   "downloads": 53176,
+   "published": "2026-11-10",
+   "stars": 40733
+  },
+  {
+   "id": "xtra",
+   "name": "Xtra",
+   "category": "Video",
+   "summary": "A Twitch player with chat.",
+   "homepage": "https://github.com/crackededed/Xtra",
+   "package": "com.github.andreyasadchy.xtra",
+   "version": "2.60.10",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "70f4c9d051037896d593ea841f30957204ef6c45d7e491a852c017552a46d543",
+   "source": "github:crackededed/Xtra",
+   "files": {
+    "any": {
+     "url": "https://github.com/crackededed/Xtra/releases/download/latest/app-release.apk",
+     "size": 36073383,
+     "sha256": "d717234d7ef63b4b63082f2f7073fd57065da340661ebaf6923ad0c1b3a7e704",
+     "versionCode": 121
+    }
+   },
+   "art": "icon",
+   "downloads": 7787,
+   "published": "2026-11-01",
+   "stars": 2360
+  },
+  {
+   "id": "moonlight",
+   "name": "Moonlight",
+   "category": "Games",
+   "summary": "Stream games from your PC to the TV.",
+   "homepage": "https://moonlight-stream.org",
+   "package": "com.limelight",
+   "version": "12.2",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "d6ce3a4df15060fe488fe52441a549dee4ba199b36e2cb1ed9085cca8bfa1aca",
+   "source": "github:moonlight-stream/moonlight-android",
+   "files": {
+    "any": {
+     "url": "https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk",
+     "size": 11137885,
+     "sha256": "a871f6190365386ef3ac5722a016d4da015ee1555631ec257f6e5dc3f4a45fe0",
+     "versionCode": 315
+    }
+   },
+   "art": "banner",
+   "downloads": 68567,
+   "published": "2026-09-12",
+   "stars": 7498
+  },
+  {
+   "id": "projectivy",
+   "name": "Projectivy Launcher",
+   "category": "Launchers",
+   "summary": "A clean, customisable home screen.",
+   "homepage": "https://github.com/spocky/miproja1",
+   "package": "com.spocky.projengmenu",
+   "version": "4.73",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "f6697bf4082ee97511e4de07863193884a015b7ab5860430321bda1042b0aadd",
+   "source": "github:spocky/miproja1",
+   "files": {
+    "any": {
+     "url": "https://github.com/spocky/miproja1/releases/download/4.73/ProjectivyLauncher-4.73-c98-xda-release.apk",
+     "size": 11437133,
+     "sha256": "74e33af1e5e13831a69a0669d2b68b02150bf9df1ae1df437dc67e3f8d52c790",
+     "versionCode": 98
+    }
+   },
+   "art": "banner",
+   "downloads": 50196,
+   "published": "2026-10-31",
+   "stars": 2369
+  },
+  {
+   "id": "ltvlauncher",
+   "name": "LTvLauncher",
+   "category": "Launchers",
+   "summary": "A minimal open-source TV launcher.",
+   "homepage": "https://github.com/LeanBitLab/LtvLauncher",
+   "package": "com.leanbitlab.ltvL",
+   "version": "2026.10.27",
+   "minSdk": 21,
+   "tv": true,
+   "signer": "df819e5940a514f3d2d5d19d852c18e4cbe2d1d636cb92011b8c101dac72aa9a",
+   "source": "github:LeanBitLab/LtvLauncher",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/leanbitlab-org/LtvLauncher/releases/download/v2026.10.27/LTvLauncher-armeabi-v7a-release.apk",
+     "size": 9979465,
+     "sha256": "99eedb0136bd5ea5b17a6fa955b693fc44093a53bfbf353cf37277f9a45ed710",
+     "versionCode": 8114
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/leanbitlab-org/LtvLauncher/releases/download/v2026.10.27/LTvLauncher-arm64-v8a-release.apk",
+     "size": 10336935,
+     "sha256": "9648baf14ba13a9f8b29bc0abc84eb017acef7b5da7cb8a11c5f382846a02d18",
+     "versionCode": 8114
+    }
+   },
+   "art": "icon",
+   "downloads": 1237,
+   "published": "2026-10-27",
+   "stars": 478
+  },
+  {
+   "id": "aerialviews",
+   "name": "Aerial Views",
+   "category": "Screensavers",
+   "summary": "Apple TV style aerial video screensaver.",
+   "homepage": "https://github.com/theothernt/AerialViews",
+   "package": "com.neilturner.aerialviews",
+   "version": "1.8.5",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "383b3b2df6d2b17cec60542c576408b0deae502f37749eb5ac7fef2f206fa51b",
+   "source": "github:theothernt/AerialViews",
+   "files": {
+    "any": {
+     "url": "https://github.com/theothernt/AerialViews/releases/download/1.8.5/aerial-views-1.8.5.apk",
+     "size": 9147039,
+     "sha256": "a20b4bc748da5ce890d96536494952aa4f50a6b589c50dee176415c021407070",
+     "versionCode": 148
+    }
+   },
+   "art": "banner",
+   "downloads": 11451,
+   "published": "2026-10-02",
+   "stars": 1168
+  },
+  {
+   "id": "tvbro",
+   "name": "TV Bro",
+   "category": "Tools",
+   "summary": "A web browser built for the remote.",
+   "homepage": "https://github.com/truefedex/tv-bro",
+   "package": "com.phlox.tvwebbrowser",
+   "version": "3.0.5",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "1e5124be7e7fcb7a6462b47a42a8567863c6fccc6fe7708cd278be4f43047c75",
+   "source": "github:truefedex/tv-bro",
+   "files": {
+    "any": {
+     "url": "https://github.com/truefedex/tv-bro/releases/download/v3.0.5/tvbro-3.0.5-generic-geckoExcluded.apk",
+     "size": 3788211,
+     "sha256": "62e958757c31e2b8ba3fad609d4508320f19c072e5cfab1401f22dee6a05a0e3",
+     "versionCode": 83
+    }
+   },
+   "art": "banner",
+   "downloads": 3347,
+   "published": "2026-11-13",
+   "stars": 1897
+  },
+  {
+   "id": "localsend",
+   "name": "LocalSend",
+   "category": "Tools",
+   "summary": "Send files to the TV from your phone or computer over Wi-Fi.",
+   "homepage": "https://localsend.org",
+   "package": "org.localsend.localsend_app",
+   "version": "1.18.2",
+   "minSdk": 24,
+   "tv": true,
+   "signer": "3220c353a73cfbd0c2f3052471c445324cf452bcba26de1c473a52fe5c44e1d6",
+   "source": "github:localsend/localsend",
+   "files": {
+    "armeabi-v7a": {
+     "url": "https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-android-arm32v7.apk",
+     "size": 39333444,
+     "sha256": "222b02d2813578a574cd3fbcfa7b8ff317d4887edb9ca0fb7b292816d222dc63",
+     "versionCode": 642
+    },
+    "arm64-v8a": {
+     "url": "https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-android-arm64v8.apk",
+     "size": 46558706,
+     "sha256": "82ec3568fba2aa5295b9aae8b76f701d7a4703d86b9f8bad749472038fbaeab3",
+     "versionCode": 643
+    }
+   },
+   "art": "banner",
+   "downloads": 247803,
+   "published": "2026-08-21",
+   "stars": 99135
+  },
+  {
+   "id": "materialfiles",
+   "name": "Material Files",
+   "category": "Tools",
+   "summary": "A file manager, with network shares.",
+   "homepage": "https://github.com/zhanghai/MaterialFiles",
+   "package": "me.zhanghai.android.files",
+   "version": "1.7.5",
+   "minSdk": 23,
+   "tv": true,
+   "signer": "873b9b60c77cf7f3cd5fae66d0fe112c4a86973e118ee8a29c346c4c673c97f0",
+   "source": "github:zhanghai/MaterialFiles",
+   "files": {
+    "any": {
+     "url": "https://github.com/zhanghai/MaterialFiles/releases/download/v1.7.5/app-release-universal.apk",
+     "size": 13747821,
+     "sha256": "f2e7f028fbddf51d7ee90ace27a1ae4b247511e12514d1def6c9e52435feac40",
+     "versionCode": 40
+    }
+   },
+   "art": "banner",
+   "downloads": 63789,
+   "published": "2026-09-20",
+   "stars": 9489
+  }
+ ]
+}
