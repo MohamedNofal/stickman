@@ -64,6 +64,12 @@ Keep ADB debugging on: Stickman talks to the TV's own debugging service. From 1.
 - Stickman never touches the launcher, Settings, remote services, or whatever is playing. The system updater is only touched by the opt-in **Freeze updates (OTA)**.
 - Every change is recorded. **Settings, Undo everything** turns Stickman off and puts the stick back the way it was; **Restore defaults** puts the stick back but keeps Stickman on. The record survives an uninstall, so a reinstall can still restore.
 
+## Support
+
+If Stickman is useful to you, you can support its development:
+
+<a href="https://buymeacoffee.com/mohamednofal"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="50"></a>
+
 ## More
 
 - How it works (VPN self-ADB, remapd, stickd) and how to build it: [docs/how-it-works.md](docs/how-it-works.md)
