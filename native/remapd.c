@@ -578,7 +578,7 @@ static int make_injector(int src) {
         snprintf(v, sizeof v, "%04x", id.vendor); snprintf(pr, sizeof pr, "%04x", id.product); snprintf(ve, sizeof ve, "%04x", id.version);
         setenv("CLASSPATH", apk, 1);
         execl("/system/bin/app_process", "app_process", "/system/bin", "--nice-name=stickinj",
-              "com.clean.stickman.daemon.Injector", v, pr, ve, remote_name, (char *)NULL);
+              "com.clean.stickman.daemon.Injector", v, pr, ve, remote_name, held_path, (char *)NULL);
         _exit(127);
     }
     close(in[0]); close(out[1]);
@@ -990,6 +990,14 @@ static void adopt(int i, const char *why) {
         inj_fails = 0; inj_retry_at = 0;
     }
     made = 1; made_for = c.id; snprintf(made_for_name, sizeof made_for_name, "%s", c.name);
+    /* A reconnected remote can have a new Android device ID even if its name and event path are unchanged.
+     * Tell the retained injector before it sees any key from the new connection. */
+    int pipe_fd = ifd >= 0 ? ifd : pend_in;
+    if (pipe_fd >= 0) {
+        char line[sizeof held_path + 4];
+        int len = snprintf(line, sizeof line, "D %s\n", held_path);
+        if (write(pipe_fd, line, len) != len) injector_stop();
+    }
     if (ufd < 0) ufd = make_uinput(rfd);
     /* No virtual remote on this system: keep going without the grab. Buttons then do their normal job AND
      * their Stickman action (better than nothing working); the Status page says so. Expected on Fire OS

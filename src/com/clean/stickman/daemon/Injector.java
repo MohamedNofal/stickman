@@ -16,9 +16,10 @@ import java.util.Map;
  * "linuxKeyCode value" lines (1 down, 0 up) to this process, which injects the matching Android key event
  * through InputManager, the same service "input keyevent" uses and which shell may call on every version.
  *
- * Started by remapd: app_process /system/bin com.clean.stickman.daemon.Injector VENDOR PRODUCT VERSION NAME
+ * Started by remapd: app_process /system/bin com.clean.stickman.daemon.Injector VENDOR PRODUCT VERSION NAME [EVENT_PATH]
  * (ids in hex). Prints READY once injection is set up; exits on stdin EOF (remapd gone) or when the system
  * keeps refusing events, so remapd can release the remote instead of leaving it dead.
+ * A "D /dev/input/eventN" line changes the selected remote after it reconnects.
  * Lines starting with "P" drive the drawn pointer instead (see SoftPointer); a "W" line wakes the stick.
  */
 public final class Injector {
@@ -34,7 +35,18 @@ public final class Injector {
     private final Method inject;
     private final Map<Integer, Integer> keys = new HashMap<>();   // linux code -> android key code (0 = unknown)
     private final Map<Integer, String> layout = new HashMap<>(), generic = new HashMap<>();
-    private final Map<Integer, Long> downAt = new HashMap<>();
+    private final VoiceRemote voiceRemote = new VoiceRemote();
+    private final Map<Integer, Press> held = new HashMap<>();
+
+    private static final class Press {
+        final long down;
+        final int deviceId;
+
+        Press(long down, int deviceId) {
+            this.down = down;
+            this.deviceId = deviceId;
+        }
+    }
     private int fails;
     /** Buttons pressed while the stick slept: they woke it and are not replayed. */
     private final java.util.Set<Integer> asleepDown = new java.util.HashSet<>();
@@ -63,6 +75,7 @@ public final class Injector {
         }
         int vendor = hex(a, 0), product = hex(a, 1), version = hex(a, 2);
         String name = a.length > 3 ? a[3] : "";
+        if (a.length > 4) voiceRemote.bind(a[4]);
         String used = null;
         for (String f : KeyLayout.candidates(vendor, product, version, name)) {
             for (String d : KeyLayout.DIRS) {
@@ -81,11 +94,15 @@ public final class Injector {
         try { return Integer.parseInt(a[i], 16); } catch (Exception e) { return 0; }
     }
 
+    private String keyName(int linux) {
+        String name = layout.get(linux);
+        return name == null ? generic.get(linux) : name;
+    }
+
     private int keyCode(int linux) {
         Integer k = keys.get(linux);
         if (k != null) return k;
-        String n = layout.get(linux);
-        if (n == null) n = generic.get(linux);
+        String n = keyName(linux);
         int code = n == null ? 0 : fromString("KEYCODE_" + n);
         if (code == 0 && n != null) code = fromString(n);
         if (code == 0) Sh.log("injector: no Android key for linux code " + linux);
@@ -101,17 +118,17 @@ public final class Injector {
         try { return (Long) uptime.invoke(null); } catch (Exception e) { return System.nanoTime() / 1000000L; }
     }
 
-    private synchronized void send(int linux, int action, long down, int repeat) {
+    private synchronized void send(int linux, int action, Press press, int repeat) {
         int code = keyCode(linux);
         if (code == 0) return;
-        sendCode(code, linux, action, down, repeat);
+        sendCode(code, linux, action, press.down, repeat, press.deviceId);
     }
 
-    private synchronized void sendCode(int code, int linux, int action, long down, int repeat) {
+    private synchronized void sendCode(int code, int linux, int action, long down, int repeat, int deviceId) {
         boolean ok;
         try {
             Object ev = newKeyEvent.newInstance(down, now(), action, code, repeat, 0,
-                VIRTUAL_KEYBOARD, linux, FLAG_FROM_SYSTEM, SOURCE_KEYBOARD);
+                deviceId, linux, FLAG_FROM_SYSTEM, SOURCE_KEYBOARD);
             ok = Boolean.TRUE.equals(inject.invoke(im, ev, 0));
         } catch (Exception e) { ok = false; }
         if (ok) { fails = 0; return; }
@@ -121,8 +138,8 @@ public final class Injector {
     /** KEYCODE_WAKEUP: wakes from sleep, ends the screensaver, reaches no app, does nothing when already awake. */
     private void wake() {
         long t = now();
-        sendCode(KEYCODE_WAKEUP, SCAN_WAKEUP, ACTION_DOWN, t, 0);
-        sendCode(KEYCODE_WAKEUP, SCAN_WAKEUP, ACTION_UP, t, 0);
+        sendCode(KEYCODE_WAKEUP, SCAN_WAKEUP, ACTION_DOWN, t, 0, VIRTUAL_KEYBOARD);
+        sendCode(KEYCODE_WAKEUP, SCAN_WAKEUP, ACTION_UP, t, 0, VIRTUAL_KEYBOARD);
     }
 
     /** Whether the screen is on (awake or showing the screensaver); null when the system would not say. */
@@ -138,20 +155,22 @@ public final class Injector {
             int plan = WakeGate.onDown(interactive());
             if (plan != WakeGate.PASS) wake();
             if (plan == WakeGate.WAKE_ONLY) { asleepDown.add(linux); return; }
-            long t = now();
-            downAt.put(linux, t);
-            send(linux, ACTION_DOWN, t, 0);
-            startRepeat(linux, t);
+            long down = now();
+            int deviceId = VoiceRemote.isVoiceKey(keyName(linux)) ? voiceRemote.deviceId() : VIRTUAL_KEYBOARD;
+            Press press = new Press(down, deviceId);
+            held.put(linux, press);
+            send(linux, ACTION_DOWN, press, 0);
+            startRepeat(linux, press);
         } else if (value == 0) {
             if (asleepDown.remove(linux)) return;   // the press that woke the stick: its release goes nowhere either
-            Long t = downAt.remove(linux);
+            Press press = held.remove(linux);
             if (repeatCode == linux) { repeatCode = -1; repeatGen++; }
-            if (t != null) send(linux, ACTION_UP, t, 0);
+            if (press != null) send(linux, ACTION_UP, press, 0);
         }
     }
 
     /** The input dispatcher only auto-repeats keys from real devices: a held injected key needs its own repeats. */
-    private void startRepeat(final int linux, final long down) {
+    private void startRepeat(final int linux, final Press press) {
         final long gen = ++repeatGen;
         repeatCode = linux;
         Thread t = new Thread(() -> {
@@ -160,7 +179,7 @@ public final class Injector {
                 for (int n = 1; ; n++) {
                     synchronized (Injector.this) {
                         if (repeatGen != gen || repeatCode != linux) break;
-                        send(linux, ACTION_DOWN, down, n);
+                        send(linux, ACTION_DOWN, press, n);
                     }
                     Thread.sleep(REPEAT_EVERY_MS);
                 }
@@ -185,6 +204,7 @@ public final class Injector {
                     continue;
                 }
                 if (t.length != 2) continue;
+                if (t[0].equals("D")) { j.voiceRemote.bind(t[1]); continue; }
                 try { j.onLine(Integer.parseInt(t[0]), Integer.parseInt(t[1])); } catch (NumberFormatException ignored) { }
             }
         } catch (Throwable t) {

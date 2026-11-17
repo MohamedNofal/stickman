@@ -50,6 +50,10 @@ public final class DaemonCmds {
     public static final Cmd REVIVE_REMAPD = Cmd.def("stickd.revive_remapd", "Self-healing", 22, "cat tr head setsid nohup sleep");
     public static String reviveRemapd() { return SetupCmds.aliveFn() + SetupCmds.startRemapd() + "alive remapd && echo REMAPD $P"; }
 
+    /** EventHub's path and descriptor for the voice remote selected by remapd. */
+    public static final Cmd INPUT_DEVICES = Cmd.def("injector.input_devices", "Remote", 22, "dumpsys:input");
+    public static String inputDevices() { return "dumpsys input"; }
+
     /** The input reader's "KeyDowns: N keys currently down" lines, one per keyboard device (parsed by core.StuckKey). */
     public static final Cmd KEYS_DOWN = Cmd.def("stickd.keys_down", "Self-healing", 22, "dumpsys:input grep");
     public static String keysDown() { return "dumpsys input | grep KeyDowns"; }
