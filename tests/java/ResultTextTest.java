@@ -26,6 +26,10 @@ public class ResultTextTest {
         T.eq("Boost done: closed 1 app.", ResultText.boost("freed_mb=0 killed=1"), "no measured gain is not claimed");
         T.eq("Boost done: freed 12 MB. No background apps needed closing.", ResultText.boost("freed_mb=12 killed=0"), "caches only");
         T.eq(null, ResultText.boost("STATUS trim freed_mb=1 trimmed=2"), "not a boost line");
+        // The toast a button-press Boost shows: the daemon sends the two numbers, the app words them the same way.
+        T.eq("am broadcast -f 32 -n com.clean.stickman/.FadeReceiver -a com.clean.stickman.BOOST_TOAST --ei mb 38 --ei killed 2 >/dev/null 2>&1",
+            com.clean.stickman.core.cmd.AutoKillCmds.toastDone(38, 2), "outcome toast");
+        T.yes(!com.clean.stickman.core.cmd.AutoKillCmds.toastStart().contains("--ei"), "the working toast carries no numbers");
         T.eq("Trim done: 9 apps gave back 61 MB. Nothing was closed.", ResultText.trim("freed_mb=61 trimmed=9 why=now"), "trim");
         T.eq("Trim done: 1 app had nothing to give back right now. Nothing was closed.", ResultText.trim("freed_mb=0 trimmed=1 why=sleep"), "nothing back");
         T.eq("Nothing to trim: no apps were idle in the background.", ResultText.trim("freed_mb=0 trimmed=0 why=now"), "nothing to trim");

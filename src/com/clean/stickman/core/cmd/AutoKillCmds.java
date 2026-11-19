@@ -16,6 +16,18 @@ public final class AutoKillCmds {
     public static String trimCaches() { return "pm trim-caches 999G"; }
 
     /**
+     * Boost's on-screen note, so a Boost from a remote button visibly does something: the app's receiver shows a
+     * toast. "Working" form when it starts; the outcome form carries the measured MB and the apps closed, and the
+     * app words it (ResultText.boost). -f 32 = FLAG_INCLUDE_STOPPED_PACKAGES.
+     */
+    public static final Cmd TOAST = Cmd.def("autokill.toast", "Boost", 22, "am:broadcast");
+    public static String toastStart() { return toast(""); }
+    public static String toastDone(long freedMb, int killed) { return toast(" --ei mb " + freedMb + " --ei killed " + killed); }
+    private static String toast(String extras) {
+        return "am broadcast -f 32 -n " + PointerCmds.OVERLAY + " -a com.clean.stickman.BOOST_TOAST" + extras + " >/dev/null 2>&1";
+    }
+
+    /**
      * Gentle first: asks a candidate to give back memory before it is closed. Best effort (ends in "; true"): on
      * API 22 am has no send-trim-memory and the kill below still runs. pkg: a KillPolicy.candidates entry.
      */

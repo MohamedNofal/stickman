@@ -149,6 +149,10 @@ final class AutoKill {
     }
 
     void boost() {
+        // Told at once (a Boost takes a while), off this thread: am broadcast can take seconds.
+        Thread note = new Thread(() -> Sh.run(AutoKillCmds.toastStart(), 10_000), "stickd-boost-note");
+        note.setDaemon(true);
+        note.start();
         long before = memAvailableKb();
         List<String> killed = killCandidates();
         Sh.run(AutoKillCmds.trimCaches(), 30_000);
@@ -157,6 +161,7 @@ final class AutoKill {
         long freed = (before < 0 || after < 0) ? 0 : Math.max(0, (after - before) / 1024);
         Sh.log("killed: " + Sh.join(",", killed));
         Sh.log("STATUS boost freed_mb=" + freed + " killed=" + killed.size());
+        Sh.run(AutoKillCmds.toastDone(freed, killed.size()), 10_000);
     }
 
     /** Recomputes candidates at kill time (fresh fg + media state), then trims and kills each. */
